@@ -1,0 +1,107 @@
+name: Build Release APK
+
+on:
+  push:
+    tags: [ "*-*" ]
+    branches: [ "master", "main" ]
+  pull_request:
+    branches: [ "master", "main" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 23
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Grant execute permission
+        run: chmod +x gradlew
+
+      - name: Verify and build release APK
+        run: ./gradlew :app:lintDebug :app:assembleRelease
+
+      - name: Sign release APK
+        id: sign
+        env:
+          SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
+          KEY_ALIAS: ${{ secrets.ALIAS }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          set -e
+          UNSIGNED_APK=$(find app/build/outputs/apk/release -maxdepth 2 -name '*.apk' | head -1)
+          if [ -z "$UNSIGNED_APK" ]; then
+            echo "No release APK found." >&2
+            exit 1
+          fi
+
+          VERSION_NAME=$(grep -oP 'versionName\s*=\s*"\K[^"]+' app/build.gradle.kts || echo "unversioned")
+          VERSION_CODE=$(grep -oP 'versionCode\s*=\s*\K[0-9]+' app/build.gradle.kts || echo "0")
+
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            EXPECTED_TAG="${VERSION_CODE}-${VERSION_NAME}"
+            if [ "$GITHUB_REF_NAME" != "$EXPECTED_TAG" ]; then
+              echo "Release tag must be $EXPECTED_TAG, got $GITHUB_REF_NAME." >&2
+              exit 1
+            fi
+            if [ -z "$SIGNING_KEY" ]; then
+              echo "A stable release signing key is required for tagged builds." >&2
+              exit 1
+            fi
+          fi
+
+          BUILD_TOOLS=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)
+
+          if [ -n "$SIGNING_KEY" ]; then
+            OUT_NAME="HuaweiPods-${VERSION_NAME}-release.apk"
+            umask 077
+            trap 'rm -f /tmp/huaweipods-release.jks' EXIT
+            echo "$SIGNING_KEY" | base64 -d > /tmp/huaweipods-release.jks
+            "${BUILD_TOOLS}zipalign" -f 4 "$UNSIGNED_APK" "./$OUT_NAME"
+            "${BUILD_TOOLS}apksigner" sign \
+              --ks /tmp/huaweipods-release.jks \
+              --ks-key-alias "$KEY_ALIAS" \
+              --ks-pass "pass:$KEYSTORE_PASSWORD" \
+              --key-pass "pass:$KEY_PASSWORD" \
+              "./$OUT_NAME"
+            "${BUILD_TOOLS}apksigner" verify --verbose "./$OUT_NAME"
+            echo "signed=true" >> "$GITHUB_OUTPUT"
+          else
+            OUT_NAME="HuaweiPods-${VERSION_NAME}-ci.apk"
+            cp "$UNSIGNED_APK" "./$OUT_NAME"
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "apk=$OUT_NAME" >> "$GITHUB_OUTPUT"
+          echo "version_name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
+          echo "version_code=$VERSION_CODE" >> "$GITHUB_OUTPUT"
+
+      # Non-zipped artifact upload supported by GitHub Actions
+      - name: Upload Release APK
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.sign.outputs.apk }}
+          path: ./${{ steps.sign.outputs.apk }}
+          archive: false
+          if-no-files-found: error
+
+      - name: Create GitHub Release
+        if: ${{ startsWith(github.ref, 'refs/tags/') && steps.sign.outputs.signed == 'true' }}
+        uses: ncipollo/release-action@v1
+        with:
+          token: ${{ github.token }}
+          artifacts: "./${{ steps.sign.outputs.apk }}"
+          name: ${{ steps.sign.outputs.version_name }}
+          generateReleaseNotes: true
+          makeLatest: true
