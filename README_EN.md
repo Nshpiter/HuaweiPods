@@ -52,7 +52,8 @@ Internal package names, broadcast actions, configuration names, and the public a
 
 ## Credits
 
-- [OppoPods](https://github.com/Leaf-lsgtky/OppoPods) by Leaf-lsgtky — the project HuaweiPods was adapted from.
+- [OppoPods](https://github.com/1812z/OppoPods) by 1812z — the fork HuaweiPods was directly adapted from.
+- [OppoPods](https://github.com/Leaf-lsgtky/OppoPods) by Leaf-lsgtky — the original upstream OppoPods project.
 - [HyperPods](https://github.com/Art-Chen/HyperPods) by Art_Chen — original HyperOS headset integration ideas.
 - [Miuix](https://github.com/YuKongA/miuix) — HyperOS-style Compose UI components.
 

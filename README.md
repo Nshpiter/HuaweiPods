@@ -52,7 +52,8 @@ HuaweiPods 是一个面向小米 HyperOS 的 Xposed 模块，用于把 Huawei Fr
 
 ## 致谢
 
-- [OppoPods](https://github.com/Leaf-lsgtky/OppoPods) by Leaf-lsgtky — HuaweiPods 基于该项目适配演进而来。
+- [OppoPods](https://github.com/1812z/OppoPods) by 1812z — HuaweiPods 直接基于该分支适配开发。
+- [OppoPods](https://github.com/Leaf-lsgtky/OppoPods) by Leaf-lsgtky — OppoPods 上游原项目。
 - [HyperPods](https://github.com/Art-Chen/HyperPods) by Art_Chen — 原始 HyperOS 耳机集成思路。
 - [Miuix](https://github.com/YuKongA/miuix) — HyperOS 风格 Compose UI 组件。
 
