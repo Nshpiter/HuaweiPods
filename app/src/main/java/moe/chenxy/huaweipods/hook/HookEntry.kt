@@ -13,6 +13,8 @@ open class HookEntry : XposedModule() {
     override fun onPackageLoaded(param: PackageLoadedParam) {
         if (!param.isFirstPackage) return
 
+        BuildVariantHooks.onPackageLoaded(this, param)
+
         when (param.packageName) {
             "com.android.bluetooth" -> {
                 loadHook(HeadsetStateDispatcher, param.defaultClassLoader, param.packageName)
@@ -27,7 +29,7 @@ open class HookEntry : XposedModule() {
         }
     }
 
-    private fun loadHook(hook: HookContext, classLoader: ClassLoader, packageName: String) {
+    internal fun loadHook(hook: HookContext, classLoader: ClassLoader, packageName: String) {
         Log.module = this
         hook.module = this
         hook.appClassLoader = classLoader

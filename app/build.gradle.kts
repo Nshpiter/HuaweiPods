@@ -24,6 +24,7 @@ android {
         debug {
             isDebuggable = true
             isMinifyEnabled = false
+            versionNameSuffix = "-debug"
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -81,6 +82,7 @@ dependencies {
     compileOnly(libs.libxposedApi)
     implementation(libs.libxposedService)
     implementation(libs.kotlinx.serialization.json)
+    testImplementation("junit:junit:4.13.2")
 
     // Compose
     implementation(platform(libs.compose.bom))

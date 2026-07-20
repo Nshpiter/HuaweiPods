@@ -1,0 +1,131 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 当前采集向导仅面向中文 issue 测试者，故有意使用中文默认文案。 -->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:ignore="MissingTranslation">
+    <string name="debug_capture_app_name">HuaweiPods 协议采集</string>
+    <string name="debug_capture_title">华为耳机协议采集向导</string>
+    <string name="debug_capture_subtitle">面向所有华为蓝牙耳机，按步骤记录官方 App 与耳机之间的蓝牙交互</string>
+    <string name="debug_capture_badge">DEBUG · 仅用于适配</string>
+    <string name="debug_capture_open_main">打开模块主界面</string>
+
+    <string name="debug_capture_privacy_title">分享前先检查敏感信息</string>
+    <string name="debug_capture_privacy_body">导出包可能包含蓝牙地址、设备名称、固件版本及原始协议载荷。只操作官方 App 当前可见且不涉及隐私的耳机设置；禁止升级固件、恢复出厂设置或取消配对，禁止真实通话、录音和“查找耳机”响铃，禁止打开账号、健康、位置或通知内容页面。提交前请检查文件并脱敏。</string>
+
+    <string name="debug_capture_prepare_title">1. 准备环境</string>
+    <string name="debug_capture_prepare_hint">以下项目全部确认后才能开始。更新 LSPosed 作用域后需要强行停止官方 App，最稳妥的方式是重启手机。</string>
+    <string name="debug_capture_prepare_single_device">断开手表、车机和其他蓝牙设备，只保留待采集耳机</string>
+    <string name="debug_capture_prepare_official_app">已安装并登录平时管理这副耳机的官方 App</string>
+    <string name="debug_capture_prepare_lsp_scope">LSPosed 已为 HuaweiPods 勾选对应官方 App，并已重启</string>
+    <string name="debug_capture_prepare_privacy">我已阅读安全与隐私提示，并同意只分享本次耳机采集</string>
+    <string name="debug_capture_official_detected">检测到：%1$s</string>
+    <string name="debug_capture_official_missing">未检测到“智慧生活”或“智慧音频”。请先安装你平时管理耳机的官方 App。</string>
+    <string name="debug_capture_official_choose">检测到多个官方 App，请选择平时管理这副耳机的一个：</string>
+    <string name="debug_capture_app_ai_life">智慧生活</string>
+    <string name="debug_capture_app_smart_audio">智慧音频</string>
+
+    <string name="debug_capture_metadata_title">2. 填写采集信息</string>
+    <string name="debug_capture_model_title">目标耳机名称</string>
+    <string name="debug_capture_model_hint">例如 HUAWEI FreeBuds Pro 4；请以系统蓝牙中显示的名称为准</string>
+    <string name="debug_capture_model_detecting">正在读取已连接的蓝牙耳机…</string>
+    <string name="debug_capture_model_detected">检测到已连接的蓝牙音频设备：%1$s</string>
+    <string name="debug_capture_model_multiple">检测到多个已连接的蓝牙音频设备，请选择本次采集对象：</string>
+    <string name="debug_capture_model_none">未读取到已连接的蓝牙耳机。请先连接耳机、刷新重试，或手动填写名称。</string>
+    <string name="debug_capture_model_permission_required">需要“附近的设备”权限，才能读取当前已连接的蓝牙耳机名称。</string>
+    <string name="debug_capture_model_grant_permission">授权并自动填写</string>
+    <string name="debug_capture_model_refresh">重新检测</string>
+    <string name="debug_capture_model_timeout">部分蓝牙服务响应超时；已显示当前读取到的设备，可刷新重试。</string>
+    <string name="debug_capture_model_bluetooth_disabled">蓝牙尚未开启。请先开启并连接目标耳机，再重新检测。</string>
+    <string name="debug_capture_model_bluetooth_unavailable">本机没有可用的蓝牙适配器，请手动填写目标耳机名称。</string>
+    <string name="debug_capture_model_failed">读取已连接耳机失败：%1$s。可刷新重试或手动填写。</string>
+    <string name="debug_capture_model_manual_hint">自动检测失败时可手动填写；这只记录设备名称，不代表已识别设备支持哪些功能。</string>
+    <string name="debug_capture_issue_title">对应 GitHub issue（可选）</string>
+    <string name="debug_capture_issue_hint">可留空；也可填写 #1、#2 或完整 issue 链接</string>
+    <string name="debug_capture_issue_invalid">请留空，或输入 issue 编号（如 #1）或完整链接</string>
+    <string name="debug_capture_start">开始本次采集</string>
+    <string name="debug_capture_start_failed">无法开始采集：%1$s</string>
+
+    <string name="debug_capture_active_title">3. 逐项采集</string>
+    <string name="debug_capture_active_hint">每项先点“开始此项”，只操作官方 App 当前可见的设置；不显示或不支持就点“跳过”。每次只改变一项，等待 2 秒后返回并标记。</string>
+    <string name="debug_capture_active_badge">正在采集</string>
+    <string name="debug_capture_progress">已完成或跳过 %1$d / %2$d 项</string>
+    <string name="debug_capture_event_count">协议事件已记录 %1$d 条</string>
+    <string name="debug_capture_no_protocol_events">本轮没有抓到任何协议事件，只有向导标记。请先确认 LSPosed 作用域并重启官方 App；仍为 0 时按页面底部的 HCI 兜底说明反馈，不要把本包当作有效协议样本。</string>
+    <string name="debug_capture_status_pending">待采集</string>
+    <string name="debug_capture_status_active">正在执行，请完成后等待 2 秒</string>
+    <string name="debug_capture_status_done">已完成</string>
+    <string name="debug_capture_status_skipped">设备无此功能，已跳过</string>
+    <string name="debug_capture_status_aborted">采集停止时未完成</string>
+    <string name="debug_capture_start_step">开始此项并打开官方 App</string>
+    <string name="debug_capture_open_official">打开所选官方 App</string>
+    <string name="debug_capture_complete_step">完成并标记</string>
+    <string name="debug_capture_skip_step">无此功能，跳过</string>
+    <string name="debug_capture_marker_failed">写入标记失败，请不要继续操作</string>
+    <string name="debug_capture_working">正在写入，请稍候…</string>
+    <string name="debug_capture_finish_active_first">请先完成或跳过当前项目</string>
+    <string name="debug_capture_official_open_failed">无法打开所选官方 App，请手动打开</string>
+
+    <string name="debug_capture_step_head_motion_title">头动控制</string>
+    <string name="debug_capture_step_head_motion_desc">若设备页提供点头/摇头等头动控制，请先关闭再开启，并按页面提示完成一次动作；没有就跳过。</string>
+    <string name="debug_capture_step_dual_device_title">双设备连接</string>
+    <string name="debug_capture_step_dual_device_desc">关闭、开启双设备连接；如页面显示已连接设备列表，仅进入查看，不要在日志中填写其他设备名称。</string>
+
+    <!-- 通用华为耳机功能全集；界面未显示或设备不支持的项目必须跳过。 -->
+    <string name="debug_capture_step_device_overview_title">连接、开盒与设备主页</string>
+    <string name="debug_capture_step_device_overview_desc">保持耳机已正常配对，从断开状态重新连接；如有充电盒可开盒一次，再进入官方 App 的设备主页等待加载。不要恢复出厂设置或取消配对。</string>
+    <string name="debug_capture_step_device_info_title">设备信息与版本页</string>
+    <string name="debug_capture_step_device_info_desc">仅打开官方 App 当前可见的设备信息或版本页并等待 3 秒，不要点击固件更新、恢复出厂设置等操作；页面不存在就跳过。</string>
+    <string name="debug_capture_step_battery_state_title">电量、充电与入盒状态</string>
+    <string name="debug_capture_step_battery_state_desc">查看左右耳和充电盒当前电量；方便时让单只耳机入盒、出盒或插拔一次充电线，每次只改变一个状态。没有充电盒或页面不显示就跳过对应动作。</string>
+    <string name="debug_capture_step_noise_modes_title">声音控制模式</string>
+    <string name="debug_capture_step_noise_modes_desc">只按界面现有选项依次切换关闭、降噪、透传或环境声等模式，每次保持 3 秒；不要凭名称猜测或寻找隐藏功能。</string>
+    <string name="debug_capture_step_noise_submodes_title">降噪与透传子选项</string>
+    <string name="debug_capture_step_noise_submodes_desc">若当前页面提供降噪档位、智慧动态、增强人声等子选项，按界面顺序逐项切换，每次保持 3 秒；没有就跳过。</string>
+    <string name="debug_capture_step_gesture_tap_title">轻点、双击与三击手势</string>
+    <string name="debug_capture_step_gesture_tap_desc">仅配置页面实际显示的点击类手势；左右耳分别修改，每次只改变一侧的一个选项并等待 2 秒，没有对应手势就跳过。</string>
+    <string name="debug_capture_step_gesture_press_title">按捏与长按手势</string>
+    <string name="debug_capture_step_gesture_press_desc">仅配置页面实际显示的按捏、按压或长按动作；左右耳分开、每次只改变一个选项，没有就跳过。</string>
+    <string name="debug_capture_step_gesture_swipe_buttons_title">滑动与实体按键</string>
+    <string name="debug_capture_step_gesture_swipe_buttons_desc">仅操作页面实际显示的滑动设置或耳机实体按键配置，每次只修改一个动作；不要触发真实通话、录音或隐私内容。</string>
+    <string name="debug_capture_step_wear_detection_title">佩戴检测</string>
+    <string name="debug_capture_step_wear_detection_desc">若页面提供佩戴检测，先关闭再开启，然后佩戴、取下一只耳机各一次，每个状态保持至少 3 秒；没有就跳过。</string>
+    <string name="debug_capture_step_drop_reminder_title">掉落提醒</string>
+    <string name="debug_capture_step_drop_reminder_desc">若页面提供掉落提醒，只切换其开关并等待 3 秒；不要刻意丢落耳机，也不要进入位置、查找或响铃页面。</string>
+    <string name="debug_capture_step_adaptive_audio_title">自适应音频与音量</string>
+    <string name="debug_capture_step_adaptive_audio_desc">若页面提供智慧动态、场景感知、音量自适应等设置，每次只切换一个开关或档位；不显示就跳过。</string>
+    <string name="debug_capture_step_voice_control_title">语音唤醒与播报开关</string>
+    <string name="debug_capture_step_voice_control_desc">只切换官方 App 当前可见且不涉及内容的语音唤醒或播报开关；不要实际录音、发送语音，也不要打开通知内容、账号或健康页面。</string>
+    <string name="debug_capture_step_equalizer_title">音效与均衡器</string>
+    <string name="debug_capture_step_equalizer_desc">依次选择当前可见的官方音效预设；若支持自定义均衡器，只移动一个频段一次并保存，再恢复原值。</string>
+    <string name="debug_capture_step_spatial_audio_title">空间音频</string>
+    <string name="debug_capture_step_spatial_audio_desc">仅在页面实际显示时，依次切换关闭、固定空间音频和头部跟踪等当前可见选项，每次保持 3 秒；没有就跳过。</string>
+    <string name="debug_capture_step_audio_quality_title">音质与连接偏好</string>
+    <string name="debug_capture_step_audio_quality_desc">若页面提供音质优先、连接稳定优先、高清音频或编解码偏好，每次只切换一个当前可见选项；不要播放涉及隐私的音频。</string>
+    <string name="debug_capture_step_low_latency_title">低时延或游戏模式</string>
+    <string name="debug_capture_step_low_latency_desc">若页面提供低时延、游戏或电竞模式，只切换开关并等待 3 秒；不显示就跳过。</string>
+    <string name="debug_capture_step_case_settings_title">充电盒设置</string>
+    <string name="debug_capture_step_case_settings_desc">若页面提供充电盒提示音、显示或按键等设置，每次只改变一个当前可见选项；不要恢复出厂设置、重新配对或触发查找响铃。</string>
+    <string name="debug_capture_step_ear_fit_title">耳塞贴合与佩戴偏好</string>
+    <string name="debug_capture_step_ear_fit_desc">仅切换当前可见的佩戴偏好或左右耳适配设置；不要开始需要播放测试音、访问健康数据或采集听力信息的测试。</string>
+    <string name="debug_capture_step_magnetic_power_title">磁吸开关与颈带设置</string>
+    <string name="debug_capture_step_magnetic_power_desc">若为 FreeLace 等颈带设备且页面提供磁吸开关、自动连接或自动休眠设置，每次只切换一个选项；其他设备直接跳过。</string>
+    <string name="debug_capture_step_disconnect_reconnect_title">断开与重新连接</string>
+    <string name="debug_capture_step_disconnect_reconnect_desc">从系统蓝牙断开耳机，等待 5 秒后重新连接并返回设备页。只执行断开/连接，不要取消配对或重置耳机。</string>
+    <string name="debug_capture_step_other_feature_title">其他当前可见功能</string>
+    <string name="debug_capture_step_other_feature_desc">若设备页还有不属于上述分类、且不涉及隐私或高风险操作的设置，可选取一个功能做单变量切换并在 issue 中注明名称。禁止固件升级、重置/取消配对、真实通话/录音、账号/健康/位置/通知内容以及查找响铃。</string>
+
+    <string name="debug_capture_stop_title">4. 停止并导出</string>
+    <string name="debug_capture_stop_hint">通用清单不代表自动识别出设备能力，也不要求所有功能都存在；页面未显示或设备不支持的项目请使用“跳过”，让维护者区分“未操作”和“不支持”。</string>
+    <string name="debug_capture_stop">停止采集</string>
+    <string name="debug_capture_stop_failed">停止采集失败：%1$s</string>
+    <string name="debug_capture_finished_title">采集已停止</string>
+    <string name="debug_capture_finished_body">请先导出并检查内容，再通过已有 GitHub issue 或新建 issue 发送给维护者。不要直接上传完整系统日志。</string>
+    <string name="debug_capture_export">导出并分享采集包</string>
+    <string name="debug_capture_include_hci">仅当维护者明确要求：我已断开其他蓝牙设备，并同意导出时尝试附加 HCI snoop（高风险）</string>
+    <string name="debug_capture_include_hci_warning">启用后可能通过 Root 读取最多 64 MiB 的系统蓝牙日志。该日志不只属于目标耳机，必须先检查和脱敏；附加文件会暂存在 HuaweiPods 私有目录，清除应用数据或卸载 Debug 版可删除。</string>
+    <string name="debug_capture_export_failed">导出失败：%1$s</string>
+    <string name="debug_capture_share_title">分享 HuaweiPods 协议采集包</string>
+    <string name="debug_capture_new_session">开始另一轮采集</string>
+
+    <string name="debug_capture_hci_title">Debug Hook 没有记录？HCI snoop 仅作兜底</string>
+    <string name="debug_capture_hci_body">先在 issue 中反馈手机型号、系统版本、官方 App 版本及“事件为零”。维护者确认后，再断开其他蓝牙设备，限时启用开发者选项中的“启用蓝牙 HCI 信息收集日志”，只重复一个操作并立即关闭。HCI 日志可能包含附近设备地址、名称及其他蓝牙通信；分享前必须脱敏，绝不要直接公开完整 bugreport。</string>
+</resources>

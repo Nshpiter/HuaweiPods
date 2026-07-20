@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <queries>
+        <package android:name="com.huawei.smarthome" />
+        <package android:name="com.huawei.smartaudio" />
+    </queries>
+
+    <application
+        android:label="@string/debug_capture_app_name"
+        tools:replace="android:label">
+
+        <activity
+            android:name=".debugcapture.DebugCaptureActivity"
+            android:exported="true"
+            android:launchMode="singleTask" />
+
+        <activity-alias
+            android:name=".LauncherActivity"
+            android:label="@string/debug_capture_app_name"
+            android:targetActivity=".debugcapture.DebugCaptureActivity"
+            tools:replace="android:label,android:targetActivity" />
+
+        <receiver
+            android:name=".debugcapture.CaptureEventReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="moe.chenxy.huaweipods.debugcapture.action.CAPTURE_EVENT" />
+            </intent-filter>
+        </receiver>
+
+        <provider
+            android:name=".debugcapture.CaptureFileProvider"
+            android:authorities="${applicationId}.debugcapture.files"
+            android:exported="false"
+            android:grantUriPermissions="true" />
+    </application>
+
+</manifest>
