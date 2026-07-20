@@ -26,3 +26,10 @@ resources/META-INF/yukihookapi_init
 opencode.json
 /.idea
 /.qoder
+
+# VitePress website
+/node_modules/
+/docs/.vitepress/cache/
+/docs/.vitepress/dist/
+/.wrangler/
+/.dev.vars
