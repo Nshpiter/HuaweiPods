@@ -1,6 +1,6 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "huaweipods-site",
+  "name": "huaweipods",
   "compatibility_date": "2026-07-20",
   "assets": {
     "directory": "./docs/.vitepress/dist",
