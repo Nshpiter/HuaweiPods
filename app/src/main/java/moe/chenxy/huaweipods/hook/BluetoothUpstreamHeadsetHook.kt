@@ -15,8 +15,8 @@ import java.lang.reflect.Method
 import moe.chenxy.huaweipods.BuildConfig
 import moe.chenxy.huaweipods.config.ConfigManager
 import moe.chenxy.huaweipods.pods.HuaweiHfpController
-import moe.chenxy.huaweipods.pods.RfcommController
-import moe.chenxy.huaweipods.pods.isHuaweiFreeBudsByName
+import moe.chenxy.huaweipods.pods.HuaweiDeviceRoute
+import moe.chenxy.huaweipods.pods.detectHuaweiDeviceRoute
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.BatteryParams
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.HuaweiPodsAction
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.addHuaweiPodsAction
@@ -36,8 +36,6 @@ class BluetoothUpstreamHeadsetHook : HookContext() {
     private var receiverRegistered = false
     private var currentBattery: BatteryParams? = null
     private var currentAnc = 1
-    private var currentTransparencyVocalEnhancement = false
-    private var hasTransparencyVocalEnhancementState = false
     private var currentAddress: String? = null
     private var currentName: String? = null
 
@@ -253,7 +251,6 @@ class BluetoothUpstreamHeadsetHook : HookContext() {
             addHuaweiPodsAction(HuaweiPodsAction.ACTION_PODS_DISCONNECTED)
             addHuaweiPodsAction(HuaweiPodsAction.ACTION_PODS_BATTERY_CHANGED)
             addHuaweiPodsAction(HuaweiPodsAction.ACTION_PODS_ANC_CHANGED)
-            addHuaweiPodsAction(HuaweiPodsAction.ACTION_PODS_TRANSPARENCY_VOCAL_ENHANCEMENT_CHANGED)
             addHuaweiPodsAction(HuaweiPodsAction.ACTION_CONFIG_CHANGED)
         }
         context?.registerReceiver(object : BroadcastReceiver() {
@@ -280,12 +277,6 @@ class BluetoothUpstreamHeadsetHook : HookContext() {
                     HuaweiPodsAction.ACTION_PODS_ANC_CHANGED -> {
                         currentAddress = receivedIntent.getStringExtra("address") ?: currentAddress
                         currentAnc = receivedIntent.getIntExtra("status", currentAnc)
-                        rememberKnownAddress(currentAddress)
-                    }
-                    HuaweiPodsAction.ACTION_PODS_TRANSPARENCY_VOCAL_ENHANCEMENT_CHANGED -> {
-                        currentAddress = receivedIntent.getStringExtra("address") ?: currentAddress
-                        currentTransparencyVocalEnhancement = receivedIntent.getBooleanExtra("enabled", currentTransparencyVocalEnhancement)
-                        hasTransparencyVocalEnhancementState = true
                         rememberKnownAddress(currentAddress)
                     }
                 }
@@ -699,8 +690,7 @@ class BluetoothUpstreamHeadsetHook : HookContext() {
         if (device == null) return false
         val address = runCatching { device.address }.getOrNull()
         val name = runCatching { device.name ?: device.alias }.getOrNull().orEmpty()
-        val result = name.contains("huawei", ignoreCase = true) ||
-            isHuaweiFreeBudsByName(name) ||
+        val result = detectHuaweiDeviceRoute(name) == HuaweiDeviceRoute.HUAWEI_FREEBUDS3 ||
             (address != null && isHuaweiAddress(address))
         if (result && address != null) knownHuaweiAddresses.add(address.uppercase())
         return result
@@ -746,34 +736,36 @@ class BluetoothUpstreamHeadsetHook : HookContext() {
     }
 
     private fun realRefreshPayload(): String {
-        val localSnapshot = runCatching { RfcommController.currentStatusSnapshot() }
-            .getOrNull()
-            ?.takeIf { it.address != null || it.battery != null }
-            ?.takeIf { currentAddress == null || it.address == null || it.address == currentAddress }
-        val battery = localSnapshot?.battery ?: currentBattery
-        val anc = currentAnc
-        if (!hasTransparencyVocalEnhancementState && localSnapshot != null) {
-            currentTransparencyVocalEnhancement = localSnapshot.transparencyVocalEnhancement
-            hasTransparencyVocalEnhancementState = true
-        }
-        val transparencyVocalEnhancement = if (hasTransparencyVocalEnhancementState) {
-            currentTransparencyVocalEnhancement
-        } else {
-            localSnapshot?.transparencyVocalEnhancement ?: currentTransparencyVocalEnhancement
-        }
-        localSnapshot?.address?.let {
-            currentAddress = it
-            knownHuaweiAddresses.add(it.uppercase())
-        }
-        localSnapshot?.deviceName?.let { currentName = it }
-        return RfcommController.miuiRefreshPayload(battery, anc, transparencyVocalEnhancement)
+        return miuiRefreshPayload(currentBattery, currentAnc)
     }
 
     private fun effectiveBattery(): BatteryParams? {
-        val localSnapshot = runCatching { RfcommController.currentStatusSnapshot() }.getOrNull()
-            ?.takeIf { currentAddress == null || it.address == null || it.address == currentAddress }
-        return localSnapshot?.battery ?: currentBattery
+        return currentBattery
     }
+
+    private fun miuiRefreshPayload(
+        battery: BatteryParams?,
+        anc: Int,
+    ): String {
+        val values = MutableList(16) { "" }
+        values[0] = miuiBatteryValue(battery?.left)
+        values[1] = miuiBatteryValue(battery?.right)
+        values[2] = miuiBatteryValue(battery?.case)
+        values[7] = miuiAncLevel(anc)
+        values[8] = "true"
+        values[11] = "00"
+        values[13] = "00"
+        values[14] = "00"
+        return values.joinToString(",")
+    }
+
+    private fun miuiBatteryValue(params: PodParams?): String {
+        if (params?.isConnected != true) return "255"
+        val value = params.battery.coerceIn(0, 100)
+        return (if (params.isCharging) value or 128 else value).toString()
+    }
+
+    private fun miuiAncLevel(anc: Int): String = if (anc == 2) "0100" else "0000"
 
     private fun displayBattery(params: PodParams?): Int? {
         if (params?.isConnected != true) return null
@@ -844,14 +836,10 @@ class BluetoothUpstreamHeadsetHook : HookContext() {
 
     private fun requestBluetoothStatus(reason: String) {
         runCatching {
-            if (packageName == "com.android.bluetooth") {
-                RfcommController.queryStatus()
-            } else {
-                context?.sendBroadcast(Intent(HuaweiPodsAction.ACTION_REFRESH_STATUS).apply {
-                    setPackage("com.android.bluetooth")
-                    addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
-                })
-            }
+            context?.sendBroadcast(Intent(HuaweiPodsAction.ACTION_REFRESH_STATUS).apply {
+                setPackage("com.android.bluetooth")
+                addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
+            })
             Log.d(TAG, "requested bluetooth status reason=$reason package=$packageName")
         }.onFailure {
             Log.w(TAG, "request bluetooth status failed reason=$reason package=$packageName", it)
@@ -859,38 +847,15 @@ class BluetoothUpstreamHeadsetHook : HookContext() {
     }
 
     private fun huaweiAncFromMiuiMode(mode: Int): Int {
-        return when (mode) {
-            1 -> 2
-            2 -> 3
-            else -> 1
-        }
+        return if (mode == 1) 2 else 1
     }
 
     private fun huaweiAncFromMiuiLevel(level: String): Int {
-        // MIUI binder level codes: 0103=Smart, 0101=Light, 0100=Medium, 0102=Deep.
-        return when {
-            level.startsWith("0103") -> 5
-            level.startsWith("0101") -> 6
-            level.startsWith("0100") -> 7
-            level.startsWith("0102") -> 8
-            level.startsWith("01") -> 7
-            level.startsWith("02") -> 3
-            else -> 1
-        }
+        return if (level.startsWith("01")) 2 else 1
     }
 
     private fun sendHuaweiAncLevel(level: String) {
-        when {
-            level.startsWith("0201") -> {
-                currentAnc = 3
-                sendHuaweiTransparencyVocalEnhancement(true)
-            }
-            level.startsWith("0200") -> {
-                currentAnc = 3
-                sendHuaweiTransparencyVocalEnhancement(false)
-            }
-            else -> sendHuaweiAnc(huaweiAncFromMiuiLevel(level))
-        }
+        sendHuaweiAnc(huaweiAncFromMiuiLevel(level))
     }
 
     private fun sendHuaweiAnc(mode: Int) {
@@ -914,30 +879,6 @@ class BluetoothUpstreamHeadsetHook : HookContext() {
             addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
         })
         Log.d(TAG, "sendHuaweiAnc broadcast sent mode=$mode")
-    }
-
-    private fun sendHuaweiTransparencyVocalEnhancement(enabled: Boolean) {
-        currentTransparencyVocalEnhancement = enabled
-        hasTransparencyVocalEnhancementState = true
-        val ctx = context ?: run {
-            Log.w(TAG, "sendHuaweiTransparencyVocalEnhancement skipped: context is null enabled=$enabled")
-            return
-        }
-        ctx.sendBroadcast(Intent(HuaweiPodsAction.ACTION_TRANSPARENCY_VOCAL_ENHANCEMENT_SET).apply {
-            putExtra("enabled", enabled)
-            setPackage("com.android.bluetooth")
-            addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
-        })
-        ctx.sendBroadcast(Intent(HuaweiPodsAction.ACTION_PODS_TRANSPARENCY_VOCAL_ENHANCEMENT_CHANGED).apply {
-            putExtra("enabled", enabled)
-            setPackage(BuildConfig.APPLICATION_ID)
-            addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
-        })
-        ctx.sendBroadcast(Intent(HuaweiPodsAction.ACTION_REFRESH_STATUS).apply {
-            setPackage("com.android.bluetooth")
-            addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
-        })
-        Log.d(TAG, "sendHuaweiTransparencyVocalEnhancement broadcast sent enabled=$enabled")
     }
 
     @Suppress("DEPRECATION")

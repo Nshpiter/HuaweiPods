@@ -47,7 +47,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Dp
 import androidx.core.content.ContextCompat
 import moe.chenxy.huaweipods.R
-import moe.chenxy.huaweipods.pods.isHuaweiFreeBudsByName
+import moe.chenxy.huaweipods.pods.HuaweiDeviceRoute
+import moe.chenxy.huaweipods.pods.detectHuaweiDeviceRoute
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Icon
@@ -139,10 +140,15 @@ fun DevicePickerPage(
     val adapter = btManager?.adapter
     val bluetoothEnabled = adapter?.isEnabled == true
     val pairedDevices = remember(hasPermission, bluetoothEnabled, bluetoothRefreshToken) {
-        if (!bluetoothEnabled) emptyList() else adapter.bondedDevices.toList().sortedWith(
-            compareByDescending<BluetoothDevice> { isHuaweiFreeBudsByName(it.name ?: it.alias ?: "") }
-                .thenBy { it.name ?: it.alias ?: it.address }
-        )
+        if (!bluetoothEnabled) {
+            emptyList()
+        } else {
+            adapter.bondedDevices
+                .filter {
+                    detectHuaweiDeviceRoute(it.name ?: it.alias) == HuaweiDeviceRoute.HUAWEI_FREEBUDS3
+                }
+                .sortedBy { it.name ?: it.alias ?: it.address }
+        }
     }
 
     Box(Modifier.fillMaxSize()) {
@@ -183,7 +189,7 @@ fun DevicePickerPage(
                     ) {
                         Text(
                             text = stringResource(
-                                if (bluetoothEnabled) R.string.no_paired_devices else R.string.bluetooth_disabled
+                                if (bluetoothEnabled) R.string.no_supported_freebuds3 else R.string.bluetooth_disabled
                             ),
                             color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                             textAlign = TextAlign.Center,

@@ -143,7 +143,6 @@ private fun PopupContent(onMore: () -> Unit, onDone: () -> Unit) {
     val ancMode = remember { mutableStateOf(NoiseControlMode.OFF) }
     val ancLevel = remember { mutableStateOf(0) }
     val deviceName = remember { mutableStateOf("") }
-    val simpleMode = true
 
     val broadcastReceiver = remember {
         object : BroadcastReceiver() {
@@ -152,24 +151,19 @@ private fun PopupContent(onMore: () -> Unit, onDone: () -> Unit) {
                 when (HuaweiPodsAction.canonical(intent.action)) {
                     HuaweiPodsAction.ACTION_PODS_ANC_CHANGED -> {
                         val status = intent.getIntExtra("status", 1)
-                        ancMode.value = when (status) {
-                            1 -> NoiseControlMode.OFF
-                            2 -> NoiseControlMode.NOISE_CANCELLATION
-                            3 -> NoiseControlMode.TRANSPARENCY
-                            4 -> NoiseControlMode.ADAPTIVE
-                            5 -> NoiseControlMode.NOISE_CANCELLATION_SMART
-                            6 -> NoiseControlMode.NOISE_CANCELLATION_LIGHT
-                            7 -> NoiseControlMode.NOISE_CANCELLATION_MEDIUM
-                            8 -> NoiseControlMode.NOISE_CANCELLATION_DEEP
-                            else -> NoiseControlMode.OFF
+                        ancMode.value = if (status == 2) {
+                            NoiseControlMode.NOISE_CANCELLATION
+                        } else {
+                            NoiseControlMode.OFF
                         }
                     }
                     HuaweiPodsAction.ACTION_HUAWEI_ANC_LEVEL_CHANGED -> {
                         ancLevel.value = intent.getIntExtra("level", ancLevel.value).coerceIn(0, 8)
                     }
                     HuaweiPodsAction.ACTION_PODS_BATTERY_CHANGED -> {
-                        batteryParams.value =
-                            intent.getParcelableExtra("status", BatteryParams::class.java)!!
+                        intent.getParcelableExtra("status", BatteryParams::class.java)?.let {
+                            batteryParams.value = it
+                        }
                     }
                     HuaweiPodsAction.ACTION_PODS_CONNECTED -> {
                         deviceName.value = intent.getStringExtra("device_name") ?: ""
@@ -226,12 +220,6 @@ private fun PopupContent(onMore: () -> Unit, onDone: () -> Unit) {
         val status = when (mode) {
             NoiseControlMode.OFF -> 1
             NoiseControlMode.NOISE_CANCELLATION -> 2
-            NoiseControlMode.TRANSPARENCY -> 3
-            NoiseControlMode.ADAPTIVE -> 4
-            NoiseControlMode.NOISE_CANCELLATION_SMART -> 5
-            NoiseControlMode.NOISE_CANCELLATION_LIGHT -> 6
-            NoiseControlMode.NOISE_CANCELLATION_MEDIUM -> 7
-            NoiseControlMode.NOISE_CANCELLATION_DEEP -> 8
         }
         Intent(HuaweiPodsAction.ACTION_ANC_SELECT).apply {
             putExtra("status", status)
@@ -277,7 +265,6 @@ private fun PopupContent(onMore: () -> Unit, onDone: () -> Unit) {
                     onAncLevelChange = ::setAncLevel,
                     onMore = onMore,
                     onDone = { showDialog.value = false },
-                    simpleMode = simpleMode
                 )
             } else {
                 PortraitPopupBody(
@@ -288,7 +275,6 @@ private fun PopupContent(onMore: () -> Unit, onDone: () -> Unit) {
                     onAncLevelChange = ::setAncLevel,
                     onMore = onMore,
                     onDone = { showDialog.value = false },
-                    simpleMode = simpleMode
                 )
             }
         }
@@ -304,7 +290,6 @@ private fun PortraitPopupBody(
     onAncLevelChange: (Int) -> Unit,
     onMore: () -> Unit,
     onDone: () -> Unit,
-    simpleMode: Boolean = false
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
         Card(modifier = Modifier.fillMaxWidth()) {
@@ -320,7 +305,6 @@ private fun PortraitPopupBody(
                 onAncModeChange = onAncModeChange,
                 huaweiAncLevel = ancLevel,
                 onHuaweiAncLevelChange = onAncLevelChange,
-                simpleMode = simpleMode
             )
         }
         Spacer(modifier = Modifier.height(16.dp))
@@ -351,7 +335,6 @@ private fun LandscapePopupBody(
     onAncLevelChange: (Int) -> Unit,
     onMore: () -> Unit,
     onDone: () -> Unit,
-    simpleMode: Boolean = false
 ) {
     Row(
         modifier = Modifier
@@ -381,7 +364,6 @@ private fun LandscapePopupBody(
                     huaweiAncLevel = ancLevel,
                     onHuaweiAncLevelChange = onAncLevelChange,
                     compact = true,
-                    simpleMode = simpleMode
                 )
             }
         }

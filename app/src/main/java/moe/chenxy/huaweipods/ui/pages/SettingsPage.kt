@@ -8,18 +8,14 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import moe.chenxy.huaweipods.R
 import moe.chenxy.huaweipods.config.ConfigManager
-import moe.chenxy.huaweipods.pods.GameModeImplementation
 import moe.chenxy.huaweipods.ui.AppLocale
 import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.DropdownEntry
-import top.yukonga.miuix.kmp.basic.DropdownItem
 import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
 
@@ -33,22 +29,12 @@ fun SettingsPage(
     onLogLevelChange: (Int) -> Unit = {},
     islandMode: MutableState<Int> = mutableStateOf(ConfigManager.ISLAND_MODE_OFFICIAL),
     onIslandModeChange: (Int) -> Unit = {},
-    islandShowTimings: MutableState<Set<Int>> = mutableStateOf(emptySet()),
-    onIslandShowTimingsChange: (Set<Int>) -> Unit = {},
     appLanguage: MutableState<Int> = mutableStateOf(AppLocale.SYSTEM),
     onAppLanguageChange: (Int) -> Unit = {},
-    autoGameMode: MutableState<Boolean> = mutableStateOf(false),
-    onAutoGameModeChange: (Boolean) -> Unit = {},
-    gameModeImplementation: MutableState<GameModeImplementation> = mutableStateOf(GameModeImplementation.STANDARD),
-    onGameModeImplementationChange: (GameModeImplementation) -> Unit = {},
     notificationClickAction: MutableState<Int> = mutableStateOf(ConfigManager.NOTIFICATION_CLICK_MODULE_POPUP),
     onNotificationClickActionChange: (Int) -> Unit = {},
     moreClickAction: MutableState<Int> = mutableStateOf(ConfigManager.MORE_CLICK_MODULE),
     onMoreClickActionChange: (Int) -> Unit = {},
-    adaptiveCapabilityOverride: MutableState<Int> = mutableStateOf(ConfigManager.CAPABILITY_OVERRIDE_AUTO),
-    spatialAudioCapabilityOverride: MutableState<Int> = mutableStateOf(ConfigManager.CAPABILITY_OVERRIDE_AUTO),
-    spatialSoundSwitchCapabilityOverride: MutableState<Int> = mutableStateOf(ConfigManager.CAPABILITY_OVERRIDE_AUTO),
-    onOpenDeviceCapabilities: () -> Unit = {},
     fakeDeviceId: MutableState<String> = mutableStateOf(ConfigManager.DEFAULT_FAKE_DEVICE_ID),
     onFakeDeviceIdChange: (String) -> Unit = {},
     onOpenTheme: () -> Unit = {},
@@ -71,30 +57,6 @@ fun SettingsPage(
         stringResource(R.string.island_mode_official),
         stringResource(R.string.island_mode_module),
     )
-    val islandShowTimingOptions = listOf(
-        ConfigManager.ISLAND_SHOW_TIMING_CONNECTED to stringResource(R.string.island_show_timing_connected),
-        ConfigManager.ISLAND_SHOW_TIMING_WEARING to stringResource(R.string.island_show_timing_wearing),
-        ConfigManager.ISLAND_SHOW_TIMING_REMOVED to stringResource(R.string.island_show_timing_removed),
-        ConfigManager.ISLAND_SHOW_TIMING_IN_CASE to stringResource(R.string.island_show_timing_in_case),
-    )
-    val islandShowTimingEntries = remember(islandShowTimings.value, islandShowTimingOptions) {
-        listOf(
-            DropdownEntry(
-                items = islandShowTimingOptions.map { (value, text) ->
-                    DropdownItem(
-                        text = text,
-                        selected = value in islandShowTimings.value,
-                        onClick = {
-                            val selected = islandShowTimings.value
-                            onIslandShowTimingsChange(
-                                if (value in selected) selected - value else selected + value
-                            )
-                        },
-                    )
-                }
-            )
-        )
-    }
     val notificationClickActionValues = listOf(
         ConfigManager.NOTIFICATION_CLICK_MODULE_POPUP,
         ConfigManager.NOTIFICATION_CLICK_SYSTEM_SETTINGS,
@@ -165,15 +127,6 @@ fun SettingsPage(
                     selectedIndex = islandModeValues.indexOf(islandMode.value).coerceAtLeast(0),
                     onSelectedIndexChange = { onIslandModeChange(islandModeValues[it]) }
                 )
-                if (islandMode.value == ConfigManager.ISLAND_MODE_MODULE) {
-                    OverlayDropdownPreference(
-                        title = stringResource(R.string.island_show_timing),
-                        summary = stringResource(R.string.island_show_timing_summary),
-                        entries = islandShowTimingEntries,
-                        collapseOnSelection = false,
-                    )
-                }
-
                 OverlayDropdownPreference(
                     title = stringResource(R.string.notification_click_action),
                     summary = stringResource(R.string.notification_click_action_summary),

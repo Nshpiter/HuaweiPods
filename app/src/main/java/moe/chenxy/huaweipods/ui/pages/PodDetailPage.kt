@@ -49,7 +49,6 @@ import androidx.compose.ui.unit.sp
 import moe.chenxy.huaweipods.R
 import moe.chenxy.huaweipods.config.ConfigManager
 import moe.chenxy.huaweipods.pods.NoiseControlMode
-import moe.chenxy.huaweipods.pods.WearStatus
 import moe.chenxy.huaweipods.pods.HuaweiGestureAction
 import moe.chenxy.huaweipods.pods.HuaweiGestureController
 import moe.chenxy.huaweipods.pods.HuaweiGestureSide
@@ -58,12 +57,10 @@ import moe.chenxy.huaweipods.ui.components.PodStatus
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.BatteryParams
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Text
-import moe.chenxy.huaweipods.pods.EqPreset
-import moe.chenxy.huaweipods.pods.isHuaweiFreeBudsByName
+import moe.chenxy.huaweipods.pods.HuaweiDeviceRoute
+import moe.chenxy.huaweipods.pods.detectHuaweiDeviceRoute
 import top.yukonga.miuix.kmp.basic.Checkbox
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
-import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
-import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 private const val GESTURE_TAG = "HuaweiPods-Gesture"
@@ -76,33 +73,18 @@ fun PodDetailPage(
     podName: String,
     connectedDeviceAddress: String = "",
     batteryParams: BatteryParams,
-    wearStatus: WearStatus = WearStatus(),
     ancMode: NoiseControlMode,
     onAncModeChange: (NoiseControlMode) -> Unit,
-    smartAncLevel: NoiseControlMode? = null,
     huaweiAncLevel: Int = 0,
     onHuaweiAncLevelChange: (Int) -> Unit = {},
-    transparencyVocalEnhancement: Boolean = false,
-    onTransparencyVocalEnhancementChange: (Boolean) -> Unit = {},
-    gameMode: Boolean = false,
-    onGameModeChange: (Boolean) -> Unit = {},
-    spatialAudioMode: Int = ConfigManager.SPATIAL_AUDIO_OFF,
-    onSpatialAudioModeChange: (Int) -> Unit = {},
-    dualDeviceConnection: Boolean = false,
-    onDualDeviceConnectionChange: (Boolean) -> Unit = {},
-    spatialAudioSupported: Boolean = false,
-    spatialSoundSupported: Boolean = false,
-    adaptiveModeEnabled: Boolean = true,
-    simpleAncMode: Boolean = true,
-    eqPreset: Int = -1,
-    onEqPresetChange: (Int) -> Unit = {},
     boxImagePath: String? = null,
 ) {
     val context = LocalContext.current
     val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
     val gesturePrefs = remember { context.getSharedPreferences(ConfigManager.PREFS_NAME, Context.MODE_PRIVATE) }
     val gestureControlEnabled = remember(podName, connectedDeviceAddress) {
-        isHuaweiFreeBudsByName(podName) && BluetoothAdapter.checkBluetoothAddress(connectedDeviceAddress)
+        detectHuaweiDeviceRoute(podName) == HuaweiDeviceRoute.HUAWEI_FREEBUDS3 &&
+            BluetoothAdapter.checkBluetoothAddress(connectedDeviceAddress)
     }
     var leftGestureAction by remember(connectedDeviceAddress) {
         mutableStateOf(readGesturePreference(gesturePrefs, connectedDeviceAddress, HuaweiGestureSide.LEFT))
@@ -166,30 +148,14 @@ fun PodDetailPage(
             ) {
                 podControlItems(
                     batteryParams = batteryParams,
-                    wearStatus = wearStatus,
                     ancMode = ancMode,
                     onAncModeChange = onAncModeChange,
-                    smartAncLevel = smartAncLevel,
                     huaweiAncLevel = huaweiAncLevel,
                     onHuaweiAncLevelChange = onHuaweiAncLevelChange,
                     gestureControlEnabled = gestureControlEnabled,
                     leftGestureAction = leftGestureAction,
                     rightGestureAction = rightGestureAction,
                     onGestureActionChange = ::setGestureAction,
-                    transparencyVocalEnhancement = transparencyVocalEnhancement,
-                    onTransparencyVocalEnhancementChange = onTransparencyVocalEnhancementChange,
-                    gameMode = gameMode,
-                    onGameModeChange = onGameModeChange,
-                    spatialAudioMode = spatialAudioMode,
-                    onSpatialAudioModeChange = onSpatialAudioModeChange,
-                    dualDeviceConnection = dualDeviceConnection,
-                    onDualDeviceConnectionChange = onDualDeviceConnectionChange,
-                    spatialAudioSupported = spatialAudioSupported,
-                    spatialSoundSupported = spatialSoundSupported,
-                    adaptiveModeEnabled = adaptiveModeEnabled,
-                    simpleAncMode = simpleAncMode,
-                    eqPreset = eqPreset,
-                    onEqPresetChange = onEqPresetChange,
                     bottomContentPadding = bottomContentPadding
                 )
             }
@@ -215,30 +181,14 @@ fun PodDetailPage(
 
         podControlItems(
             batteryParams = batteryParams,
-            wearStatus = wearStatus,
             ancMode = ancMode,
             onAncModeChange = onAncModeChange,
-            smartAncLevel = smartAncLevel,
             huaweiAncLevel = huaweiAncLevel,
             onHuaweiAncLevelChange = onHuaweiAncLevelChange,
             gestureControlEnabled = gestureControlEnabled,
             leftGestureAction = leftGestureAction,
             rightGestureAction = rightGestureAction,
             onGestureActionChange = ::setGestureAction,
-            transparencyVocalEnhancement = transparencyVocalEnhancement,
-            onTransparencyVocalEnhancementChange = onTransparencyVocalEnhancementChange,
-            gameMode = gameMode,
-            onGameModeChange = onGameModeChange,
-            spatialAudioMode = spatialAudioMode,
-            onSpatialAudioModeChange = onSpatialAudioModeChange,
-            dualDeviceConnection = dualDeviceConnection,
-            onDualDeviceConnectionChange = onDualDeviceConnectionChange,
-            spatialAudioSupported = spatialAudioSupported,
-            spatialSoundSupported = spatialSoundSupported,
-            adaptiveModeEnabled = adaptiveModeEnabled,
-            simpleAncMode = simpleAncMode,
-            eqPreset = eqPreset,
-            onEqPresetChange = onEqPresetChange,
             bottomContentPadding = bottomContentPadding
         )
     }
@@ -254,45 +204,22 @@ private fun rememberPodImagePainter(path: String?) = remember(path) {
 
 private fun LazyListScope.podControlItems(
     batteryParams: BatteryParams,
-    wearStatus: WearStatus,
     ancMode: NoiseControlMode,
     onAncModeChange: (NoiseControlMode) -> Unit,
-    smartAncLevel: NoiseControlMode?,
     huaweiAncLevel: Int,
     onHuaweiAncLevelChange: (Int) -> Unit,
     gestureControlEnabled: Boolean,
     leftGestureAction: HuaweiGestureAction,
     rightGestureAction: HuaweiGestureAction,
     onGestureActionChange: (HuaweiGestureSide, HuaweiGestureAction) -> Unit,
-    transparencyVocalEnhancement: Boolean,
-    onTransparencyVocalEnhancementChange: (Boolean) -> Unit,
-    gameMode: Boolean,
-    onGameModeChange: (Boolean) -> Unit,
-    spatialAudioMode: Int,
-    onSpatialAudioModeChange: (Int) -> Unit,
-    dualDeviceConnection: Boolean,
-    onDualDeviceConnectionChange: (Boolean) -> Unit,
-    spatialAudioSupported: Boolean,
-    spatialSoundSupported: Boolean,
-    adaptiveModeEnabled: Boolean,
-    simpleAncMode: Boolean,
-    eqPreset: Int,
-    onEqPresetChange: (Int) -> Unit,
     bottomContentPadding: Dp
 ) {
-    val spatialAudioValues = listOf(
-        ConfigManager.SPATIAL_AUDIO_OFF,
-        ConfigManager.SPATIAL_AUDIO_FIXED,
-        ConfigManager.SPATIAL_AUDIO_HEAD_TRACKING,
-    )
-
     item {
         Card(
             modifier = Modifier.padding(horizontal = 12.dp)
         ) {
             PodStatus(
                 batteryParams = batteryParams,
-                wearStatus = wearStatus,
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 16.dp)
             )
         }
@@ -305,13 +232,8 @@ private fun LazyListScope.podControlItems(
             AncSwitch(
                 ancStatus = ancMode,
                 onAncModeChange = onAncModeChange,
-                smartAncLevel = smartAncLevel,
                 huaweiAncLevel = huaweiAncLevel,
                 onHuaweiAncLevelChange = onHuaweiAncLevelChange,
-                adaptiveModeEnabled = adaptiveModeEnabled,
-                simpleMode = simpleAncMode,
-                transparencyVocalEnhancement = transparencyVocalEnhancement,
-                onTransparencyVocalEnhancementChange = onTransparencyVocalEnhancementChange
             )
         }
     }
@@ -335,64 +257,6 @@ private fun LazyListScope.podControlItems(
         }
     }
 
-    if (!simpleAncMode) {
-        item {
-            Card(
-                modifier = Modifier.padding(horizontal = 12.dp)
-            ) {
-                SwitchPreference(
-                    title = stringResource(R.string.game_mode),
-                    summary = stringResource(R.string.game_mode_summary),
-                    checked = gameMode,
-                    onCheckedChange = onGameModeChange
-                )
-                if (spatialAudioSupported) {
-                    val spatialAudioOptions = listOf(
-                        stringResource(R.string.off),
-                        stringResource(R.string.spatial_audio_fixed),
-                        stringResource(R.string.spatial_audio_head_tracking),
-                    )
-                    OverlayDropdownPreference(
-                        title = stringResource(R.string.spatial_audio),
-                        summary = stringResource(R.string.spatial_audio_summary),
-                        items = spatialAudioOptions,
-                        selectedIndex = spatialAudioValues.indexOf(spatialAudioMode).coerceAtLeast(0),
-                        onSelectedIndexChange = { onSpatialAudioModeChange(spatialAudioValues[it]) }
-                    )
-                }
-                if (spatialSoundSupported) {
-                    SwitchPreference(
-                        title = stringResource(R.string.spatial_sound),
-                        summary = stringResource(if (spatialAudioMode != ConfigManager.SPATIAL_AUDIO_OFF) R.string.enabled else R.string.off),
-                        checked = spatialAudioMode != ConfigManager.SPATIAL_AUDIO_OFF,
-                        onCheckedChange = {
-                            onSpatialAudioModeChange(if (it) ConfigManager.SPATIAL_AUDIO_FIXED else ConfigManager.SPATIAL_AUDIO_OFF)
-                        }
-                    )
-                }
-                val eqOptions = listOf(
-                    stringResource(R.string.eq_preset_authentic),
-                    stringResource(R.string.eq_preset_detail),
-                    stringResource(R.string.eq_preset_vocal),
-                    stringResource(R.string.eq_preset_bass),
-                    stringResource(R.string.eq_preset_dynaudio),
-                )
-                OverlayDropdownPreference(
-                    title = stringResource(R.string.eq_preset_title),
-                    summary = stringResource(R.string.eq_preset_summary),
-                    items = eqOptions,
-                    selectedIndex = EqPreset.ALL.indexOf(eqPreset).coerceAtLeast(0),
-                    onSelectedIndexChange = { onEqPresetChange(EqPreset.ALL[it]) }
-                )
-                SwitchPreference(
-                    title = stringResource(R.string.dual_device_connection),
-                    summary = stringResource(if (dualDeviceConnection) R.string.enabled else R.string.off),
-                    checked = dualDeviceConnection,
-                    onCheckedChange = onDualDeviceConnectionChange
-                )
-            }
-        }
-    }
     item {
         androidx.compose.foundation.layout.Spacer(modifier = Modifier.height(bottomContentPadding))
     }

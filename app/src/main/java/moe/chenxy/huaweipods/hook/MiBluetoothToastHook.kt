@@ -25,13 +25,11 @@ import moe.chenxy.huaweipods.utils.miuiStrongToast.data.HuaweiPodsAction
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.addHuaweiPodsAction
 import moe.chenxy.huaweipods.BuildConfig
 import moe.chenxy.huaweipods.R
-import moe.chenxy.huaweipods.pods.detectDeviceCapabilities
 
 @SuppressLint("MissingPermission")
 object MiBluetoothToastHook : HookContext() {
 
-    // ANC 模式本地缓存，用于循环切换和状态同步（1=关 2=降噪 3=通透 4=自适应）
-    // 通过接收 ACTION_PODS_ANC_CHANGED 广播与 RfcommController 保持同步
+    // ANC 模式本地缓存，用于在 FreeBuds 3 已验证的关/开状态之间切换。
     private var localAncMode = 1
 
     override fun onHook() {
@@ -275,22 +273,7 @@ object MiBluetoothToastHook : HookContext() {
                                 // 同步耳机实际 ANC 状态到本地缓存，确保下次循环切换时状态准确
                                 localAncMode = intent.getIntExtra("status", 1)
                             } else if (action == HuaweiPodsAction.ACTION_CYCLE_ANC) {
-                                val capabilities = detectDeviceCapabilities(
-                                    deviceName = intent.getStringExtra("device_name").orEmpty(),
-                                    adaptiveOverride = prefs.getInt(
-                                        ConfigManager.PREF_KEY_ADAPTIVE_CAPABILITY_OVERRIDE,
-                                        ConfigManager.CAPABILITY_OVERRIDE_AUTO
-                                    ),
-                                    spatialAudioOverride = ConfigManager.CAPABILITY_OVERRIDE_AUTO,
-                                    spatialSoundSwitchOverride = ConfigManager.CAPABILITY_OVERRIDE_AUTO,
-                                )
-                                val cycle = if (capabilities.adaptiveSupported) {
-                                    listOf(2, 4, 3, 1)
-                                } else {
-                                    listOf(2, 3, 1)
-                                }
-                                val currentIndex = cycle.indexOf(if (localAncMode in 5..8) 2 else localAncMode)
-                                localAncMode = cycle[(currentIndex + 1).floorMod(cycle.size)]
+                                localAncMode = if (localAncMode == 2) 1 else 2
                                 Intent(HuaweiPodsAction.ACTION_ANC_SELECT).apply {
                                     putExtra("status", localAncMode)
                                     addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
@@ -305,12 +288,11 @@ object MiBluetoothToastHook : HookContext() {
                     intentFilter.addHuaweiPodsAction(HuaweiPodsAction.ACTION_UPDATE_PODS_NOTIFICATION)
                     intentFilter.addHuaweiPodsAction(HuaweiPodsAction.ACTION_CANCEL_PODS_NOTIFICATION)
                     intentFilter.addHuaweiPodsAction(HuaweiPodsAction.ACTION_CYCLE_ANC)
-                    // 监听耳机实际 ANC 状态变更广播，保持 localAncMode 与 RfcommController 同步
+                    // 监听耳机实际 ANC 状态变更广播，保持本地开关状态同步。
                     intentFilter.addHuaweiPodsAction(HuaweiPodsAction.ACTION_PODS_ANC_CHANGED)
                     context.registerReceiver(broadcastReceiver, intentFilter,
                         Context.RECEIVER_EXPORTED)
         }
     }
 
-    private fun Int.floorMod(divisor: Int): Int = ((this % divisor) + divisor) % divisor
 }

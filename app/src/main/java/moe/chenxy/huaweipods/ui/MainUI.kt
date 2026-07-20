@@ -47,13 +47,8 @@ import moe.chenxy.huaweipods.R
 import moe.chenxy.huaweipods.config.ConfigManager
 import moe.chenxy.huaweipods.config.PodImagePrefs
 import moe.chenxy.huaweipods.config.PodImageResource
-import moe.chenxy.huaweipods.pods.GameModeImplementation
 import moe.chenxy.huaweipods.pods.NoiseControlMode
-import moe.chenxy.huaweipods.pods.WearState
-import moe.chenxy.huaweipods.pods.WearStatus
-import moe.chenxy.huaweipods.pods.detectDeviceCapabilities
 import moe.chenxy.huaweipods.ui.pages.AboutPage
-import moe.chenxy.huaweipods.ui.pages.DeviceCapabilitiesPage
 import moe.chenxy.huaweipods.ui.pages.ThemeSettingsPage
 import moe.chenxy.huaweipods.utils.RootManager
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.BatteryParams
@@ -81,8 +76,10 @@ sealed interface Screen : NavKey {
     data object Main : Screen
     data object About : Screen
     data object Theme : Screen
-    data object DeviceCapabilities : Screen
 }
+
+private const val DEVICE_CONNECT_TIMEOUT_MS = 15_000L
+
 @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
 @Composable
 fun MainUI(
@@ -103,15 +100,9 @@ fun MainUI(
 
     val mainTitle = remember { mutableStateOf("") }
     val batteryParams = remember { mutableStateOf(BatteryParams()) }
-    val wearStatus = remember { mutableStateOf(WearStatus()) }
     val ancMode = remember { mutableStateOf(NoiseControlMode.OFF) }
-    /** Smart-mode current auto-applied NC level (LIGHT/MEDIUM/DEEP), or null. */
-    val smartAncLevel = remember { mutableStateOf<NoiseControlMode?>(null) }
     val huaweiAncLevel = remember { mutableStateOf(0) }
     val hookConnected = remember { mutableStateOf(false) }
-    val gameMode = remember { mutableStateOf(false) }
-    val transparencyVocalEnhancement = remember { mutableStateOf(false) }
-    val dualDeviceConnection = remember { mutableStateOf(false) }
     val tabs = remember { MainTab.entries.toList() }
     var selectedTab by remember { mutableStateOf(MainTab.Module) }
     var hasAppliedDefaultTab by remember { mutableStateOf(false) }
@@ -139,57 +130,22 @@ fun MainUI(
         null
     }
 
-    // Auto game mode preference (persisted)
     val prefs = remember { context.getSharedPreferences(ConfigManager.PREFS_NAME, Context.MODE_PRIVATE) }
     val appConfig = remember { ConfigManager.refreshFromPrefs(prefs) }
-    val autoGameMode = remember { mutableStateOf(prefs.getBoolean("auto_game_mode", false)) }
-    val gameModeImplementation = remember {
-        mutableStateOf(
-            GameModeImplementation.fromPreference(
-                prefs.getString(GameModeImplementation.PREF_KEY, null)
-            )
-        )
-    }
     val notificationClickAction = remember { mutableStateOf(appConfig.notificationClickAction) }
     val moreClickAction = remember { mutableStateOf(appConfig.moreClickAction) }
     val desktopIconHidden = remember { mutableStateOf(isLauncherIconHidden(context)) }
     val logLevel = remember { mutableStateOf(appConfig.logLevel) }
     val fakeDeviceId = remember { mutableStateOf(appConfig.fakeDeviceId) }
     val islandMode = remember { mutableStateOf(appConfig.islandMode) }
-    val islandShowTimings = remember { mutableStateOf(appConfig.islandShowTimings) }
-    val spatialAudioMode = remember { mutableStateOf(prefs.getInt("spatial_audio_mode", ConfigManager.SPATIAL_AUDIO_OFF)) }
-    val eqPreset = remember { mutableStateOf(-1) }
     val earphonePrefs = remember { mutableStateOf(PodImagePrefs.load(prefs)) }
-    val adaptiveCapabilityOverride = remember { mutableStateOf(appConfig.adaptiveCapabilityOverride) }
-    val spatialAudioCapabilityOverride = remember { mutableStateOf(appConfig.spatialAudioCapabilityOverride) }
-    val spatialSoundSwitchCapabilityOverride = remember { mutableStateOf(appConfig.spatialSoundSwitchCapabilityOverride) }
-    val ancImplementationCapabilityOverride = remember { mutableStateOf(appConfig.ancImplementationCapabilityOverride) }
 
     val connectedAddressValid = BluetoothAdapter.checkBluetoothAddress(connectedDeviceAddress)
     val canShowDetailPage = hookConnected.value && connectedAddressValid
     val showEarphoneDetail = canShowDetailPage && !showDevicePicker
     val displayBattery = batteryParams.value
-    val displayWearStatus = wearStatus.value
     val displayAnc = ancMode.value
-    val displayGameMode = gameMode.value
-    val displayTransparencyVocalEnhancement = transparencyVocalEnhancement.value
-    val displayDualDeviceConnection = dualDeviceConnection.value
     val displayTitle = mainTitle.value.takeIf { it.isNotBlank() && hookConnected.value } ?: mainTitle.value
-    val simpleAncMode = true
-    val displayCapabilities = detectDeviceCapabilities(
-        deviceName = displayTitle,
-        adaptiveOverride = adaptiveCapabilityOverride.value,
-        spatialAudioOverride = spatialAudioCapabilityOverride.value,
-        spatialSoundSwitchOverride = spatialSoundSwitchCapabilityOverride.value,
-        ancImplementationOverride = ancImplementationCapabilityOverride.value,
-    )
-
-    LaunchedEffect(displayTitle, displayCapabilities) {
-        Log.i(
-            "HuaweiPods",
-            "capability check: deviceName='$displayTitle', adaptive=${displayCapabilities.adaptiveSupported}, spatial=${displayCapabilities.spatialAudioSupported}, spatialSoundSwitch=${displayCapabilities.spatialSoundSwitchSupported}"
-        )
-    }
 
     LaunchedEffect(displayTitle) {
         if (displayTitle.isNotEmpty()) {
@@ -213,6 +169,14 @@ fun MainUI(
         }
     }
 
+    LaunchedEffect(connectingDeviceAddress) {
+        val requestedAddress = connectingDeviceAddress ?: return@LaunchedEffect
+        delay(DEVICE_CONNECT_TIMEOUT_MS)
+        if (connectingDeviceAddress == requestedAddress) {
+            hookConnectionState = "error"
+        }
+    }
+
     LaunchedEffect(pendingOpenEarphonesAfterPickerLoaded, connectingDeviceAddress, hookConnected.value) {
         if (pendingOpenEarphonesAfterPickerLoaded && connectingDeviceAddress == null && hookConnected.value) {
             withFrameNanos { }
@@ -229,61 +193,21 @@ fun MainUI(
                     HuaweiPodsAction.ACTION_PODS_ANC_CHANGED -> {
                         connectedDeviceAddress = intent.getStringExtra("address") ?: connectedDeviceAddress
                         val status = intent.getIntExtra("status", 1)
-                        ancMode.value = when (status) {
-                            1 -> NoiseControlMode.OFF
-                            2 -> NoiseControlMode.NOISE_CANCELLATION
-                            3 -> NoiseControlMode.TRANSPARENCY
-                            4 -> NoiseControlMode.ADAPTIVE
-                            5 -> NoiseControlMode.NOISE_CANCELLATION_SMART
-                            6 -> NoiseControlMode.NOISE_CANCELLATION_LIGHT
-                            7 -> NoiseControlMode.NOISE_CANCELLATION_MEDIUM
-                            8 -> NoiseControlMode.NOISE_CANCELLATION_DEEP
-                            else -> NoiseControlMode.OFF
+                        ancMode.value = if (status == 2) {
+                            NoiseControlMode.NOISE_CANCELLATION
+                        } else {
+                            NoiseControlMode.OFF
                         }
                     }
 
-
                     HuaweiPodsAction.ACTION_HUAWEI_ANC_LEVEL_CHANGED -> {
                         huaweiAncLevel.value = intent.getIntExtra("level", huaweiAncLevel.value).coerceIn(0, 8)
-                    }
-                    HuaweiPodsAction.ACTION_PODS_SMART_ANC_LEVEL_CHANGED -> {
-                        val ord = intent.getIntExtra("ordinal", -1)
-                        smartAncLevel.value = NoiseControlMode.entries.getOrNull(ord)
                     }
 
                     HuaweiPodsAction.ACTION_PODS_BATTERY_CHANGED -> {
                         connectedDeviceAddress = intent.getStringExtra("address") ?: connectedDeviceAddress
                         batteryParams.value =
                             intent.getParcelableExtra("status", BatteryParams::class.java)!!
-                    }
-
-                    HuaweiPodsAction.ACTION_PODS_WEAR_STATUS_CHANGED -> {
-                        connectedDeviceAddress = intent.getStringExtra("address") ?: connectedDeviceAddress
-                        wearStatus.value = WearStatus(
-                            left = wearStateFromExtra(intent.getIntExtra("left_wear_status", -1)),
-                            right = wearStateFromExtra(intent.getIntExtra("right_wear_status", -1)),
-                            case = wearStateFromExtra(intent.getIntExtra("case_wear_status", -1))
-                        )
-                    }
-
-                    HuaweiPodsAction.ACTION_PODS_GAME_MODE_CHANGED -> {
-                        gameMode.value = intent.getBooleanExtra("enabled", false)
-                    }
-
-                    HuaweiPodsAction.ACTION_PODS_TRANSPARENCY_VOCAL_ENHANCEMENT_CHANGED -> {
-                        transparencyVocalEnhancement.value = intent.getBooleanExtra("enabled", false)
-                    }
-
-                    HuaweiPodsAction.ACTION_PODS_SPATIAL_AUDIO_CHANGED -> {
-                        spatialAudioMode.value = intent.getIntExtra("mode", ConfigManager.SPATIAL_AUDIO_OFF)
-                    }
-
-                    HuaweiPodsAction.ACTION_PODS_EQ_PRESET_CHANGED -> {
-                        eqPreset.value = intent.getIntExtra("preset", -1)
-                    }
-
-                    HuaweiPodsAction.ACTION_PODS_DUAL_DEVICE_CONNECTION_CHANGED -> {
-                        dualDeviceConnection.value = intent.getBooleanExtra("enabled", false)
                     }
 
                     HuaweiPodsAction.ACTION_PODS_CONNECTED -> {
@@ -315,7 +239,22 @@ fun MainUI(
                         if (hookConnectionState == "disconnected") {
                             connectedDeviceAddress = ""
                             mainTitle.value = ""
+                            batteryParams.value = BatteryParams()
+                            ancMode.value = NoiseControlMode.OFF
+                            huaweiAncLevel.value = 0
                             hookConnected.value = false
+                        } else if (hookConnectionState == "connecting") {
+                            val incomingAddress = intent.getStringExtra("address")
+                            if (!incomingAddress.isNullOrBlank() &&
+                                !incomingAddress.equals(connectedDeviceAddress, ignoreCase = true)
+                            ) {
+                                connectedDeviceAddress = ""
+                                mainTitle.value = ""
+                                batteryParams.value = BatteryParams()
+                                ancMode.value = NoiseControlMode.OFF
+                                huaweiAncLevel.value = 0
+                                hookConnected.value = false
+                            }
                         } else if (hookConnected.value) {
                             connectedDeviceAddress = resolvedConnectedAddress(intent.getStringExtra("address"), connectingDeviceAddress, connectedDeviceAddress)
                             intent.getStringExtra("device_name")?.let {
@@ -328,6 +267,9 @@ fun MainUI(
                     HuaweiPodsAction.ACTION_PODS_DISCONNECTED -> {
                         mainTitle.value = ""
                         connectedDeviceAddress = ""
+                        batteryParams.value = BatteryParams()
+                        ancMode.value = NoiseControlMode.OFF
+                        huaweiAncLevel.value = 0
                         hookConnectionState = "disconnected"
                         hookConnected.value = false
                     }
@@ -354,15 +296,8 @@ fun MainUI(
 
         context.registerReceiver(broadcastReceiver, IntentFilter().apply {
             addHuaweiPodsAction(HuaweiPodsAction.ACTION_PODS_ANC_CHANGED)
-            addHuaweiPodsAction(HuaweiPodsAction.ACTION_PODS_SMART_ANC_LEVEL_CHANGED)
             addHuaweiPodsAction(HuaweiPodsAction.ACTION_HUAWEI_ANC_LEVEL_CHANGED)
             addHuaweiPodsAction(HuaweiPodsAction.ACTION_PODS_BATTERY_CHANGED)
-            addHuaweiPodsAction(HuaweiPodsAction.ACTION_PODS_WEAR_STATUS_CHANGED)
-            addHuaweiPodsAction(HuaweiPodsAction.ACTION_PODS_GAME_MODE_CHANGED)
-            addHuaweiPodsAction(HuaweiPodsAction.ACTION_PODS_TRANSPARENCY_VOCAL_ENHANCEMENT_CHANGED)
-            addHuaweiPodsAction(HuaweiPodsAction.ACTION_PODS_SPATIAL_AUDIO_CHANGED)
-            addHuaweiPodsAction(HuaweiPodsAction.ACTION_PODS_EQ_PRESET_CHANGED)
-            addHuaweiPodsAction(HuaweiPodsAction.ACTION_PODS_DUAL_DEVICE_CONNECTION_CHANGED)
             addHuaweiPodsAction(HuaweiPodsAction.ACTION_PODS_CONNECTED)
             addHuaweiPodsAction(HuaweiPodsAction.ACTION_PODS_CONNECTION_STATE_CHANGED)
             addHuaweiPodsAction(HuaweiPodsAction.ACTION_PODS_DISCONNECTED)
@@ -406,19 +341,14 @@ fun MainUI(
     }
 
     fun setAncMode(mode: NoiseControlMode) {
-        ancMode.value = mode
-        val status = when (mode) {
-            NoiseControlMode.OFF -> 1
-            NoiseControlMode.NOISE_CANCELLATION -> 2
-            NoiseControlMode.TRANSPARENCY -> 3
-            NoiseControlMode.ADAPTIVE -> 4
-            NoiseControlMode.NOISE_CANCELLATION_SMART -> 5
-            NoiseControlMode.NOISE_CANCELLATION_LIGHT -> 6
-            NoiseControlMode.NOISE_CANCELLATION_MEDIUM -> 7
-            NoiseControlMode.NOISE_CANCELLATION_DEEP -> 8
+        val normalizedMode = if (mode == NoiseControlMode.NOISE_CANCELLATION) {
+            NoiseControlMode.NOISE_CANCELLATION
+        } else {
+            NoiseControlMode.OFF
         }
+        ancMode.value = normalizedMode
         Intent(HuaweiPodsAction.ACTION_ANC_SELECT).apply {
-            this.putExtra("status", status)
+            putExtra("status", if (normalizedMode == NoiseControlMode.NOISE_CANCELLATION) 2 else 1)
             setPackage("com.android.bluetooth")
             addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
             context.sendBroadcast(this)
@@ -436,25 +366,6 @@ fun MainUI(
             context.sendBroadcast(this)
         }
     }
-    fun setGameMode(enabled: Boolean) {
-        gameMode.value = enabled
-        Intent(HuaweiPodsAction.ACTION_GAME_MODE_SET).apply {
-            this.putExtra("enabled", enabled)
-            setPackage("com.android.bluetooth")
-            addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
-            context.sendBroadcast(this)
-        }
-    }
-
-    fun setTransparencyVocalEnhancement(enabled: Boolean) {
-        transparencyVocalEnhancement.value = enabled
-        Intent(HuaweiPodsAction.ACTION_TRANSPARENCY_VOCAL_ENHANCEMENT_SET).apply {
-            this.putExtra("enabled", enabled)
-            setPackage("com.android.bluetooth")
-            addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
-            context.sendBroadcast(this)
-        }
-    }
 
     fun clearPodConnectionState() {
         connectingDeviceAddress = null
@@ -462,8 +373,8 @@ fun MainUI(
         connectedDeviceAddress = ""
         mainTitle.value = ""
         batteryParams.value = BatteryParams()
-        wearStatus.value = WearStatus()
         ancMode.value = NoiseControlMode.OFF
+        huaweiAncLevel.value = 0
         hookConnected.value = false
         hookConnectionState = "disconnected"
         showConnectErrorDialog = false
@@ -486,38 +397,6 @@ fun MainUI(
         }
     }
 
-    fun setSpatialAudioMode(mode: Int) {
-        val normalizedMode = mode.coerceIn(ConfigManager.SPATIAL_AUDIO_OFF, ConfigManager.SPATIAL_AUDIO_HEAD_TRACKING)
-        spatialAudioMode.value = normalizedMode
-        prefs.edit().putInt("spatial_audio_mode", normalizedMode).apply()
-        Intent(HuaweiPodsAction.ACTION_SPATIAL_AUDIO_SET).apply {
-            this.putExtra("mode", normalizedMode)
-            setPackage("com.android.bluetooth")
-            addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
-            context.sendBroadcast(this)
-        }
-    }
-
-    fun setEqPreset(preset: Int) {
-        eqPreset.value = preset
-        Intent(HuaweiPodsAction.ACTION_EQ_PRESET_SET).apply {
-            this.putExtra("preset", preset)
-            setPackage("com.android.bluetooth")
-            addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
-            context.sendBroadcast(this)
-        }
-    }
-
-    fun setDualDeviceConnection(enabled: Boolean) {
-        dualDeviceConnection.value = enabled
-        Intent(HuaweiPodsAction.ACTION_DUAL_DEVICE_CONNECTION_SET).apply {
-            this.putExtra("enabled", enabled)
-            setPackage("com.android.bluetooth")
-            addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
-            context.sendBroadcast(this)
-        }
-    }
-
     fun onDeviceDisconnect(device: BluetoothDevice) {
         connectingDeviceAddress = null
         pendingOpenEarphonesAfterPickerLoaded = false
@@ -526,6 +405,9 @@ fun MainUI(
             hookConnectionState = "disconnected"
             connectedDeviceAddress = ""
             mainTitle.value = ""
+            batteryParams.value = BatteryParams()
+            ancMode.value = NoiseControlMode.OFF
+            huaweiAncLevel.value = 0
         }
         Intent(HuaweiPodsAction.ACTION_DISCONNECT_POD_REQUEST).apply {
             putExtra("device", device)
@@ -649,26 +531,10 @@ fun MainUI(
                 mainTitle = mainTitle.value,
                 displayTitle = displayTitle,
                 displayBattery = displayBattery,
-                displayWearStatus = displayWearStatus,
                 displayAnc = displayAnc,
                 onAncModeChange = { setAncMode(it) },
-                smartAncLevel = smartAncLevel.value,
                 huaweiAncLevel = huaweiAncLevel.value,
                 onHuaweiAncLevelChange = { setHuaweiAncLevel(it) },
-                displayTransparencyVocalEnhancement = displayTransparencyVocalEnhancement,
-                onTransparencyVocalEnhancementChange = { setTransparencyVocalEnhancement(it) },
-                displayGameMode = displayGameMode,
-                onGameModeChange = { setGameMode(it) },
-                spatialAudioMode = spatialAudioMode.value,
-                onSpatialAudioModeChange = { setSpatialAudioMode(it) },
-                eqPreset = eqPreset.value,
-                onEqPresetChange = { setEqPreset(it) },
-                displayDualDeviceConnection = displayDualDeviceConnection,
-                onDualDeviceConnectionChange = { setDualDeviceConnection(it) },
-                spatialAudioSupported = displayCapabilities.spatialAudioSupported,
-                spatialSoundSupported = displayCapabilities.spatialSoundSwitchSupported,
-                adaptiveModeEnabled = displayCapabilities.adaptiveSupported,
-                simpleAncMode = simpleAncMode,
                 earphonePrefs = earphonePrefs.value,
                 connectedDeviceAddress = connectedDeviceAddress,
                 connectingDeviceAddress = connectingDeviceAddress,
@@ -697,40 +563,10 @@ fun MainUI(
                     broadcastConfigChanged(context, "com.android.bluetooth")
                     broadcastConfigChanged(context, "com.xiaomi.bluetooth")
                 },
-                islandShowTimings = islandShowTimings,
-                onIslandShowTimingsChange = {
-                    islandShowTimings.value = it
-                    ConfigManager.updateIslandShowTimings(prefs, xposedService, it)
-                    broadcastConfigChanged(context, "com.android.bluetooth")
-                },
                 appLanguage = appLanguage,
                 onAppLanguageChange = {
                     appLanguage.value = it
                     onAppLanguageChange(it)
-                },
-                autoGameMode = autoGameMode,
-                onAutoGameModeChange = {
-                    autoGameMode.value = it
-                    prefs.edit().putBoolean("auto_game_mode", it).apply()
-                    Intent(HuaweiPodsAction.ACTION_AUTO_GAME_MODE_CHANGED).apply {
-                        setPackage("com.android.bluetooth")
-                        putExtra("enabled", it)
-                        addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
-                        context.sendBroadcast(this)
-                    }
-                },
-                gameModeImplementation = gameModeImplementation,
-                onGameModeImplementationChange = {
-                    gameModeImplementation.value = it
-                    prefs.edit()
-                        .putString(GameModeImplementation.PREF_KEY, it.preferenceValue)
-                        .apply()
-                    Intent(HuaweiPodsAction.ACTION_GAME_MODE_IMPLEMENTATION_CHANGED).apply {
-                        setPackage("com.android.bluetooth")
-                        putExtra(GameModeImplementation.PREF_KEY, it.preferenceValue)
-                        addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
-                        context.sendBroadcast(this)
-                    }
                 },
                 notificationClickAction = notificationClickAction,
                 onNotificationClickActionChange = {
@@ -743,10 +579,6 @@ fun MainUI(
                     moreClickAction.value = it
                     ConfigManager.updateMoreClickAction(prefs, xposedService, it)
                 },
-                adaptiveCapabilityOverride = adaptiveCapabilityOverride,
-                spatialAudioCapabilityOverride = spatialAudioCapabilityOverride,
-                spatialSoundSwitchCapabilityOverride = spatialSoundSwitchCapabilityOverride,
-                onOpenDeviceCapabilities = { backStack.add(Screen.DeviceCapabilities) },
                 fakeDeviceId = fakeDeviceId,
                 onFakeDeviceIdChange = {
                     fakeDeviceId.value = it
@@ -842,73 +674,6 @@ fun MainUI(
                 }
             }
         }
-        entry<Screen.DeviceCapabilities> {
-            val capabilitiesScrollBehavior = MiuixScrollBehavior(rememberTopAppBarState())
-
-            Scaffold(
-                topBar = {
-                    TopAppBar(
-                        title = stringResource(R.string.device_capabilities),
-                        largeTitle = stringResource(R.string.device_capabilities),
-                        scrollBehavior = capabilitiesScrollBehavior,
-                        navigationIcon = {
-                            IconButton(onClick = { backStack.removeLast() }) {
-                                Icon(imageVector = MiuixIcons.Back, contentDescription = "Back")
-                            }
-                        }
-                    )
-                }
-            ) { padding ->
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(backgroundColor)
-                        .padding(padding),
-                ) {
-                    DeviceCapabilitiesPage(
-                        modifier = Modifier
-                            .overScrollVertical()
-                            .nestedScroll(capabilitiesScrollBehavior.nestedScrollConnection),
-                        contentPadding = PaddingValues(bottom = pageBottomContentPadding),
-                        adaptiveCapabilityOverride = adaptiveCapabilityOverride,
-                        onAdaptiveCapabilityOverrideChange = {
-                            adaptiveCapabilityOverride.value = it
-                            ConfigManager.updateAdaptiveCapabilityOverride(prefs, xposedService, it)
-                            broadcastConfigChanged(context, "com.android.bluetooth")
-                            if (!detectDeviceCapabilities(
-                                    deviceName = displayTitle,
-                                    adaptiveOverride = it,
-                                    spatialAudioOverride = spatialAudioCapabilityOverride.value,
-                                    spatialSoundSwitchOverride = spatialSoundSwitchCapabilityOverride.value,
-                                    ancImplementationOverride = ancImplementationCapabilityOverride.value,
-                                ).adaptiveSupported &&
-                                displayAnc == NoiseControlMode.ADAPTIVE
-                            ) {
-                                setAncMode(NoiseControlMode.NOISE_CANCELLATION)
-                            }
-                        },
-                        spatialAudioCapabilityOverride = spatialAudioCapabilityOverride,
-                        onSpatialAudioCapabilityOverrideChange = {
-                            spatialAudioCapabilityOverride.value = it
-                            ConfigManager.updateSpatialAudioCapabilityOverride(prefs, xposedService, it)
-                            broadcastConfigChanged(context, "com.android.bluetooth")
-                        },
-                        spatialSoundSwitchCapabilityOverride = spatialSoundSwitchCapabilityOverride,
-                        onSpatialSoundSwitchCapabilityOverrideChange = {
-                            spatialSoundSwitchCapabilityOverride.value = it
-                            ConfigManager.updateSpatialSoundSwitchCapabilityOverride(prefs, xposedService, it)
-                            broadcastConfigChanged(context, "com.android.bluetooth")
-                        },
-                        ancImplementationCapabilityOverride = ancImplementationCapabilityOverride,
-                        onAncImplementationCapabilityOverrideChange = {
-                            ancImplementationCapabilityOverride.value = it
-                            ConfigManager.updateAncImplementationCapabilityOverride(prefs, xposedService, it)
-                            broadcastConfigChanged(context, "com.android.bluetooth")
-                        },
-                    )
-                }
-            }
-        }
     }
 
     val entries = rememberDecoratedNavEntries(
@@ -945,10 +710,6 @@ private fun readBluetoothState(context: Context): BluetoothSummary {
             bondedCount = adapter?.bondedDevices?.size ?: 0,
         )
     }.getOrDefault(BluetoothSummary(enabled = false, bondedCount = 0))
-}
-
-private fun wearStateFromExtra(value: Int): WearState? {
-    return WearState.fromValue(value)
 }
 
 private fun resolvedConnectedAddress(vararg candidates: String?): String {

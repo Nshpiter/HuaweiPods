@@ -60,6 +60,10 @@ object HuaweiHfpController {
     }
 
     fun connectPod(context: Context, device: BluetoothDevice) {
+        if (!supportsPrivateCommands(device)) {
+            Log.w(TAG, "Huawei session skipped: unsupported device=${device.address}")
+            return
+        }
         ensureSession(context, device)
         sendConnectionState("connecting")
         sendConnected()
@@ -91,6 +95,10 @@ object HuaweiHfpController {
         text: String
     ): BatteryParams? {
         val result = HuaweiBatteryParser.parse(text) ?: return null
+        if (!supportsPrivateCommands(device)) {
+            Log.w(TAG, "Huawei battery ignored: unsupported device=${device.address}")
+            return null
+        }
         ensureSession(context, device)
         currentBattery = result.battery
         sendConnectionState("connected")
@@ -104,6 +112,10 @@ object HuaweiHfpController {
     fun setAncMode(status: Int) {
         val currentDevice = device ?: run {
             Log.w(TAG, "Huawei ANC skipped: device null status=$status")
+            return
+        }
+        if (!supportsPrivateCommands(currentDevice)) {
+            Log.w(TAG, "Huawei ANC skipped: unsupported device=${currentDevice.address}")
             return
         }
         val currentContext = context ?: run {
@@ -123,6 +135,10 @@ object HuaweiHfpController {
     fun setAncLevel(level: Int) {
         val currentDevice = device ?: run {
             Log.w(TAG, "Huawei ANC level skipped: device null level=$level")
+            return
+        }
+        if (!supportsPrivateCommands(currentDevice)) {
+            Log.w(TAG, "Huawei ANC level skipped: unsupported device=${currentDevice.address}")
             return
         }
         val currentContext = context ?: run {
@@ -147,6 +163,10 @@ object HuaweiHfpController {
             Log.w(TAG, "Huawei legacy debug skipped: device null")
             return
         }
+        if (!supportsPrivateCommands(currentDevice)) {
+            Log.w(TAG, "Huawei legacy debug skipped: unsupported device=${currentDevice.address}")
+            return
+        }
         val currentContext = context ?: run {
             Log.w(TAG, "Huawei legacy debug skipped: context null device=${currentDevice.address}")
             return
@@ -162,6 +182,18 @@ object HuaweiHfpController {
     fun setGesture(intent: Intent) {
         val currentDevice = device ?: run {
             Log.w(TAG, "Huawei gesture skipped: device null")
+            return
+        }
+        if (!supportsPrivateCommands(currentDevice)) {
+            Log.w(TAG, "Huawei gesture skipped: unsupported device=${currentDevice.address}")
+            return
+        }
+        val requestedAddress = intent.getStringExtra(HuaweiGestureController.EXTRA_ADDRESS)
+        if (!requestedAddress.isNullOrBlank() && !requestedAddress.equals(currentDevice.address, ignoreCase = true)) {
+            Log.w(
+                TAG,
+                "Huawei gesture skipped: target mismatch requested=$requestedAddress current=${currentDevice.address}",
+            )
             return
         }
         val currentContext = context ?: run {
@@ -185,6 +217,18 @@ object HuaweiHfpController {
     }
 
     private fun ensureSession(context: Context, device: BluetoothDevice) {
+        val previousDevice = this.device
+        val deviceChanged = previousDevice != null &&
+            !previousDevice.address.equals(device.address, ignoreCase = true)
+        if (deviceChanged) {
+            HuaweiL2capAncController.disconnect(previousDevice)
+            currentBattery = null
+            currentAnc = 1
+            currentAncLevel = 0
+            lastDispatchedAncLevel = null
+            connectedBroadcastSent = false
+            Log.i(TAG, "Huawei session switched from=${previousDevice.address} to=${device.address}")
+        }
         this.context = context.applicationContext ?: context
         this.device = device
         registerReceiver()
@@ -205,6 +249,11 @@ object HuaweiHfpController {
             addHuaweiPodsAction(HuaweiPodsAction.ACTION_HUAWEI_GESTURE_SET)
         }, Context.RECEIVER_EXPORTED)
         receiverRegistered = true
+    }
+
+    private fun supportsPrivateCommands(device: BluetoothDevice): Boolean {
+        val deviceName = device.name ?: device.alias
+        return detectHuaweiDeviceRoute(deviceName) == HuaweiDeviceRoute.HUAWEI_FREEBUDS3
     }
 
     private fun sendConnected(force: Boolean = false) {

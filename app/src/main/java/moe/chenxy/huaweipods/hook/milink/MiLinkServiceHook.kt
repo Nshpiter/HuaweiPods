@@ -21,9 +21,8 @@ import moe.chenxy.huaweipods.hook.Log
 import moe.chenxy.huaweipods.hook.callMethod
 import moe.chenxy.huaweipods.hook.getObjectField
 import moe.chenxy.huaweipods.hook.setObjectField
-import moe.chenxy.huaweipods.pods.RfcommController
-import moe.chenxy.huaweipods.pods.detectDeviceCapabilities
-import moe.chenxy.huaweipods.pods.isHuaweiFreeBudsByName
+import moe.chenxy.huaweipods.pods.HuaweiDeviceRoute
+import moe.chenxy.huaweipods.pods.detectHuaweiDeviceRoute
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.BatteryParams
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.HuaweiPodsAction
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.addHuaweiPodsAction
@@ -51,10 +50,8 @@ object MiLinkServiceHook : HookContext() {
     private var currentName: String? = null
     private var currentBattery: BatteryParams = BatteryParams()
     private var currentAnc = 1
-    internal var currentSpatialAudioMode = ConfigManager.SPATIAL_AUDIO_OFF
     internal var lastAncBatteryController: Any? = null
     internal var lastProfileContext: Any? = null
-    private val spatialAudioHook = MiLinkSpatialAudioHook(this)
     private var circulationSignalRewriteUntilMs = 0L
     private var circulationUiCompletedUntilMs = 0L
     private var circulationTargetHostId: String? = null
@@ -71,7 +68,6 @@ object MiLinkServiceHook : HookContext() {
         hookWindowsHeadsetCirculationCapability()
         hookWindowsHeadsetBondState()
         hookCirculatePlusHeadsetAncCard()
-        spatialAudioHook.hookCirculateHeadsetServiceInfo()
     }
 
     private fun hookContextEntry() {
@@ -110,7 +106,6 @@ object MiLinkServiceHook : HookContext() {
             hookStringAddressResult(className, "getRingFindState") { false }
             hookTransparentFeatureMethods(className)
         }
-        spatialAudioHook.hookMxBluetoothRuntime(classes)
     }
 
     private fun hookHeadsetRuntimeDisplay() {
@@ -125,7 +120,6 @@ object MiLinkServiceHook : HookContext() {
         hookTransparentFeatureMethods("com.miui.headset.runtime.ProfileContext")
         hookTransparentFeatureMethods("com.miui.headset.api.HeadsetInfo")
         hookAncStateBlock()
-        spatialAudioHook.hookHeadsetRuntimeDisplay()
         hookHeadsetInfoNoArg("getDeviceId") { fakeDeviceId() }
         hookHeadsetInfoNoArg("component3") { fakeDeviceId() }
         hookHeadsetInfoNoArg("getPowers") { miLinkBatteryLevels() }
@@ -582,7 +576,6 @@ object MiLinkServiceHook : HookContext() {
             addHuaweiPodsAction(HuaweiPodsAction.ACTION_PODS_DISCONNECTED)
             addHuaweiPodsAction(HuaweiPodsAction.ACTION_PODS_BATTERY_CHANGED)
             addHuaweiPodsAction(HuaweiPodsAction.ACTION_PODS_ANC_CHANGED)
-            addHuaweiPodsAction(HuaweiPodsAction.ACTION_PODS_SPATIAL_AUDIO_CHANGED)
             addHuaweiPodsAction(HuaweiPodsAction.ACTION_CONFIG_CHANGED)
         }
         context?.registerReceiver(object : BroadcastReceiver() {
@@ -593,26 +586,20 @@ object MiLinkServiceHook : HookContext() {
                         refreshConfig()
                     }
                     HuaweiPodsAction.ACTION_PODS_CONNECTED -> {
-                        rememberDeviceFromIntent(receivedIntent)
+                        if (!rememberSupportedDevice(receivedIntent)) return
                         saveState(context)
                     }
                     HuaweiPodsAction.ACTION_PODS_DISCONNECTED -> {
-                        rememberDeviceFromIntent(receivedIntent)
+                        if (!rememberSupportedDevice(receivedIntent)) return
                     }
                     HuaweiPodsAction.ACTION_PODS_BATTERY_CHANGED -> {
-                        rememberDeviceFromIntent(receivedIntent)
+                        if (!rememberSupportedDevice(receivedIntent)) return
                         currentBattery = receivedIntent.batteryStatusFromExtras() ?: receivedIntent.parcelableStatus() ?: currentBattery
                         saveState(context)
                     }
                     HuaweiPodsAction.ACTION_PODS_ANC_CHANGED -> {
-                        rememberDeviceFromIntent(receivedIntent)
+                        if (!rememberSupportedDevice(receivedIntent)) return
                         currentAnc = receivedIntent.getIntExtra("status", currentAnc)
-                        saveState(context)
-                    }
-                    HuaweiPodsAction.ACTION_PODS_SPATIAL_AUDIO_CHANGED -> {
-                        rememberDeviceFromIntent(receivedIntent)
-                        currentSpatialAudioMode = receivedIntent.getIntExtra("mode", currentSpatialAudioMode)
-                            .coerceIn(ConfigManager.SPATIAL_AUDIO_OFF, ConfigManager.SPATIAL_AUDIO_HEAD_TRACKING)
                         saveState(context)
                     }
                 }
@@ -629,7 +616,7 @@ object MiLinkServiceHook : HookContext() {
         val address = runCatching { device.address }.getOrNull()
         if (address != null && isHuaweiAddress(address)) return true
         val name = runCatching { device.name ?: device.alias }.getOrNull().orEmpty()
-        val result = name.contains("huawei", ignoreCase = true) || isHuaweiFreeBudsByName(name)
+        val result = detectHuaweiDeviceRoute(name) == HuaweiDeviceRoute.HUAWEI_FREEBUDS3
         if (result && address != null) {
             knownHuaweiAddresses.add(address.uppercase())
             currentAddress = address
@@ -725,134 +712,35 @@ object MiLinkServiceHook : HookContext() {
         }
     }
 
-    internal fun sendHuaweiSpatialAudio(mode: Int, fallbackContext: Context? = null) {
-        val ctx = fallbackContext ?: context ?: run {
-            Log.w(TAG, "sendHuaweiSpatialAudio skipped: context is null mode=$mode")
-            return
-        }
-        Intent(HuaweiPodsAction.ACTION_SPATIAL_AUDIO_SET).apply {
-            putExtra("mode", mode.coerceIn(ConfigManager.SPATIAL_AUDIO_OFF, ConfigManager.SPATIAL_AUDIO_HEAD_TRACKING))
-            setPackage("com.android.bluetooth")
-            addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
-            ctx.sendBroadcast(this)
-        }
-    }
-
-    internal fun sendSpatialChanged(mode: Int, fallbackContext: Context? = null) {
-        val ctx = fallbackContext ?: context ?: return
-        val normalizedMode = mode.coerceIn(ConfigManager.SPATIAL_AUDIO_OFF, ConfigManager.SPATIAL_AUDIO_HEAD_TRACKING)
-        listOf(BuildConfig.APPLICATION_ID, "com.milink.service", "com.android.settings").forEach { targetPackage ->
-            ctx.sendBroadcast(Intent(HuaweiPodsAction.ACTION_PODS_SPATIAL_AUDIO_CHANGED).apply {
-                currentAddress?.let { putExtra("address", it) }
-                putExtra("mode", normalizedMode)
-                setPackage(targetPackage)
-                addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
-            })
-        }
-    }
-
-    internal fun miLinkSpatialMode(): Int {
-        loadState()
-        if (!spatialAudioPanelEnabled()) return -1
-        return when (currentAudioEffectState()) {
-            ConfigManager.SPATIAL_AUDIO_HEAD_TRACKING -> if (miLinkDeviceSpatialType() == 1) 11 else 9
-            ConfigManager.SPATIAL_AUDIO_FIXED -> 1
-            else -> 0
-        }
-    }
-
-    internal fun huaweiSpatialFromMiLink(mode: Int): Int {
-        return when (mode) {
-            9, 11 -> ConfigManager.SPATIAL_AUDIO_HEAD_TRACKING
-            1 -> ConfigManager.SPATIAL_AUDIO_FIXED
-            else -> ConfigManager.SPATIAL_AUDIO_OFF
-        }
-    }
-
-    internal fun miLinkSpatialModeFromMode(mode: Int): Int {
-        return when (mode) {
-            ConfigManager.SPATIAL_AUDIO_HEAD_TRACKING -> if (miLinkDeviceSpatialType() == 1) 11 else 9
-            ConfigManager.SPATIAL_AUDIO_FIXED -> 1
-            ConfigManager.SPATIAL_AUDIO_OFF -> 0
-            else -> -1
-        }
-    }
-
-    internal fun miLinkAudioEffectState(): Int {
-        loadState()
-        return currentAudioEffectState()
-    }
-
-    internal fun miLinkDeviceSpatialType(): Int {
-        return if (spatialAudioPanelEnabled()) 1 else 0
-    }
-
     internal fun miLinkSwitchState(): Int {
         loadState()
         return 1
     }
 
-    internal fun updateSpatialAudioMode(mode: Int) {
-        currentSpatialAudioMode = mode.coerceIn(ConfigManager.SPATIAL_AUDIO_OFF, ConfigManager.SPATIAL_AUDIO_HEAD_TRACKING)
-        saveState(context)
-    }
-
-    private fun currentAudioEffectState(): Int {
-        return if (spatialAudioPanelEnabled()) {
-            currentSpatialAudioMode.coerceIn(ConfigManager.SPATIAL_AUDIO_OFF, ConfigManager.SPATIAL_AUDIO_HEAD_TRACKING)
-        } else {
-            -1
+    private fun rememberSupportedDevice(intent: Intent): Boolean {
+        val name = intent.getStringExtra("device_name") ?: currentName
+        if (detectHuaweiDeviceRoute(name) != HuaweiDeviceRoute.HUAWEI_FREEBUDS3) {
+            Log.w(TAG, "ignored unsupported persisted/broadcast device name=${name.orEmpty()}")
+            return false
         }
-    }
-
-    internal fun spatialAudioPanelEnabled(): Boolean {
-        runCatching { refreshConfig() }
-        return panelCapabilities().spatialAudioSupported
-    }
-
-    private fun panelCapabilities() = detectDeviceCapabilities(
-        deviceName = backendDeviceName() ?: currentName.orEmpty(),
-        adaptiveOverride = ConfigManager.adaptiveCapabilityOverride(),
-        spatialAudioOverride = miLinkSpatialAudioOverride(),
-        spatialSoundSwitchOverride = ConfigManager.CAPABILITY_OVERRIDE_FORCE_DISABLED,
-    )
-
-    private fun miLinkSpatialAudioOverride(): Int {
-        val direct = runCatching {
-            prefs.getInt(ConfigManager.PREF_KEY_SPATIAL_AUDIO_CAPABILITY_OVERRIDE, Int.MIN_VALUE)
-        }.getOrDefault(Int.MIN_VALUE)
-        return (direct.takeIf { it != Int.MIN_VALUE } ?: ConfigManager.spatialAudioCapabilityOverride())
-            .coerceIn(ConfigManager.CAPABILITY_OVERRIDE_AUTO, ConfigManager.CAPABILITY_OVERRIDE_FORCE_DISABLED)
-    }
-
-    private fun backendDeviceName(): String? {
-        return runCatching { RfcommController.currentStatusSnapshot().deviceName }
-            .getOrNull()
-            ?.takeIf { it.isNotBlank() }
-    }
-
-    private fun rememberDeviceFromIntent(intent: Intent) {
+        currentName = name
         currentAddress = intent.getStringExtra("address") ?: currentAddress
-        currentName = intent.getStringExtra("device_name") ?: currentName
-        currentAddress?.let { knownHuaweiAddresses.add(it.uppercase()) }
-    }
-
-    internal fun isTargetAncBatteryModel(model: Any?): Boolean {
-        val device = runCatching { callMethod(model, "getBluetoothDevice") as? BluetoothDevice }.getOrNull()
-        return device?.let { isHuaweiPod(it) } == true
+        currentAddress?.takeIf { it.isNotBlank() }?.let { knownHuaweiAddresses.add(it.uppercase()) }
+        return true
     }
 
     private fun isCurrentHuaweiHeadset(): Boolean {
         loadState()
-        return isHuaweiFreeBudsByName(currentName.orEmpty()) || currentAddress != null
+        return !currentAddress.isNullOrBlank() &&
+            detectHuaweiDeviceRoute(currentName) == HuaweiDeviceRoute.HUAWEI_FREEBUDS3
     }
 
     private fun isTargetCirculateHeadset(serviceInfo: Any?): Boolean {
         if (serviceInfo == null) return false
         val serviceId = runCatching { getObjectField(serviceInfo, "serviceId") as? String }.getOrNull().orEmpty()
         val deviceId = runCatching { getObjectField(serviceInfo, "deviceId") as? String }.getOrNull()
-        return isHuaweiFreeBudsByName(serviceId) ||
-            serviceId == backendDeviceName() ||
+        return detectHuaweiDeviceRoute(serviceId) == HuaweiDeviceRoute.HUAWEI_FREEBUDS3 ||
+            serviceId == currentName?.takeIf { it.isNotBlank() } ||
             deviceId == fakeDeviceId() ||
             isCurrentHuaweiHeadset()
     }
@@ -1289,34 +1177,6 @@ object MiLinkServiceHook : HookContext() {
         context = ownerContext.applicationContext ?: ownerContext
     }
 
-    internal fun notifySpatialUiChanged(owner: Any?, device: BluetoothDevice, mode: Int) {
-        val spatialMode = miLinkSpatialModeFromMode(mode)
-        val audioEffectState = mode.coerceIn(ConfigManager.SPATIAL_AUDIO_OFF, ConfigManager.SPATIAL_AUDIO_HEAD_TRACKING)
-        syncSpatialModel(owner, device, spatialMode)
-        syncSpatialModel(lastAncBatteryController, device, spatialMode)
-        listOf(owner, lastAncBatteryController, lastProfileContext).distinctBy { it?.javaClass?.name }.forEach { target ->
-            notifyHeadsetPropertyChanged(target, device, 9)
-            notifyHeadsetPropertyChanged(target, device, 4)
-            notifyProfileAudioEffectListeners(target, audioEffectState)
-        }
-    }
-
-    private fun syncSpatialModel(owner: Any?, device: BluetoothDevice, spatialMode: Int) {
-        val model = runCatching { getObjectField(owner, "ancBatteryModel") }.getOrNull() ?: return
-        if (!isTargetAncBatteryModel(model)) return
-        runCatching { setObjectField(model, "spatialState", spatialMode) }
-            .onFailure { }
-        runCatching { setObjectField(model, "deviceSpatialType", miLinkDeviceSpatialType()) }
-            .onFailure { }
-    }
-
-    private fun notifyProfileAudioEffectListeners(owner: Any?, audioEffectState: Int) {
-        runCatching {
-            val listener = getObjectField(owner, "audioEffectListener")
-            callMethod(listener, "invoke", audioEffectState)
-        }.onFailure { }
-    }
-
     private fun notifyHeadsetPropertyChanged(controller: Any?, device: BluetoothDevice, updateType: Int) {
         val listener = runCatching { getObjectField(controller, "headsetPropertyChangeListener") }.getOrNull() ?: return
         runCatching {
@@ -1360,7 +1220,6 @@ object MiLinkServiceHook : HookContext() {
             .putString("address", currentAddress)
             .putString("name", currentName)
             .putInt("anc", currentAnc)
-            .putInt("spatial_audio_mode", currentSpatialAudioMode)
             .putInt("left_battery", currentBattery.left?.battery ?: 0)
             .putBoolean("left_charging", currentBattery.left?.isCharging == true)
             .putBoolean("left_connected", currentBattery.left?.isConnected == true)
@@ -1375,11 +1234,34 @@ object MiLinkServiceHook : HookContext() {
 
     private fun loadState() {
         val prefs = context?.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE) ?: return
+        val hasPersistedIdentity = prefs.contains("address") || prefs.contains("name")
+        val persistedName = prefs.getString("name", null)
+        if (hasPersistedIdentity && detectHuaweiDeviceRoute(persistedName) != HuaweiDeviceRoute.HUAWEI_FREEBUDS3) {
+            currentAddress = null
+            currentName = null
+            currentBattery = BatteryParams()
+            currentAnc = 1
+            knownHuaweiAddresses.clear()
+            prefs.edit()
+                .remove("address")
+                .remove("name")
+                .remove("anc")
+                .remove("left_battery")
+                .remove("left_charging")
+                .remove("left_connected")
+                .remove("right_battery")
+                .remove("right_charging")
+                .remove("right_connected")
+                .remove("case_battery")
+                .remove("case_charging")
+                .remove("case_connected")
+                .apply()
+            Log.i(TAG, "removed unsupported legacy headset state name=${persistedName.orEmpty()}")
+            return
+        }
         currentAddress = prefs.getString("address", currentAddress)
         currentName = prefs.getString("name", currentName)
         currentAnc = prefs.getInt("anc", currentAnc)
-        currentSpatialAudioMode = prefs.getInt("spatial_audio_mode", currentSpatialAudioMode)
-            .coerceIn(ConfigManager.SPATIAL_AUDIO_OFF, ConfigManager.SPATIAL_AUDIO_HEAD_TRACKING)
         currentAddress?.let { knownHuaweiAddresses.add(it.uppercase()) }
         currentBattery = BatteryParams(
             left = PodParams(

@@ -84,6 +84,15 @@ object HuaweiL2capAncController {
         onComplete: ((Boolean) -> Unit)? = null,
     ) {
         val appContext = context.applicationContext ?: context
+        val deviceName = runCatching { device.name ?: device.alias }.getOrNull()
+        if (detectHuaweiDeviceRoute(deviceName) != HuaweiDeviceRoute.HUAWEI_FREEBUDS3) {
+            logInfo(
+                appContext,
+                "Huawei write rejected: unsupported device name=${deviceName.orEmpty()} address=${device.address}",
+            )
+            notifyComplete(onComplete, false)
+            return
+        }
         logInfo(appContext, "Huawei ANC enqueue $description keepSocket=$keepSocket device=${device.address}")
         runCatching {
             executor.execute {

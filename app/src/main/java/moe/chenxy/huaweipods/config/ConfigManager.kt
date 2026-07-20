@@ -11,13 +11,8 @@ data class AppConfig(
     val fakeDeviceId: String = ConfigManager.DEFAULT_FAKE_DEVICE_ID,
     val logLevel: Int = ConfigManager.LOG_LEVEL_BASIC,
     val islandMode: Int = ConfigManager.ISLAND_MODE_OFFICIAL,
-    val islandShowTimings: Set<Int> = emptySet(),
     val notificationClickAction: Int = ConfigManager.NOTIFICATION_CLICK_MODULE_POPUP,
     val moreClickAction: Int = ConfigManager.MORE_CLICK_MODULE,
-    val adaptiveCapabilityOverride: Int = ConfigManager.CAPABILITY_OVERRIDE_AUTO,
-    val spatialAudioCapabilityOverride: Int = ConfigManager.CAPABILITY_OVERRIDE_AUTO,
-    val spatialSoundSwitchCapabilityOverride: Int = ConfigManager.CAPABILITY_OVERRIDE_AUTO,
-    val ancImplementationCapabilityOverride: Int = ConfigManager.CAPABILITY_OVERRIDE_AUTO,
 )
 
 object ConfigManager {
@@ -28,13 +23,8 @@ object ConfigManager {
     const val PREF_KEY_FAKE_DEVICE_ID = "fake_device_id"
     const val PREF_KEY_LOG_LEVEL = "log_level"
     const val PREF_KEY_ISLAND_MODE = "island_mode"
-    const val PREF_KEY_ISLAND_SHOW_TIMINGS = "island_show_timings"
     const val PREF_KEY_NOTIFICATION_CLICK_ACTION = "notification_click_action"
     const val PREF_KEY_MORE_CLICK_ACTION = "more_click_action"
-    const val PREF_KEY_ADAPTIVE_CAPABILITY_OVERRIDE = "adaptive_capability_override"
-    const val PREF_KEY_SPATIAL_AUDIO_CAPABILITY_OVERRIDE = "spatial_audio_capability_override"
-    const val PREF_KEY_SPATIAL_SOUND_SWITCH_CAPABILITY_OVERRIDE = "spatial_sound_switch_capability_override"
-    const val PREF_KEY_ANC_IMPLEMENTATION_CAPABILITY_OVERRIDE = "anc_implementation_capability_override"
     const val DEFAULT_FAKE_DEVICE_ID = "01010607"
     const val LOG_LEVEL_OFF = 0
     const val LOG_LEVEL_BASIC = 1
@@ -42,20 +32,10 @@ object ConfigManager {
     const val ISLAND_MODE_NONE = 0
     const val ISLAND_MODE_OFFICIAL = 1
     const val ISLAND_MODE_MODULE = 2
-    const val ISLAND_SHOW_TIMING_CONNECTED = 0
-    const val ISLAND_SHOW_TIMING_WEARING = 1
-    const val ISLAND_SHOW_TIMING_REMOVED = 2
-    const val ISLAND_SHOW_TIMING_IN_CASE = 3
     const val NOTIFICATION_CLICK_MODULE_POPUP = 0
     const val NOTIFICATION_CLICK_SYSTEM_SETTINGS = 1
     const val MORE_CLICK_SYSTEM_SETTINGS = 1
     const val MORE_CLICK_MODULE = 2
-    const val SPATIAL_AUDIO_OFF = 0
-    const val SPATIAL_AUDIO_FIXED = 1
-    const val SPATIAL_AUDIO_HEAD_TRACKING = 2
-    const val CAPABILITY_OVERRIDE_AUTO = 0
-    const val CAPABILITY_OVERRIDE_FORCE_ENABLED = 1
-    const val CAPABILITY_OVERRIDE_FORCE_DISABLED = 2
 
     private val json = Json {
         ignoreUnknownKeys = true
@@ -87,19 +67,9 @@ object ConfigManager {
 
     fun islandMode(): Int = current().islandMode.coerceIn(ISLAND_MODE_NONE, ISLAND_MODE_MODULE)
 
-    fun islandShowTimings(): Set<Int> = current().islandShowTimings.normalizedIslandShowTimings()
-
     fun notificationClickAction(): Int = current().notificationClickAction.normalizedNotificationClickAction()
 
     fun moreClickAction(): Int = current().moreClickAction.normalizedMoreClickAction()
-
-    fun adaptiveCapabilityOverride(): Int = current().adaptiveCapabilityOverride.normalizedCapabilityOverride()
-
-    fun spatialAudioCapabilityOverride(): Int = current().spatialAudioCapabilityOverride.normalizedCapabilityOverride()
-
-    fun spatialSoundSwitchCapabilityOverride(): Int = current().spatialSoundSwitchCapabilityOverride.normalizedCapabilityOverride()
-
-    fun ancImplementationCapabilityOverride(): Int = current().ancImplementationCapabilityOverride.normalizedCapabilityOverride()
 
     fun fakeSupport(): String = "${fakeDeviceId()},000000000000000010000000"
 
@@ -123,11 +93,6 @@ object ConfigManager {
         save(prefs, service, config)
     }
 
-    fun updateIslandShowTimings(prefs: SharedPreferences, service: XposedService?, timings: Set<Int>) {
-        val config = current().copy(islandShowTimings = timings.normalizedIslandShowTimings())
-        save(prefs, service, config)
-    }
-
     fun updateNotificationClickAction(prefs: SharedPreferences, service: XposedService?, action: Int) {
         val config = current().copy(notificationClickAction = action.normalizedNotificationClickAction())
         save(prefs, service, config)
@@ -135,26 +100,6 @@ object ConfigManager {
 
     fun updateMoreClickAction(prefs: SharedPreferences, service: XposedService?, action: Int) {
         val config = current().copy(moreClickAction = action.normalizedMoreClickAction())
-        save(prefs, service, config)
-    }
-
-    fun updateAdaptiveCapabilityOverride(prefs: SharedPreferences, service: XposedService?, override: Int) {
-        val config = current().copy(adaptiveCapabilityOverride = override.normalizedCapabilityOverride())
-        save(prefs, service, config)
-    }
-
-    fun updateSpatialAudioCapabilityOverride(prefs: SharedPreferences, service: XposedService?, override: Int) {
-        val config = current().copy(spatialAudioCapabilityOverride = override.normalizedCapabilityOverride())
-        save(prefs, service, config)
-    }
-
-    fun updateSpatialSoundSwitchCapabilityOverride(prefs: SharedPreferences, service: XposedService?, override: Int) {
-        val config = current().copy(spatialSoundSwitchCapabilityOverride = override.normalizedCapabilityOverride())
-        save(prefs, service, config)
-    }
-
-    fun updateAncImplementationCapabilityOverride(prefs: SharedPreferences, service: XposedService?, override: Int) {
-        val config = current().copy(ancImplementationCapabilityOverride = override.normalizedCapabilityOverride())
         save(prefs, service, config)
     }
 
@@ -184,13 +129,8 @@ object ConfigManager {
             .putString(PREF_KEY_FAKE_DEVICE_ID, config.fakeDeviceId)
             .putInt(PREF_KEY_LOG_LEVEL, config.logLevel)
             .putInt(PREF_KEY_ISLAND_MODE, config.islandMode)
-            .putStringSet(PREF_KEY_ISLAND_SHOW_TIMINGS, config.islandShowTimings.map { it.toString() }.toSet())
             .putInt(PREF_KEY_NOTIFICATION_CLICK_ACTION, config.notificationClickAction)
             .putInt(PREF_KEY_MORE_CLICK_ACTION, config.moreClickAction)
-            .putInt(PREF_KEY_ADAPTIVE_CAPABILITY_OVERRIDE, config.adaptiveCapabilityOverride)
-            .putInt(PREF_KEY_SPATIAL_AUDIO_CAPABILITY_OVERRIDE, config.spatialAudioCapabilityOverride)
-            .putInt(PREF_KEY_SPATIAL_SOUND_SWITCH_CAPABILITY_OVERRIDE, config.spatialSoundSwitchCapabilityOverride)
-            .putInt(PREF_KEY_ANC_IMPLEMENTATION_CAPABILITY_OVERRIDE, config.ancImplementationCapabilityOverride)
             .commit()
     }
 
@@ -198,13 +138,8 @@ object ConfigManager {
         val directFakeDeviceId = prefs.getString(PREF_KEY_FAKE_DEVICE_ID, null)
         val directLogLevel = prefs.getInt(PREF_KEY_LOG_LEVEL, Int.MIN_VALUE)
         val directIslandMode = prefs.getInt(PREF_KEY_ISLAND_MODE, Int.MIN_VALUE)
-        val directIslandShowTimings = prefs.getStringSet(PREF_KEY_ISLAND_SHOW_TIMINGS, null)?.mapNotNull { it.toIntOrNull() }?.toSet()
         val directNotificationClickAction = prefs.getInt(PREF_KEY_NOTIFICATION_CLICK_ACTION, Int.MIN_VALUE)
         val directMoreClickAction = prefs.getInt(PREF_KEY_MORE_CLICK_ACTION, Int.MIN_VALUE)
-        val directAdaptiveCapabilityOverride = prefs.getInt(PREF_KEY_ADAPTIVE_CAPABILITY_OVERRIDE, Int.MIN_VALUE)
-        val directSpatialAudioCapabilityOverride = prefs.getInt(PREF_KEY_SPATIAL_AUDIO_CAPABILITY_OVERRIDE, Int.MIN_VALUE)
-        val directSpatialSoundSwitchCapabilityOverride = prefs.getInt(PREF_KEY_SPATIAL_SOUND_SWITCH_CAPABILITY_OVERRIDE, Int.MIN_VALUE)
-        val directAncImplementationCapabilityOverride = prefs.getInt(PREF_KEY_ANC_IMPLEMENTATION_CAPABILITY_OVERRIDE, Int.MIN_VALUE)
         val raw = prefs.getString(PREF_KEY_CONFIG_JSON, null)
         logPrefsSnapshot(source, prefs, directFakeDeviceId, raw)
         val config = raw?.let {
@@ -215,26 +150,16 @@ object ConfigManager {
                 fakeDeviceId = directFakeDeviceId.normalizedFakeDeviceId(),
                 logLevel = directLogLevel.takeIf { it != Int.MIN_VALUE } ?: config.logLevel,
                 islandMode = directIslandMode.takeIf { it != Int.MIN_VALUE } ?: config.islandMode,
-                islandShowTimings = directIslandShowTimings ?: config.islandShowTimings,
                 notificationClickAction = directNotificationClickAction.takeIf { it != Int.MIN_VALUE } ?: config.notificationClickAction,
                 moreClickAction = directMoreClickAction.takeIf { it != Int.MIN_VALUE } ?: config.moreClickAction,
-                adaptiveCapabilityOverride = directAdaptiveCapabilityOverride.takeIf { it != Int.MIN_VALUE } ?: config.adaptiveCapabilityOverride,
-                spatialAudioCapabilityOverride = directSpatialAudioCapabilityOverride.takeIf { it != Int.MIN_VALUE } ?: config.spatialAudioCapabilityOverride,
-                spatialSoundSwitchCapabilityOverride = directSpatialSoundSwitchCapabilityOverride.takeIf { it != Int.MIN_VALUE } ?: config.spatialSoundSwitchCapabilityOverride,
-                ancImplementationCapabilityOverride = directAncImplementationCapabilityOverride.takeIf { it != Int.MIN_VALUE } ?: config.ancImplementationCapabilityOverride,
             ).normalized()
         }
         return config.copy(
             fakeDeviceId = config.fakeDeviceId.normalizedFakeDeviceId(),
             logLevel = directLogLevel.takeIf { it != Int.MIN_VALUE } ?: config.logLevel,
             islandMode = directIslandMode.takeIf { it != Int.MIN_VALUE } ?: config.islandMode,
-            islandShowTimings = directIslandShowTimings ?: config.islandShowTimings,
             notificationClickAction = directNotificationClickAction.takeIf { it != Int.MIN_VALUE } ?: config.notificationClickAction,
             moreClickAction = directMoreClickAction.takeIf { it != Int.MIN_VALUE } ?: config.moreClickAction,
-            adaptiveCapabilityOverride = directAdaptiveCapabilityOverride.takeIf { it != Int.MIN_VALUE } ?: config.adaptiveCapabilityOverride,
-            spatialAudioCapabilityOverride = directSpatialAudioCapabilityOverride.takeIf { it != Int.MIN_VALUE } ?: config.spatialAudioCapabilityOverride,
-            spatialSoundSwitchCapabilityOverride = directSpatialSoundSwitchCapabilityOverride.takeIf { it != Int.MIN_VALUE } ?: config.spatialSoundSwitchCapabilityOverride,
-            ancImplementationCapabilityOverride = directAncImplementationCapabilityOverride.takeIf { it != Int.MIN_VALUE } ?: config.ancImplementationCapabilityOverride,
         ).normalized()
     }
 
@@ -242,28 +167,17 @@ object ConfigManager {
         fakeDeviceId = fakeDeviceId.normalizedFakeDeviceId(),
         logLevel = logLevel.coerceIn(LOG_LEVEL_OFF, LOG_LEVEL_DEBUG),
         islandMode = islandMode.coerceIn(ISLAND_MODE_NONE, ISLAND_MODE_MODULE),
-        islandShowTimings = islandShowTimings.normalizedIslandShowTimings(),
         notificationClickAction = notificationClickAction.normalizedNotificationClickAction(),
         moreClickAction = moreClickAction.normalizedMoreClickAction(),
-        adaptiveCapabilityOverride = adaptiveCapabilityOverride.normalizedCapabilityOverride(),
-        spatialAudioCapabilityOverride = spatialAudioCapabilityOverride.normalizedCapabilityOverride(),
-        spatialSoundSwitchCapabilityOverride = spatialSoundSwitchCapabilityOverride.normalizedCapabilityOverride(),
-        ancImplementationCapabilityOverride = ancImplementationCapabilityOverride.normalizedCapabilityOverride(),
     )
 
     private fun String.normalizedFakeDeviceId(): String = trim().takeIf { it.isNotEmpty() } ?: DEFAULT_FAKE_DEVICE_ID
-
-    private fun Int.normalizedCapabilityOverride(): Int = coerceIn(CAPABILITY_OVERRIDE_AUTO, CAPABILITY_OVERRIDE_FORCE_DISABLED)
 
     private fun Int.normalizedNotificationClickAction(): Int =
         if (this == NOTIFICATION_CLICK_SYSTEM_SETTINGS) NOTIFICATION_CLICK_SYSTEM_SETTINGS else NOTIFICATION_CLICK_MODULE_POPUP
 
     private fun Int.normalizedMoreClickAction(): Int =
         if (this == MORE_CLICK_SYSTEM_SETTINGS) MORE_CLICK_SYSTEM_SETTINGS else MORE_CLICK_MODULE
-
-    private fun Set<Int>.normalizedIslandShowTimings(): Set<Int> = filterTo(mutableSetOf()) {
-        it in ISLAND_SHOW_TIMING_CONNECTED..ISLAND_SHOW_TIMING_IN_CASE
-    }
 
     private fun logConfigChange(source: String, oldConfig: AppConfig, newConfig: AppConfig) {
         val changes = changedFields(oldConfig, newConfig)
@@ -294,26 +208,11 @@ object ConfigManager {
             if (oldConfig.islandMode != newConfig.islandMode) {
                 add("islandMode=${oldConfig.islandMode}->${newConfig.islandMode}")
             }
-            if (oldConfig.islandShowTimings != newConfig.islandShowTimings) {
-                add("islandShowTimings=${oldConfig.islandShowTimings}->${newConfig.islandShowTimings}")
-            }
             if (oldConfig.notificationClickAction != newConfig.notificationClickAction) {
                 add("notificationClickAction=${oldConfig.notificationClickAction}->${newConfig.notificationClickAction}")
             }
             if (oldConfig.moreClickAction != newConfig.moreClickAction) {
                 add("moreClickAction=${oldConfig.moreClickAction}->${newConfig.moreClickAction}")
-            }
-            if (oldConfig.adaptiveCapabilityOverride != newConfig.adaptiveCapabilityOverride) {
-                add("adaptiveCapabilityOverride=${oldConfig.adaptiveCapabilityOverride}->${newConfig.adaptiveCapabilityOverride}")
-            }
-            if (oldConfig.spatialAudioCapabilityOverride != newConfig.spatialAudioCapabilityOverride) {
-                add("spatialAudioCapabilityOverride=${oldConfig.spatialAudioCapabilityOverride}->${newConfig.spatialAudioCapabilityOverride}")
-            }
-            if (oldConfig.spatialSoundSwitchCapabilityOverride != newConfig.spatialSoundSwitchCapabilityOverride) {
-                add("spatialSoundSwitchCapabilityOverride=${oldConfig.spatialSoundSwitchCapabilityOverride}->${newConfig.spatialSoundSwitchCapabilityOverride}")
-            }
-            if (oldConfig.ancImplementationCapabilityOverride != newConfig.ancImplementationCapabilityOverride) {
-                add("ancImplementationCapabilityOverride=${oldConfig.ancImplementationCapabilityOverride}->${newConfig.ancImplementationCapabilityOverride}")
             }
         }
     }
