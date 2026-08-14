@@ -317,6 +317,10 @@ object SettingsHeadsetHook : HookContext() {
                 if (methodName == "setCommonCommand") proxySetCommonCommandCalls++
                 Log.d(TAG, "$methodName proxy call#${if (methodName == "setCommonCommand") proxySetCommonCommandCalls else -1} args=${args.describeArgs()} device=${device.describe()} addressArg=$address isHuawei=$isHuawei")
                 if (!isHuawei) return@hookBefore
+                // 通知栏开关交给蓝牙服务处理。
+                if (methodName == "setCommonCommand" && (args[0] == 114 || args[0] == 115)) {
+                    return@hookBefore
+                }
                 this.result = result(args)
                 Log.d(TAG, "$methodName proxy forced result=${this.result} address=${device?.address ?: address}")
             }

@@ -68,6 +68,19 @@ object MiBluetoothToastHook : HookContext() {
             }
             try {
                 val address: String = bluetoothDevice.address
+                val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                fun detailNotificationEnabled(): Boolean = context.getSharedPreferences(
+                    "DeviceIdCached",
+                    Context.MODE_MULTI_PROCESS,
+                ).getBoolean("detail_notification$address", false)
+                if (!detailNotificationEnabled()) {
+                    notificationManager.cancelAsUser(
+                        "BTHeadset$address",
+                        10003,
+                        SystemApisUtils.getUserAllUserHandle(),
+                    )
+                    return
+                }
                 var alias: String? = bluetoothDevice.alias
                 if (alias?.isEmpty() == true) {
                     alias = bluetoothDevice.name
@@ -114,7 +127,6 @@ object MiBluetoothToastHook : HookContext() {
                 else ""
 
                 val contentText: String = caseBattStr + leftEar + rightEar
-                val notificationManager = context.getSystemService("notification") as NotificationManager
                 notificationManager.createNotificationChannel(
                     NotificationChannel(
                         "BTHeadset$address",
@@ -277,6 +289,13 @@ object MiBluetoothToastHook : HookContext() {
                     notification,
                     SystemApisUtils.getUserAllUserHandle()
                 )
+                if (!detailNotificationEnabled()) {
+                    notificationManager.cancelAsUser(
+                        "BTHeadset$address",
+                        10003,
+                        SystemApisUtils.getUserAllUserHandle(),
+                    )
+                }
             } catch (e: Exception) {
                 Log.e("HuaweiPods", "Failed to create Pod Notification", e)
             }

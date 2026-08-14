@@ -156,12 +156,16 @@ internal fun miLinkAncModeFor(
 
 /**
  * 小米的虚拟耳机模板始终读取一个 ANC 状态，即使当前机型没有 ANC。
- * 无 ANC 机型只向宿主返回“关闭”，写操作仍由能力检查拒绝。
+ * 无 ANC 机型必须返回“不可用”，否则宿主仍会按“支持但已关闭”保留区块高度。
  */
 internal fun miLinkHostAncStateFor(
     route: HuaweiDeviceRoute,
     huaweiStatus: Int,
-): Int = miLinkAncModeFor(route, huaweiStatus) ?: 0
+): Int = miLinkAncModeFor(route, huaweiStatus) ?: -1
+
+/** ANC 开关能力与音频切换能力相互独立。 */
+internal fun miLinkAncSwitchStateFor(route: HuaweiDeviceRoute): Int =
+    if (route.supportsAnc) 1 else 0
 
 /**
  * 融合设备中心使用 0=关闭、1=头部跟踪、2=固定；这与耳机 AAM 的
@@ -279,6 +283,7 @@ object MiLinkServiceHook : HookContext() {
     private const val PREF_TRANSPARENCY_SUBMODE = "transparency_submode"
     private const val PREF_DEVICE_ROUTE = "device_route"
     private const val FREECLIP2_AUDIO_REFRESH_MIN_INTERVAL_MS = 750L
+    private const val DEVICE_SESSION_REQUEST_MIN_INTERVAL_MS = 1_500L
     private val bluetoothAddressPattern = Regex("^(?:[0-9A-F]{2}:){5}[0-9A-F]{2}$")
     private val ancIdentityGetterNames = listOf(
         "getAddress",
@@ -338,6 +343,7 @@ object MiLinkServiceHook : HookContext() {
     private var currentFreeClip2SoundEffect = FreeClip2SoundEffect.DEFAULT
     private val freeClip2AudioPendingGate = FreeClip2AudioPendingGate()
     private var lastFreeClip2AudioRefreshRequestAt = 0L
+    private var lastDeviceSessionRequestAt = 0L
     private val freeClip2AudioInternalRenderDepth = AtomicInteger(0)
     private var currentSessionConfirmed = false
     internal var lastAncBatteryController: Any? = null
@@ -354,6 +360,7 @@ object MiLinkServiceHook : HookContext() {
         hookContextEntry()
         hookMxBluetoothRuntime()
         hookHeadsetRuntimeDisplay()
+        hookSupportedAncModes()
         hookHeadsetCirculationExperiment()
         hookWindowsHeadsetCirculationCapability()
         hookWindowsHeadsetBondState()
@@ -388,6 +395,7 @@ object MiLinkServiceHook : HookContext() {
                 className,
                 "getAncState",
                 requiresCurrentState = true,
+                noAncResult = { -1 },
             ) { miLinkAncState() }
             hookBluetoothDeviceResult(className, "getDeviceRunInfo") { 0 }
             hookBluetoothDeviceResult(className, "getWearStatus") { "0,0" }
@@ -416,6 +424,7 @@ object MiLinkServiceHook : HookContext() {
             "com.miui.headset.runtime.AncBatteryController",
             "getAncState",
             requiresCurrentState = true,
+            noAncResult = { -1 },
         ) { miLinkAncState() }
         hookBluetoothDeviceResult(
             "com.miui.headset.runtime.AncBatteryController",
@@ -427,7 +436,7 @@ object MiLinkServiceHook : HookContext() {
             "getHeadsetPropertyBlock",
             requiresCurrentState = true,
         ) { batteryPercentForMiLink() }
-        hookStringAddressResult("com.miui.headset.runtime.AncBatteryController", "getSwitchState") { miLinkSwitchState() }
+        hookAncSwitchStateResult("com.miui.headset.runtime.AncBatteryController")
         hookTransparentFeatureMethods("com.miui.headset.runtime.AncBatteryController")
         hookTransparentFeatureMethods("com.miui.headset.runtime.ProfileContext")
         hookTransparentFeatureMethods("com.miui.headset.api.HeadsetInfo")
@@ -436,10 +445,66 @@ object MiLinkServiceHook : HookContext() {
         hookHeadsetInfoNoArg("component3") { fakeDeviceId() }
         hookHeadsetInfoNoArg("getPowers", requiresCurrentState = true) { miLinkBatteryLevels() }
         hookHeadsetInfoNoArg("component4", requiresCurrentState = true) { miLinkBatteryLevels() }
-        hookHeadsetInfoNoArg("getMode", requiresCurrentState = true) { miLinkAncState() }
-        hookHeadsetInfoNoArg("component5", requiresCurrentState = true) { miLinkAncState() }
-        hookHeadsetInfoNoArg("getSwitchState", requiresCurrentState = true) { miLinkSwitchState() }
-        hookHeadsetInfoNoArg("component8", requiresCurrentState = true) { miLinkSwitchState() }
+        hookHeadsetInfoNoArg(
+            "getMode",
+            requiresCurrentState = true,
+            noAncResult = { -1 },
+        ) { miLinkAncState() }
+        hookHeadsetInfoNoArg(
+            "component5",
+            requiresCurrentState = true,
+            noAncResult = { -1 },
+        ) { miLinkAncState() }
+        hookHeadsetInfoNoArg(
+            "getSwitchState",
+            requiresCurrentState = true,
+            noAncResult = { 0 },
+        ) { miLinkSwitchState() }
+        hookHeadsetInfoNoArg(
+            "component8",
+            requiresCurrentState = true,
+            noAncResult = { 0 },
+        ) { miLinkSwitchState() }
+    }
+
+    private fun hookAncSwitchStateResult(className: String) {
+        runCatching {
+            hookAfter(findMethod(className, "getSwitchState", String::class.java)) {
+                val address = args[0] as? String ?: return@hookAfter
+                val route = routeForAddress(address)
+                if (!route.isSupported) return@hookAfter
+                result = miLinkAncSwitchStateFor(route)
+            }
+        }.onFailure { Log.w(TAG, "hook $className.getSwitchState(String) skipped", it) }
+    }
+
+    /** 融合设备中心在绑定详情页前读取 ANC 能力，并据此决定区块和弹窗高度。 */
+    private fun hookSupportedAncModes() {
+        listOf(
+            "com.miui.headset.runtime.QueryLocal",
+            "com.miui.headset.runtime.QueryServer",
+        ).forEach { className ->
+            runCatching {
+                hookBefore(
+                    findMethod(
+                        className,
+                        "getSupportAncMode",
+                        String::class.java,
+                        String::class.java,
+                    ),
+                ) {
+                    val address = (args.firstOrNull() as? String)
+                        ?.trim()
+                        ?.uppercase()
+                        ?.takeIf(bluetoothAddressPattern::matches)
+                        ?: return@hookBefore
+                    val route = routeForAddress(address)
+                    if (route.isSupported && !route.supportsAnc) {
+                        result = 0
+                    }
+                }
+            }.onFailure { Log.w(TAG, "hook $className.getSupportAncMode skipped", it) }
+        }
     }
 
     internal fun hookBluetoothDeviceResult(
@@ -447,6 +512,7 @@ object MiLinkServiceHook : HookContext() {
         methodName: String,
         requiresAnc: Boolean = false,
         requiresCurrentState: Boolean = false,
+        noAncResult: (() -> Any)? = null,
         result: () -> Any,
     ) {
         runCatching {
@@ -454,9 +520,14 @@ object MiLinkServiceHook : HookContext() {
                 val device = args[0] as? BluetoothDevice ?: return@hookAfter
                 val route = routeForDevice(device)
                 if (!route.isSupported || requiresAnc && !route.supportsAnc) return@hookAfter
+                if (!route.supportsAnc && noAncResult != null) {
+                    this.result = noAncResult()
+                    return@hookAfter
+                }
                 if (requiresCurrentState && !isCurrentHuaweiDevice(device, route)) return@hookAfter
                 cacheRuntimeOwner(className, instance)
                 captureRuntimeContext(instance)
+                if (requiresCurrentState && !currentSessionConfirmed) requestCurrentDeviceSession()
                 this.result = result()
                 if (className == "com.miui.headset.runtime.AncBatteryController" && methodName == "getHeadsetPropertyBlock") {
                     notifyHeadsetPropertyChanged(instance, device, 4)
@@ -487,6 +558,10 @@ object MiLinkServiceHook : HookContext() {
                 val device = args[0] as? BluetoothDevice ?: return@hookBefore
                 val route = routeForDevice(device)
                 if (!route.isSupported) return@hookBefore
+                if (!currentSessionConfirmed) {
+                    this.result = 0
+                    return@hookBefore
+                }
                 if (!isCurrentHuaweiDevice(device, route)) return@hookBefore
                 if (!route.supportsAnc || requiresTransparency && !route.supportsTransparency) {
                     this.result = 0
@@ -514,6 +589,10 @@ object MiLinkServiceHook : HookContext() {
                 val device = args[0] as? BluetoothDevice ?: return@hookBefore
                 val route = routeForDevice(device)
                 if (!route.isSupported) return@hookBefore
+                if (!currentSessionConfirmed) {
+                    this.result = 0
+                    return@hookBefore
+                }
                 if (!isCurrentHuaweiDevice(device, route)) return@hookBefore
                 if (!route.supportsAnc) {
                     this.result = 0
@@ -548,13 +627,19 @@ object MiLinkServiceHook : HookContext() {
         methodName: String,
         requiresAnc: Boolean = false,
         requiresCurrentState: Boolean = false,
+        noAncResult: (() -> Any)? = null,
         result: () -> Any,
     ) {
         runCatching {
             hookAfter(findMethodByParamCount("com.miui.headset.api.HeadsetInfo", methodName, 0)) {
                 val route = routeForHeadsetInfo(instance)
                 if (!route.isSupported || requiresAnc && !route.supportsAnc) return@hookAfter
+                if (!route.supportsAnc && noAncResult != null) {
+                    this.result = noAncResult()
+                    return@hookAfter
+                }
                 if (requiresCurrentState && !isCurrentHeadsetInfo(instance, route)) return@hookAfter
+                if (requiresCurrentState && !currentSessionConfirmed) requestCurrentDeviceSession()
                 this.result = result()
             }
         }.onFailure { Log.w(TAG, "hook HeadsetInfo.$methodName skipped", it) }
@@ -665,6 +750,10 @@ object MiLinkServiceHook : HookContext() {
                 if (currentHuaweiRoute() != HuaweiDeviceRoute.HUAWEI_FREECLIP2 ||
                     !isTargetCirculateHeadset(serviceInfo)
                 ) {
+                    return@hookBefore
+                }
+                if (!currentSessionConfirmed) {
+                    result = CompletableFuture.completedFuture(208)
                     return@hookBefore
                 }
                 val mode = freeClip2SpatialModeForMiLinkAudioEffect(args[1] as? Int ?: -1)
@@ -1382,6 +1471,7 @@ object MiLinkServiceHook : HookContext() {
         }
         val selected = selectionForStatus(route, currentAnc)?.subMode ?: options.first().value
         val targetSelector = selector ?: HuaweiAncSubModeSelectorView(ancContainer.context) { subMode ->
+            if (!currentSessionConfirmed) return@HuaweiAncSubModeSelectorView
             val activeRoute = currentHuaweiRoute()
             val selection = selectionForStatus(activeRoute, currentAnc, subMode)
                 ?: return@HuaweiAncSubModeSelectorView
@@ -2059,6 +2149,7 @@ object MiLinkServiceHook : HookContext() {
                     HuaweiPodsAction.ACTION_PODS_DISCONNECTED -> {
                         if (!forgetCurrentDevice(receivedIntent)) return
                         saveState(context)
+                        requestCurrentDeviceSession(context)
                         refreshAncCards("disconnected")
                         refreshFreeClip2AudioEffectSections("disconnected")
                     }
@@ -2323,6 +2414,7 @@ object MiLinkServiceHook : HookContext() {
     }
 
     private fun sendHuaweiAnc(selection: MiLinkAncSelection, fallbackContext: Context? = null) {
+        if (!currentSessionConfirmed) return
         val route = currentHuaweiRoute()
         if (!route.supportsAnc || selection.status == 3 && !route.supportsTransparency) {
             Log.d(TAG, "sendHuaweiAnc skipped: route=$route selection=$selection")
@@ -2401,6 +2493,7 @@ object MiLinkServiceHook : HookContext() {
     }
 
     private fun requestFreeClip2AudioState(reason: String, force: Boolean = false) {
+        if (!currentSessionConfirmed) return
         val route = currentHuaweiRoute()
         val address = currentAddress?.takeIf(String::isNotBlank) ?: return
         val ctx = context ?: return
@@ -2423,11 +2516,31 @@ object MiLinkServiceHook : HookContext() {
         Log.d(TAG, "MiLink FreeClip2 audio readback requested reason=$reason address=$address")
     }
 
+    private fun requestCurrentDeviceSession(fallbackContext: Context? = null) {
+        if (currentSessionConfirmed) return
+        val ctx = fallbackContext ?: context ?: return
+        val device = currentBluetoothDevice(ctx) ?: return
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastDeviceSessionRequestAt < DEVICE_SESSION_REQUEST_MIN_INTERVAL_MS) return
+        lastDeviceSessionRequestAt = now
+        runCatching {
+            ctx.sendBroadcast(Intent(HuaweiPodsAction.ACTION_CONNECT_POD_REQUEST).apply {
+                putExtra("device", device)
+                setPackage("com.android.bluetooth")
+                addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
+            })
+        }.onFailure {
+            lastDeviceSessionRequestAt = 0L
+            Log.w(TAG, "MiLink device session request failed address=${device.address}", it)
+        }
+    }
+
     private fun sendFreeClip2AudioSetting(
         kind: String,
         value: String,
         fallbackContext: Context? = null,
     ): Boolean {
+        if (!currentSessionConfirmed) return false
         val route = currentHuaweiRoute()
         if (route != HuaweiDeviceRoute.HUAWEI_FREECLIP2) {
             Log.w(TAG, "FreeClip2 audio setting ignored for route=$route kind=$kind value=$value")
@@ -2527,11 +2640,15 @@ object MiLinkServiceHook : HookContext() {
             return false
         }
 
-        currentAddress = null
-        currentName = null
-        currentRoute = HuaweiDeviceRoute.UNSUPPORTED
+        val keepDisplayState = isCurrentDeviceStillConnected()
+        if (!keepDisplayState) {
+            currentAddress = null
+            currentName = null
+            currentRoute = HuaweiDeviceRoute.UNSUPPORTED
+            currentBattery = BatteryParams()
+        }
+        // 双设备切换时只终止旧会话，设备中心会通过仍连接的传输重新建立会话并继续刷新。
         currentSessionConfirmed = false
-        currentBattery = BatteryParams()
         currentAnc = NoiseControlMode.OFF.broadcastStatus
         currentAncSubMode = null
         currentTransparencySubMode = null
@@ -2540,6 +2657,31 @@ object MiLinkServiceHook : HookContext() {
         circulationUiCompletedUntilMs = 0L
         circulationTargetHostId = null
         return true
+    }
+
+    private fun isCurrentDeviceStillConnected(): Boolean {
+        val device = currentBluetoothDevice() ?: return false
+        return runCatching {
+            val method = device.javaClass.methods.firstOrNull {
+                it.name == "isConnected" && it.parameterCount in 0..1
+            } ?: return@runCatching false
+            when (method.parameterCount) {
+                0 -> method.invoke(device) as? Boolean == true
+                else -> method.invoke(device, BluetoothDevice.TRANSPORT_AUTO) as? Boolean == true
+            }
+        }.getOrDefault(false)
+    }
+
+    private fun currentBluetoothDevice(fallbackContext: Context? = null): BluetoothDevice? {
+        val address = currentAddress
+            ?.trim()
+            ?.uppercase()
+            ?.takeIf(bluetoothAddressPattern::matches)
+            ?: return null
+        val ctx = fallbackContext ?: context ?: return null
+        return runCatching {
+            ctx.getSystemService(BluetoothManager::class.java)?.adapter?.getRemoteDevice(address)
+        }.getOrNull()
     }
 
     private fun resetAncState(route: HuaweiDeviceRoute) {

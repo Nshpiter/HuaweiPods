@@ -34,6 +34,7 @@ import moe.chenxy.huaweipods.utils.miuiStrongToast.data.HuaweiPodsAction
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.addHuaweiPodsAction
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.PodParams
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.normalizedEarbudAvailability
+import moe.chenxy.huaweipods.utils.SystemApisUtils.cancelAsUser
 import org.json.JSONObject
 
 @SuppressLint("MissingPermission")
@@ -77,6 +78,7 @@ class BluetoothUpstreamHeadsetHook : HookContext() {
 
     override fun onHook() {
         hookHeadsetServiceBinder()
+        hookMiuiHeadsetBinder()
         hookNotificationBatteryUpstream()
         hookHuaweiHfpBattery()
     }
@@ -497,11 +499,29 @@ class BluetoothUpstreamHeadsetHook : HookContext() {
         hookAddressBooleanResult(binderClass, listOf("getRingFindState", "mo19772m0", "m0"), "getRingFindState", false)
 
         runCatching {
-            hookBefore(binderClass.method("setCommonCommand", Int::class.java, String::class.java, BluetoothDevice::class.java)) {
+            val method = binderClass.declaredMethods.firstOrNull { candidate ->
+                candidate.returnType == String::class.java &&
+                    candidate.parameterTypes.contentEquals(
+                        arrayOf(
+                            Int::class.javaPrimitiveType!!,
+                            String::class.java,
+                            BluetoothDevice::class.java,
+                        ),
+                    )
+            } ?: return@runCatching
+            method.isAccessible = true
+            hookBefore(method) {
                 val command = args[0] as? Int
                 val value = args[1] as? String
                 val device = args[2] as? BluetoothDevice
                 if (!isHuaweiPod(device)) return@hookBefore
+                // 114/115 是通知栏开关；114 的值“1”表示断开设备，继续交给原实现。
+                if (command == COMMAND_SET_DETAIL_NOTIFICATION ||
+                    command == COMMAND_GET_DETAIL_NOTIFICATION
+                ) {
+                    detailNotificationResponse(command, value, device)?.let { result = it }
+                    return@hookBefore
+                }
                 lastHuaweiDevice = device
                 result = when (command) {
                     102 -> "1"
@@ -707,6 +727,7 @@ class BluetoothUpstreamHeadsetHook : HookContext() {
         runCatching {
             hookBefore(findMethod(stubClass, "onTransact", Int::class.java, Parcel::class.java, Parcel::class.java, Int::class.java)) {
                 val code = args[0] as? Int ?: return@hookBefore
+                if (code != TRANSACTION_SET_COMMON_COMMAND) return@hookBefore
                 val data = args[1] as? Parcel ?: return@hookBefore
                 val reply = args[2] as? Parcel ?: return@hookBefore
                 handleTransaction(code, data, reply)?.let { handled ->
@@ -881,6 +902,16 @@ class BluetoothUpstreamHeadsetHook : HookContext() {
         Log.d(TAG, "setCommonCommand upstream command=$command value=$value device=${device.describe()} isHuawei=$isHuawei")
         if (!isHuawei) return null
         lastHuaweiDevice = device
+        detailNotificationResponse(command, value, device)?.let { response ->
+            reply.writeNoException()
+            reply.writeString(response)
+            return true
+        }
+        if (command == COMMAND_SET_DETAIL_NOTIFICATION ||
+            command == COMMAND_GET_DETAIL_NOTIFICATION
+        ) {
+            return null
+        }
         reply.writeNoException()
         reply.writeString(
             when (command) {
@@ -891,6 +922,50 @@ class BluetoothUpstreamHeadsetHook : HookContext() {
         )
         sendRealStatus(device, "setCommonCommand:$command")
         return true
+    }
+
+    private fun detailNotificationResponse(
+        command: Int?,
+        value: String?,
+        device: BluetoothDevice?,
+    ): String? {
+        if (packageName != "com.xiaomi.bluetooth" || command == null || device == null) return null
+        val ctx = context ?: return null
+        val address = runCatching { device.address }.getOrNull()?.takeIf(String::isNotBlank)
+            ?: return null
+        val preferences = ctx.getSharedPreferences("DeviceIdCached", Context.MODE_MULTI_PROCESS)
+        val key = "detail_notification$address"
+        if (command == COMMAND_SET_DETAIL_NOTIFICATION) {
+            val enabled = when (value) {
+                "true" -> true
+                "false" -> false
+                else -> return null
+            }
+            if (!preferences.edit().putBoolean(key, enabled).commit()) return null
+            if (enabled) {
+                ctx.sendBroadcast(Intent(HuaweiPodsAction.ACTION_REFRESH_STATUS).apply {
+                    putExtra(HuaweiPodsAction.EXTRA_RESTORE_NOTIFICATION, true)
+                    setPackage("com.android.bluetooth")
+                    addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
+                })
+            } else {
+                cancelDetailNotification(ctx, address)
+            }
+            return ""
+        }
+        if (command == COMMAND_GET_DETAIL_NOTIFICATION) {
+            return preferences.getBoolean(key, false).toString()
+        }
+        return null
+    }
+
+    private fun cancelDetailNotification(ctx: Context, address: String) {
+        (ctx.getSystemService(Context.NOTIFICATION_SERVICE) as? android.app.NotificationManager)
+            ?.cancelAsUser(
+                "BTHeadset$address",
+                DETAIL_NOTIFICATION_ID,
+                moe.chenxy.huaweipods.utils.SystemApisUtils.getUserAllUserHandle(),
+            )
     }
 
     private fun handleCommonConfig(data: Parcel, reply: Parcel): Boolean? {
@@ -1306,6 +1381,10 @@ class BluetoothUpstreamHeadsetHook : HookContext() {
     }
 
     private companion object {
+        private const val TRANSACTION_SET_COMMON_COMMAND = 14
+        private const val COMMAND_SET_DETAIL_NOTIFICATION = 114
+        private const val COMMAND_GET_DETAIL_NOTIFICATION = 115
+        private const val DETAIL_NOTIFICATION_ID = 10003
         private const val FREEBUDS3_BATTERY_RESPONSE = "+HUAWEIBATTERY=OK"
         private const val AT_RESPONSE_OK = 1
     }

@@ -45,7 +45,8 @@ class MiLinkAncRoutingTest {
             HuaweiDeviceRoute.HUAWEI_EYEWEAR2,
         ).forEach { route ->
             assertNull(miLinkAncModeFor(route, 2))
-            assertEquals(0, miLinkHostAncStateFor(route, 2))
+            assertEquals(-1, miLinkHostAncStateFor(route, 2))
+            assertEquals(0, miLinkAncSwitchStateFor(route))
             assertNull(huaweiAncStatusForMiLink(route, 0))
             assertNull(huaweiAncStatusForMiLink(route, 1))
             assertNull(huaweiAncStatusForMiLink(route, 2))
@@ -63,6 +64,7 @@ class MiLinkAncRoutingTest {
             assertEquals(0, miLinkAncModeFor(route, 1))
             assertEquals(1, miLinkAncModeFor(route, 2))
             assertEquals(2, miLinkAncModeFor(route, 3))
+            assertEquals(1, miLinkAncSwitchStateFor(route))
             assertEquals(1, huaweiAncStatusForMiLink(route, 0))
             assertEquals(2, huaweiAncStatusForMiLink(route, 1))
             assertEquals(3, huaweiAncStatusForMiLink(route, 2))
@@ -78,6 +80,7 @@ class MiLinkAncRoutingTest {
         ).forEach { route ->
             assertEquals(0, miLinkAncModeFor(route, 1))
             assertEquals(1, miLinkAncModeFor(route, 2))
+            assertEquals(1, miLinkAncSwitchStateFor(route))
             assertNull(huaweiAncStatusForMiLink(route, 2))
         }
     }
