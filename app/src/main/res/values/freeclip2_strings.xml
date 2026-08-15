@@ -23,6 +23,14 @@
     <string name="freeclip2_sound_effect_treble">Treble boost</string>
     <string name="freeclip2_sound_effect_clear_voice">Clear voice</string>
     <string name="freeclip2_sound_effect_custom">Official/custom effect</string>
+    <string name="freeclip2_custom_effect_title">Custom effects</string>
+    <string name="freeclip2_custom_effect_summary">Read and edit the earphones’ 10-band custom curves</string>
+    <string name="freeclip2_custom_effect_existing">Saved custom effects</string>
+    <string name="freeclip2_custom_effect_add">Add custom effect</string>
+    <string name="freeclip2_custom_effect_name">Effect name</string>
+    <string name="freeclip2_custom_effect_default_name">My effect %1$d</string>
+    <string name="freeclip2_custom_effect_edit_hint">Select to edit its name and 10-band curve</string>
+    <string name="freeclip2_custom_effect_bridge_hint">Up to three effects. Writing uses Smart Audio’s official channel, so Smart Audio must be running.</string>
     <string name="freeclip2_sound_quality_priority">Prioritize sound quality</string>
     <string name="freeclip2_low_latency">Low latency mode</string>
     <string name="freeclip2_dual_device">Dual-device connection</string>

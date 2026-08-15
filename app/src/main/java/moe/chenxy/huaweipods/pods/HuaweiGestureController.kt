@@ -15,11 +15,15 @@ object HuaweiGestureController {
     const val EXTRA_TRIPLE_RIGHT_ACTION = "triple_right_action"
     const val EXTRA_SWIPE_LEFT_ACTION = "swipe_left_action"
     const val EXTRA_SWIPE_RIGHT_ACTION = "swipe_right_action"
+    const val EXTRA_LONG_PRESS_LEFT_ACTION = "long_press_left_action"
+    const val EXTRA_LONG_PRESS_RIGHT_ACTION = "long_press_right_action"
 
     private val freeClip2DoubleTapQuery = hex("5A000700012001000200E897")
     private val freeClip2TripleTapQuery = hex("5A0007000126010002002512")
     private val freeClip2SwipeQuery = hex("5A0007002B1F01000200328A")
+    private val freeBuds4eLongPressQuery = hex("5A0007002B170100020030A7")
     private val modernLongPressRoutes = setOf(
+        HuaweiDeviceRoute.HUAWEI_FREEBUDS4E,
         HuaweiDeviceRoute.HUAWEI_FREEBUDS6I,
         HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3,
         HuaweiDeviceRoute.HUAWEI_FREEBUDS7I,
@@ -158,6 +162,21 @@ object HuaweiGestureController {
         protocolValue = action.protocolValue,
     )
 
+    fun buildModernEarbudsLongPressPacket(
+        route: HuaweiDeviceRoute,
+        side: HuaweiGestureSide,
+        action: FreeBudsPro3LongPressAction,
+    ): ByteArray? {
+        if (route !in modernLongPressRoutes) return null
+        val protocolValue = action.protocolValue(route) ?: return null
+        return buildSideActionPacket(
+            service = 0x2B,
+            command = 0x16,
+            side = side,
+            protocolValue = protocolValue,
+        )
+    }
+
     fun buildFreeBudsPro3GestureTogglePacket(
         gesture: FreeBudsPro3GestureToggle,
         enabled: Boolean,
@@ -271,7 +290,9 @@ object HuaweiGestureController {
     }
 
     internal fun buildGestureStateQuery(route: HuaweiDeviceRoute): ByteArray? =
-        if (route == HuaweiDeviceRoute.HUAWEI_FREEBUDS6I ||
+        if (route == HuaweiDeviceRoute.HUAWEI_FREEBUDS4E) {
+            freeClip2DoubleTapQuery + freeBuds4eLongPressQuery
+        } else if (route == HuaweiDeviceRoute.HUAWEI_FREEBUDS6I ||
             route == HuaweiDeviceRoute.HUAWEI_FREECLIP2 ||
             route == HuaweiDeviceRoute.HUAWEI_FREEBUDS7I
         ) {
@@ -348,7 +369,8 @@ object HuaweiGestureController {
         action: FreeBudsPro3LongPressAction,
         onComplete: ((Boolean) -> Unit)? = null,
     ) {
-        if (route !in modernLongPressRoutes) {
+        val packet = buildModernEarbudsLongPressPacket(route, side, action)
+        if (packet == null) {
             onComplete?.invoke(false)
             return
         }
@@ -356,7 +378,7 @@ object HuaweiGestureController {
             context = context,
             device = device,
             route = route,
-            packet = buildFreeBudsPro3LongPressPacket(side, action),
+            packet = packet,
             description = "modern-earbuds long-press side=${side.extraValue} action=${action.extraValue}",
             onComplete = onComplete,
         )
@@ -551,6 +573,13 @@ enum class HuaweiTapAction(val extraValue: String) {
             NONE,
         )
         private val freeBuds7iTripleTapActions = listOf(PLAY_NEXT, PLAY_PREVIOUS, NONE)
+        private val freeBuds4eDoubleTapActions = listOf(
+            PLAY_PAUSE,
+            PLAY_NEXT,
+            PLAY_PREVIOUS,
+            VOICE_ASSISTANT,
+            NONE,
+        )
         private val eyewear2DoubleTapActions = listOf(PLAY_PAUSE, VOICE_ASSISTANT, NONE)
 
         fun availableFor(
@@ -558,6 +587,7 @@ enum class HuaweiTapAction(val extraValue: String) {
             kind: HuaweiGestureKind,
         ): List<HuaweiTapAction> = when (route to kind) {
             HuaweiDeviceRoute.HUAWEI_FREEBUDS3 to HuaweiGestureKind.DOUBLE_TAP -> freeBuds3DoubleTapActions
+            HuaweiDeviceRoute.HUAWEI_FREEBUDS4E to HuaweiGestureKind.DOUBLE_TAP -> freeBuds4eDoubleTapActions
             HuaweiDeviceRoute.HUAWEI_FREEBUDS6I to HuaweiGestureKind.DOUBLE_TAP -> freeBuds6iDoubleTapActions
             HuaweiDeviceRoute.HUAWEI_FREEBUDS6I to HuaweiGestureKind.TRIPLE_TAP -> freeBuds6iTripleTapActions
             HuaweiDeviceRoute.HUAWEI_FREECLIP2 to HuaweiGestureKind.DOUBLE_TAP -> freeClip2DoubleTapActions
@@ -609,7 +639,9 @@ enum class HuaweiTapAction(val extraValue: String) {
                 NOISE_CANCELLATION -> null
             }
 
-            HuaweiDeviceRoute.HUAWEI_FREEBUDS7I -> when (this) {
+            HuaweiDeviceRoute.HUAWEI_FREEBUDS4E,
+            HuaweiDeviceRoute.HUAWEI_FREEBUDS7I,
+            -> when (this) {
                 PLAY_NEXT -> 0x02
                 PLAY_PREVIOUS -> 0x07
                 PLAY_PAUSE -> 0x01
@@ -678,10 +710,16 @@ data class HuaweiGestureState(
     val doubleTap: HuaweiTapState? = null,
     val tripleTap: HuaweiTapState? = null,
     val swipe: HuaweiSwipeState? = null,
+    val longPress: HuaweiLongPressState? = null,
 ) {
     val hasAnyState: Boolean
-        get() = doubleTap != null || tripleTap != null || swipe != null
+        get() = doubleTap != null || tripleTap != null || swipe != null || longPress != null
 }
+
+data class HuaweiLongPressState(
+    val left: FreeBudsPro3LongPressAction,
+    val right: FreeBudsPro3LongPressAction,
+)
 
 enum class FreeBuds6iTapGesture(
     val kind: HuaweiGestureKind,
@@ -726,11 +764,48 @@ enum class FreeBudsPro3LongPressAction(
 ) {
     VOICE_ASSISTANT(0x00, "voice_assistant"),
     NOISE_CONTROL(0x0A, "noise_control"),
+    SONG_RECOGNITION(0x0E, "song_recognition"),
     NONE(0xFF, "none");
 
     companion object {
         fun fromProtocolValue(value: Int): FreeBudsPro3LongPressAction? =
             entries.firstOrNull { it.protocolValue == value }
+
+        fun availableFor(route: HuaweiDeviceRoute): List<FreeBudsPro3LongPressAction> = when (route) {
+            HuaweiDeviceRoute.HUAWEI_FREEBUDS4E -> listOf(NOISE_CONTROL, SONG_RECOGNITION, NONE)
+            HuaweiDeviceRoute.HUAWEI_FREEBUDS6I,
+            HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3,
+            HuaweiDeviceRoute.HUAWEI_FREEBUDS7I,
+            -> listOf(VOICE_ASSISTANT, NOISE_CONTROL, NONE)
+
+            else -> emptyList()
+        }
+
+        fun fromProtocolValue(
+            route: HuaweiDeviceRoute,
+            value: Int,
+        ): FreeBudsPro3LongPressAction? = availableFor(route).firstOrNull {
+            it.protocolValue(route) == value
+        }
+    }
+
+    fun protocolValue(route: HuaweiDeviceRoute): Int? {
+        if (this !in availableFor(route)) return null
+        return when (route) {
+            HuaweiDeviceRoute.HUAWEI_FREEBUDS4E -> when (this) {
+                NOISE_CONTROL -> 0x03
+                SONG_RECOGNITION -> 0x0E
+                NONE -> 0xFF
+                VOICE_ASSISTANT -> null
+            }
+
+            HuaweiDeviceRoute.HUAWEI_FREEBUDS6I,
+            HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3,
+            HuaweiDeviceRoute.HUAWEI_FREEBUDS7I,
+            -> protocolValue
+
+            else -> null
+        }
     }
 }
 

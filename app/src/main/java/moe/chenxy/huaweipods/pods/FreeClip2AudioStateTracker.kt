@@ -71,6 +71,13 @@ internal class FreeClip2AudioStateTracker {
 
     fun isPending(token: WriteToken): Boolean = pendingWrite?.version == token.version
 
+    /**
+     * 新打开的系统宿主可以立即复用最近一次真实回读，避免查询节流期间显示各自的旧缓存。
+     * 写入尚待确认时不能重播旧值，否则会让选择器在用户刚点击后跳回去。
+     */
+    fun stableRefreshSnapshot(): FreeClip2AudioState? =
+        confirmedState?.takeIf { pendingWrite == null }
+
     fun beginQuery(): QueryToken = QueryToken(++queryVersion, mutationVersion)
 
     /**

@@ -11,6 +11,7 @@ class DeviceCapabilitiesTest {
     fun `unified build recognizes every integrated model by exact official alias`() {
         val cases = listOf(
             "HUAWEI FreeBuds 3" to HuaweiDeviceRoute.HUAWEI_FREEBUDS3,
+            "FreeBuds 4E" to HuaweiDeviceRoute.HUAWEI_FREEBUDS4E,
             "FreeBuds 5" to HuaweiDeviceRoute.HUAWEI_FREEBUDS5,
             "HUAWEI FreeBuds 6i" to HuaweiDeviceRoute.HUAWEI_FREEBUDS6I,
             "FreeBuds Pro 3" to HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3,
@@ -53,6 +54,7 @@ class DeviceCapabilitiesTest {
 
         listOf(
             HuaweiDeviceRoute.HUAWEI_FREEBUDS5,
+            HuaweiDeviceRoute.HUAWEI_FREEBUDS4E,
             HuaweiDeviceRoute.HUAWEI_FREEBUDS6I,
             HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3,
             HuaweiDeviceRoute.HUAWEI_FREEBUDS7I,
@@ -115,6 +117,7 @@ class DeviceCapabilitiesTest {
     fun `gesture configuration is only exposed for implemented routes`() {
         listOf(
             HuaweiDeviceRoute.HUAWEI_FREEBUDS3,
+            HuaweiDeviceRoute.HUAWEI_FREEBUDS4E,
             HuaweiDeviceRoute.HUAWEI_FREEBUDS6I,
             HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3,
             HuaweiDeviceRoute.HUAWEI_FREEBUDS7I,
@@ -151,6 +154,7 @@ class DeviceCapabilitiesTest {
     fun `broadcast route codec uses stable values and round trips every enabled route`() {
         val expectedValues = linkedMapOf(
             HuaweiDeviceRoute.HUAWEI_FREEBUDS3 to "HUAWEI_FREEBUDS3",
+            HuaweiDeviceRoute.HUAWEI_FREEBUDS4E to "HUAWEI_FREEBUDS4E",
             HuaweiDeviceRoute.HUAWEI_FREEBUDS5 to "HUAWEI_FREEBUDS5",
             HuaweiDeviceRoute.HUAWEI_FREEBUDS6I to "HUAWEI_FREEBUDS6I",
             HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3 to "HUAWEI_FREEBUDS_PRO3",

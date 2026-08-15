@@ -8,6 +8,24 @@ import org.junit.Test
 
 class HuaweiAncLevelProfileTest {
     @Test
+    fun `FreeBuds 4E exposes only the three captured ANC values`() {
+        val route = HuaweiDeviceRoute.HUAWEI_FREEBUDS4E
+        val expected = listOf(
+            HuaweiAncLevelOption(HuaweiAncLevel.DEEP, protocolValue = 0xFF, miuiValue = 0x02),
+            HuaweiAncLevelOption(HuaweiAncLevel.BALANCED, protocolValue = 0x00, miuiValue = 0x00),
+            HuaweiAncLevelOption(HuaweiAncLevel.LIGHT, protocolValue = 0x01, miuiValue = 0x01),
+        )
+
+        assertEquals(expected, route.ancLevelOptions)
+        assertEquals(0xFF, route.defaultAncSubMode)
+        expected.forEach { option ->
+            assertEquals(option.protocolValue, route.ancSubModeForMiuiLevel(option.miuiValue))
+            assertEquals(option.miuiValue, route.miuiLevelForAncSubMode(option.protocolValue))
+        }
+        assertFalse(route.supportsAncSubMode(0x03))
+    }
+
+    @Test
     fun `FreeBuds 5 exposes the three captured ANC levels without deep mode`() {
         val route = HuaweiDeviceRoute.HUAWEI_FREEBUDS5
 

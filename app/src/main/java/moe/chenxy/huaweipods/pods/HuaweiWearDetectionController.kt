@@ -4,6 +4,8 @@ import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import moe.chenxy.huaweipods.config.ConfigManager
 import moe.chenxy.huaweipods.config.DeviceRoutePrefs
 
@@ -16,6 +18,7 @@ import moe.chenxy.huaweipods.config.DeviceRoutePrefs
 object HuaweiWearDetectionController {
     private val supportedRoutes = setOf(
         HuaweiDeviceRoute.HUAWEI_FREEBUDS5,
+        HuaweiDeviceRoute.HUAWEI_FREEBUDS4E,
         HuaweiDeviceRoute.HUAWEI_FREEBUDS6I,
         HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3,
         HuaweiDeviceRoute.HUAWEI_FREEBUDS7I,
@@ -52,13 +55,38 @@ object HuaweiWearDetectionController {
             onComplete?.invoke(false)
             return
         }
+        val mainHandler = Handler(Looper.getMainLooper())
+        fun verifyWrite(attempt: Int) {
+            requestState(context, device, route) { actual ->
+                when {
+                    actual == enabled -> onComplete?.invoke(true)
+                    attempt >= WRITE_READBACK_ATTEMPTS -> onComplete?.invoke(false)
+                    else -> mainHandler.postDelayed(
+                        { verifyWrite(attempt + 1) },
+                        WRITE_READBACK_RETRY_DELAY_MS,
+                    )
+                }
+            }
+        }
         HuaweiL2capAncController.sendRawPacketOnce(
             context = context,
             device = device,
             route = route,
             packet = packet,
             description = "wear-detection enabled=$enabled",
-            onComplete = onComplete,
+            onComplete = { writeSucceeded ->
+                if (!writeSucceeded) {
+                    onComplete?.invoke(false)
+                    return@sendRawPacketOnce
+                }
+                if (onComplete == null) return@sendRawPacketOnce
+                // 2B10 的通用 ACK 只能证明写入完成，不能证明耳机已经应用。
+                // 稍等耳机落盘后用抓包确认的 2B11 回读做最终结果，避免 UI 假成功。
+                mainHandler.postDelayed(
+                    { verifyWrite(attempt = 1) },
+                    WRITE_READBACK_DELAY_MS,
+                )
+            },
         )
     }
 
@@ -104,4 +132,8 @@ object HuaweiWearDetectionController {
     private fun hex(value: String): ByteArray = value.chunked(2)
         .map { it.toInt(16).toByte() }
         .toByteArray()
+
+    private const val WRITE_READBACK_DELAY_MS = 200L
+    private const val WRITE_READBACK_RETRY_DELAY_MS = 300L
+    private const val WRITE_READBACK_ATTEMPTS = 2
 }

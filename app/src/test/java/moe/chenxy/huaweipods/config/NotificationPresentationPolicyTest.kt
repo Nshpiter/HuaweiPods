@@ -67,4 +67,10 @@ class NotificationPresentationPolicyTest {
             ),
         )
     }
+
+    @Test
+    fun `persistent notification master switch gates notification posting`() {
+        assertTrue(NotificationPresentationPolicy.shouldPostPersistentNotification(true))
+        assertFalse(NotificationPresentationPolicy.shouldPostPersistentNotification(false))
+    }
 }

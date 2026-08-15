@@ -18,19 +18,11 @@ internal object SmartAudioFreeClip2BridgePolicy {
         ?.trim()
         ?.takeIf { runCatching { UUID.fromString(it) }.isSuccess }
 
-    /** 智慧音频公开 API 的枚举是 0=关闭、1=头部跟踪、2=固定。 */
-    fun officialModeFor(mode: FreeClip2SpatialAudioMode): Int = when (mode) {
-        FreeClip2SpatialAudioMode.OFF -> 0
-        FreeClip2SpatialAudioMode.FIXED -> 2
-        FreeClip2SpatialAudioMode.HEAD_TRACKING -> 1
-    }
+    /** 智慧音频公开 API 与 FreeClip 2 AAM 均为 0=关闭、1=头部跟踪、2=固定。 */
+    fun officialModeFor(mode: FreeClip2SpatialAudioMode): Int = mode.protocolValue
 
-    fun modeFromOfficial(value: Int): FreeClip2SpatialAudioMode? = when (value) {
-        0 -> FreeClip2SpatialAudioMode.OFF
-        1 -> FreeClip2SpatialAudioMode.HEAD_TRACKING
-        2 -> FreeClip2SpatialAudioMode.FIXED
-        else -> null
-    }
+    fun modeFromOfficial(value: Int): FreeClip2SpatialAudioMode? =
+        FreeClip2SpatialAudioMode.fromProtocolValue(value)
 
     /** 智慧音频 EQ 类型；模块未提供的官方/自定义类型只读显示为 CUSTOM。 */
     fun soundEffectFromOfficial(value: Int): FreeClip2SoundEffect = when (value) {

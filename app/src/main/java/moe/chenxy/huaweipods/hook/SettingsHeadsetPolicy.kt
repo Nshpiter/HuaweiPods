@@ -21,6 +21,23 @@ internal fun isSettingsEarTipFitText(text: String): Boolean =
     settingsEarTipFitKeywords.any { it.equals(text.trim(), ignoreCase = true) }
 
 /**
+ * 小米耳机模板自带的通知开关不会控制 HuaweiPods 创建的通知。华为耳机页面隐藏该假入口，
+ * 统一由模块设置中的“耳机常驻通知”开关管理，避免用户看到开关变化但通知行为不变。
+ */
+internal val settingsNotificationDisplayKeywords = listOf(
+    "通知栏显示",
+    "耳机连接后在通知栏显示状态信息",
+    "Notification display",
+    "Show notification",
+    "Show in notification",
+    "Show in notification shade",
+    "Display status information in the notification",
+)
+
+internal fun isSettingsNotificationDisplayText(text: String): Boolean =
+    settingsNotificationDisplayKeywords.any { it.equals(text.trim(), ignoreCase = true) }
+
+/**
  * 系统蓝牙详情页使用的是小米耳机模板。这里只暴露已经桥接到华为协议的能力，
  * 避免模板把硬件可能具备、但 HuaweiPods 尚未实现的入口显示成可用功能。
  */

@@ -180,6 +180,9 @@ fun MainUI(
     val logLevel = remember { mutableStateOf(appConfig.logLevel) }
     val fakeDeviceId = remember { mutableStateOf(appConfig.fakeDeviceId) }
     val islandMode = remember { mutableStateOf(ConfigManager.islandMode()) }
+    val persistentNotificationEnabled = remember {
+        mutableStateOf(appConfig.persistentNotificationEnabled)
+    }
     val lockscreenNotificationEnabled = remember {
         mutableStateOf(appConfig.lockscreenNotificationEnabled)
     }
@@ -915,6 +918,12 @@ fun MainUI(
                     islandMode.value = it
                     ConfigManager.updateIslandMode(prefs, xposedService, it)
                     broadcastConfigChanged(context, "com.android.bluetooth")
+                    broadcastConfigChanged(context, "com.xiaomi.bluetooth")
+                },
+                persistentNotificationEnabled = persistentNotificationEnabled,
+                onPersistentNotificationEnabledChange = {
+                    persistentNotificationEnabled.value = it
+                    ConfigManager.updatePersistentNotificationEnabled(prefs, xposedService, it)
                     broadcastConfigChanged(context, "com.xiaomi.bluetooth")
                 },
                 lockscreenNotificationEnabled = lockscreenNotificationEnabled,

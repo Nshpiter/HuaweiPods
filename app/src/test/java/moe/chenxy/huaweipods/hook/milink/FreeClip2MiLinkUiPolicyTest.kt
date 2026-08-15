@@ -7,6 +7,18 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class FreeClip2MiLinkUiPolicyTest {
+
+    @Test
+    fun `section title translation aligns its visible start without accumulating`() {
+        assertEquals(
+            -19f,
+            FreeClip2MiLinkUiPolicy.alignedTitleTranslation(
+                originalTranslation = 3f,
+                referenceStart = 100,
+                targetStart = 122,
+            ),
+        )
+    }
     @Test
     fun `native labels map to official FreeClip2 semantics`() {
         assertEquals(FreeClip2MiLinkLabel.AUDIO_SETTINGS, FreeClip2MiLinkUiPolicy.classify("噪声控制"))
@@ -35,5 +47,12 @@ class FreeClip2MiLinkUiPolicyTest {
         assertFalse(FreeClip2MiLinkUiPolicy.isVolumeHeading("调节音量"))
         assertFalse(FreeClip2MiLinkUiPolicy.isVolumeHeading("Volume control"))
         assertFalse(FreeClip2MiLinkUiPolicy.isSpatialAudioHeading("空间音频说明"))
+    }
+
+    @Test
+    fun `host ANC section collapses only for supported devices without ANC`() {
+        assertTrue(FreeClip2MiLinkUiPolicy.shouldCollapseHostAncSection(true, false))
+        assertFalse(FreeClip2MiLinkUiPolicy.shouldCollapseHostAncSection(true, true))
+        assertFalse(FreeClip2MiLinkUiPolicy.shouldCollapseHostAncSection(false, false))
     }
 }

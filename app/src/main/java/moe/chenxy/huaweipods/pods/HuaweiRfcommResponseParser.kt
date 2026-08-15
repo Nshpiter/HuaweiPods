@@ -20,6 +20,8 @@ internal object HuaweiRfcommResponseParser {
     private const val TRIPLE_TAP_STATE_COMMAND = 0x26
     private const val SWIPE_SERVICE = 0x2B
     private const val SWIPE_STATE_COMMAND = 0x1F
+    private const val LONG_PRESS_SERVICE = 0x2B
+    private const val LONG_PRESS_STATE_COMMAND = 0x17
     private const val LEFT_GESTURE = 0x01
     private const val RIGHT_GESTURE = 0x02
 
@@ -140,7 +142,25 @@ internal object HuaweiRfcommResponseParser {
         doubleTap = parseDoubleTapState(stream, route),
         tripleTap = parseTripleTapState(stream, route),
         swipe = parseSwipeState(stream, route),
+        longPress = parseLongPressState(stream, route),
     )
+
+    fun parseLongPressState(
+        stream: ByteArray,
+        route: HuaweiDeviceRoute,
+    ): HuaweiLongPressState? {
+        var latestState: HuaweiLongPressState? = null
+        frames(stream).forEach { frame ->
+            if (frame.u8(4) != LONG_PRESS_SERVICE || frame.u8(5) != LONG_PRESS_STATE_COMMAND) return@forEach
+            val fields = parseFields(frame, start = 6, endExclusive = frame.size - CHECKSUM_SIZE)
+            val leftValue = fields[LEFT_GESTURE]?.singleOrNull()?.toInt()?.and(0xFF) ?: return@forEach
+            val rightValue = fields[RIGHT_GESTURE]?.singleOrNull()?.toInt()?.and(0xFF) ?: return@forEach
+            val left = FreeBudsPro3LongPressAction.fromProtocolValue(route, leftValue) ?: return@forEach
+            val right = FreeBudsPro3LongPressAction.fromProtocolValue(route, rightValue) ?: return@forEach
+            latestState = HuaweiLongPressState(left = left, right = right)
+        }
+        return latestState
+    }
 
     private fun parseTapState(
         stream: ByteArray,
@@ -216,11 +236,11 @@ internal object HuaweiRfcommResponseParser {
         )
     }
 
-    /** Pro 5 抓包里的 0x05 字段：1 为正在使用，0 为已收纳或未连接。 */
+    /** Pro 5 抓包里的 0x05 字段：0 为已出盒，1 为已收纳入盒。 */
     private fun ByteArray.reportedConnectedAt(index: Int): Boolean? =
         when (getOrNull(index)?.toInt()?.and(0xFF)) {
-            0 -> false
-            1 -> true
+            0 -> true
+            1 -> false
             else -> null
         }
 

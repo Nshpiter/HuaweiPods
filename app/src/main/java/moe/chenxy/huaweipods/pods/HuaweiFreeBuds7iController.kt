@@ -23,6 +23,11 @@ object HuaweiFreeBuds7iController {
     private val SOUND_EFFECT_QUERY = hex("5A0005002B4A02008C46")
     private val HIGH_QUALITY_AUDIO_QUERY = hex("5A0005002BA30101F794")
     private val DUAL_DEVICE_QUERY = hex("5A0008002B3101000D0100AEEE")
+    private val SPATIAL_AUDIO_MODE_PACKETS = mapOf(
+        FreeClip2SpatialAudioMode.OFF to hex("5A0009002BB401011802010060ED"),
+        FreeClip2SpatialAudioMode.FIXED to hex("5A0009002BB401011802010170CC"),
+        FreeClip2SpatialAudioMode.HEAD_TRACKING to hex("5A0009002BB401011802010240AF"),
+    )
 
     fun setBooleanFeature(
         context: Context,
@@ -46,7 +51,7 @@ object HuaweiFreeBuds7iController {
     ) = send(
         context,
         device,
-        mode.packet(),
+        spatialAudioModePacket(mode),
         "freebuds7i spatial-mode=${mode.extraValue}",
         onComplete,
     )
@@ -94,7 +99,7 @@ object HuaweiFreeBuds7iController {
             }
         }
         request(context, device, SPATIAL_AUDIO_QUERY, "spatial-audio-state") { response ->
-            HuaweiFreeClip2Controller.parseSpatialAudioState(response)?.mode?.let {
+            parseSpatialAudioState(response)?.mode?.let {
                 onState(FreeBuds7iSettingsState(spatialAudioMode = it))
             }
         }
@@ -152,6 +157,20 @@ object HuaweiFreeBuds7iController {
     fun highQualityAudioQueryPacket(): ByteArray = HIGH_QUALITY_AUDIO_QUERY.copyOf()
 
     fun dualDeviceQueryPacket(): ByteArray = DUAL_DEVICE_QUERY.copyOf()
+
+    /** FreeBuds 7i 抓包确认使用 0=关闭、1=固定、2=头部跟踪。 */
+    internal fun spatialAudioModePacket(mode: FreeClip2SpatialAudioMode): ByteArray =
+        requireNotNull(SPATIAL_AUDIO_MODE_PACKETS[mode]).copyOf()
+
+    internal fun parseSpatialAudioState(stream: ByteArray): FreeClip2AudioState? =
+        HuaweiFreeClip2Controller.parseSpatialAudioState(stream) { value ->
+            when (value) {
+                0 -> FreeClip2SpatialAudioMode.OFF
+                1 -> FreeClip2SpatialAudioMode.FIXED
+                2 -> FreeClip2SpatialAudioMode.HEAD_TRACKING
+                else -> null
+            }
+        }
 
     /** Parses field 0x02 from the verified 2BB4/0x0B feature response. */
     fun parseHeadMotionState(stream: ByteArray): Boolean? {

@@ -102,15 +102,18 @@ object HuaweiHfpController {
     private val smartAudioAudioQueryTimeoutRunnable = Runnable {
         val pending = pendingSmartAudioAudioQuery ?: return@Runnable
         pendingSmartAudioAudioQuery = null
-        if (shouldFallbackAfterSmartAudioBridgeTimeout(pending.accepted)) {
-            Log.d(TAG, "Smart Audio state query unavailable; using direct transaction")
-            dispatchDirectFreeClip2AudioStateQuery(pending.request)
-        } else {
-            Log.d(
-                TAG,
-                "Smart Audio accepted state query; direct RFCOMM fallback suppressed",
-            )
-        }
+        /*
+         * “已受理”只表示智慧音频调用了异步查询 API。设备页未创建时，官方 API
+         * 可能不会经过 SpatialAudioWidget.setSpatialAudioState()，因而没有任何状态
+         * 回调。此处是只读查询，超时后必须直接向耳机核实，否则 Settings/MiLink
+         * 会永久停留在各自的旧缓存。空间音频写入仍沿用下方更保守的冲突策略。
+         */
+        Log.i(
+            TAG,
+            "Smart Audio state query produced no confirmed state; " +
+                "using direct transaction accepted=${pending.accepted}",
+        )
+        dispatchDirectFreeClip2AudioStateQuery(pending.request)
     }
     private val lowLatencyAutoApplyRunnable = Runnable {
         applyAutoLowLatency()
@@ -1618,6 +1621,12 @@ object HuaweiHfpController {
         val requestedRoute = sessionRoute
         if (requestedRoute != HuaweiDeviceRoute.HUAWEI_FREECLIP2) return
         val now = SystemClock.elapsedRealtime()
+        val stableSnapshot = synchronized(sessionStateLock) {
+            freeClip2AudioStateTracker.stableRefreshSnapshot()
+        }
+        if (!pendingOnly) {
+            stableSnapshot?.let(::sendFreeClip2AudioState)
+        }
         if (!force && now - lastFreeClip2AudioStateRequestAt < FREECLIP2_AUDIO_REFRESH_MIN_INTERVAL_MS) {
             return
         }
@@ -1865,6 +1874,10 @@ object HuaweiHfpController {
             state.swipe?.let { swipe ->
                 putExtra(HuaweiGestureController.EXTRA_SWIPE_LEFT_ACTION, swipe.left.extraValue)
                 putExtra(HuaweiGestureController.EXTRA_SWIPE_RIGHT_ACTION, swipe.right.extraValue)
+            }
+            state.longPress?.let { longPress ->
+                putExtra(HuaweiGestureController.EXTRA_LONG_PRESS_LEFT_ACTION, longPress.left.extraValue)
+                putExtra(HuaweiGestureController.EXTRA_LONG_PRESS_RIGHT_ACTION, longPress.right.extraValue)
             }
         }
         sendAppBroadcast(HuaweiPodsAction.ACTION_HUAWEI_GESTURE_CHANGED, fillState)

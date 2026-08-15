@@ -87,7 +87,8 @@ fun HuaweiGestureControls(
         mutableStateOf(prefs.getBoolean(wearDetectionKey, true))
     }
     HuaweiGestureReadbackEffect(
-        enabled = route == HuaweiDeviceRoute.HUAWEI_FREEBUDS6I ||
+        enabled = route == HuaweiDeviceRoute.HUAWEI_FREEBUDS4E ||
+            route == HuaweiDeviceRoute.HUAWEI_FREEBUDS6I ||
             route == HuaweiDeviceRoute.HUAWEI_FREECLIP2 ||
             route == HuaweiDeviceRoute.HUAWEI_FREEBUDS7I,
         route = route,
@@ -144,12 +145,21 @@ fun HuaweiGestureControls(
                 }
             }
 
+            if (layout.hasFixedSwipeVolume) {
+                GestureSectionTitle(R.string.huawei_gesture_light_swipe_section)
+                GestureInfoPreference(
+                    title = stringResource(R.string.huawei_gesture_any_earbud_swipe),
+                    summary = stringResource(R.string.huawei_gesture_action_volume_up_down),
+                )
+            }
+
             if (layout.hasModernLongPressControls) {
                 ModernEarbudsGestureControls(
                     route = route,
                     address = address,
                     prefs = prefs,
                     showSwipeVolumeToggle = layout.hasModernSwipeVolumeToggle,
+                    confirmedActions = confirmedReadback.longPressActions,
                 )
             }
 
@@ -173,7 +183,8 @@ fun HuaweiGestureControls(
 
             Text(
                 text = stringResource(
-                    if (route == HuaweiDeviceRoute.HUAWEI_FREEBUDS6I ||
+                    if (route == HuaweiDeviceRoute.HUAWEI_FREEBUDS4E ||
+                        route == HuaweiDeviceRoute.HUAWEI_FREEBUDS6I ||
                         route == HuaweiDeviceRoute.HUAWEI_FREECLIP2 ||
                         route == HuaweiDeviceRoute.HUAWEI_FREEBUDS7I
                     ) {
@@ -222,6 +233,12 @@ private fun HuaweiGestureReadbackEffect(
                         tripleRight = receivedIntent.getStringExtra(HuaweiGestureController.EXTRA_TRIPLE_RIGHT_ACTION),
                         swipeLeft = receivedIntent.getStringExtra(HuaweiGestureController.EXTRA_SWIPE_LEFT_ACTION),
                         swipeRight = receivedIntent.getStringExtra(HuaweiGestureController.EXTRA_SWIPE_RIGHT_ACTION),
+                        longPressLeft = receivedIntent.getStringExtra(
+                            HuaweiGestureController.EXTRA_LONG_PRESS_LEFT_ACTION,
+                        ),
+                        longPressRight = receivedIntent.getStringExtra(
+                            HuaweiGestureController.EXTRA_LONG_PRESS_RIGHT_ACTION,
+                        ),
                     ),
                 )
             }
@@ -277,7 +294,8 @@ private fun TapActionPreference(
                 if (success) {
                     localSelected = action
                     prefs.edit().putString(key, action.extraValue).apply()
-                    if (route == HuaweiDeviceRoute.HUAWEI_FREEBUDS6I ||
+                    if (route == HuaweiDeviceRoute.HUAWEI_FREEBUDS4E ||
+                        route == HuaweiDeviceRoute.HUAWEI_FREEBUDS6I ||
                         route == HuaweiDeviceRoute.HUAWEI_FREECLIP2 ||
                         route == HuaweiDeviceRoute.HUAWEI_FREEBUDS7I
                     ) {
@@ -345,11 +363,24 @@ private fun ModernEarbudsGestureControls(
     address: String,
     prefs: SharedPreferences,
     showSwipeVolumeToggle: Boolean,
+    confirmedActions: Map<HuaweiGestureSide, FreeBudsPro3LongPressAction>,
 ) {
     val context = LocalContext.current
-    GestureSectionTitle(R.string.huawei_gesture_pro3_long_press_section)
+    GestureSectionTitle(
+        if (route == HuaweiDeviceRoute.HUAWEI_FREEBUDS4E) {
+            R.string.huawei_gesture_hold_section
+        } else {
+            R.string.huawei_gesture_pro3_long_press_section
+        },
+    )
     HuaweiGestureSide.entries.forEach { side ->
-        ModernEarbudsLongPressPreference(route, address, side, prefs)
+        ModernEarbudsLongPressPreference(
+            route = route,
+            address = address,
+            side = side,
+            prefs = prefs,
+            confirmedAction = confirmedActions[side],
+        )
     }
 
     if (route == HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3) {
@@ -392,26 +423,38 @@ private fun ModernEarbudsLongPressPreference(
     address: String,
     side: HuaweiGestureSide,
     prefs: SharedPreferences,
+    confirmedAction: FreeBudsPro3LongPressAction? = null,
 ) {
+    val actions = remember(route) { FreeBudsPro3LongPressAction.availableFor(route) }
+    if (actions.isEmpty()) return
     val key = remember(route, address, side) { modernLongPressPreferenceKey(route, address, side) }
-    var selected by remember(key) {
+    var localSelected by remember(key) {
         mutableStateOf(
-            FreeBudsPro3LongPressAction.entries.firstOrNull {
+            actions.firstOrNull {
                 it.extraValue == prefs.getString(key, null)
-            } ?: FreeBudsPro3LongPressAction.NOISE_CONTROL,
+            } ?: actions.first(),
         )
     }
+    val selected = confirmedAction?.takeIf(actions::contains) ?: localSelected
     val context = LocalContext.current
     GestureChoicePreference(
-        title = stringResource(longPressTitleRes(side)),
+        title = stringResource(longPressTitleRes(route, side)),
         selected = selected,
-        values = FreeBudsPro3LongPressAction.entries,
+        values = actions,
         label = { stringResource(it.labelRes()) },
         onSelected = { action, complete ->
             context.sendModernLongPress(route, address, side, action) { success ->
                 if (success) {
-                    selected = action
+                    localSelected = action
                     prefs.edit().putString(key, action.extraValue).apply()
+                    if (route == HuaweiDeviceRoute.HUAWEI_FREEBUDS4E) {
+                        context.requestHuaweiGestureState(
+                            route = route,
+                            address = address,
+                            delayMs = GESTURE_WRITE_CONFIRM_DELAY_MS,
+                            force = true,
+                        )
+                    }
                 }
                 complete(success)
             }
@@ -427,6 +470,29 @@ private fun GestureSectionTitle(@StringRes titleRes: Int) {
         style = MiuixTheme.textStyles.headline1,
         modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 12.dp, bottom = 4.dp),
     )
+}
+
+@Composable
+private fun GestureInfoPreference(
+    title: String,
+    summary: String,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp, vertical = 14.dp),
+    ) {
+        Text(
+            text = title,
+            color = MiuixTheme.colorScheme.onSurface,
+            style = MiuixTheme.textStyles.headline1,
+        )
+        Text(
+            text = summary,
+            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+            style = MiuixTheme.textStyles.body2,
+        )
+    }
 }
 
 @Composable
@@ -716,10 +782,12 @@ internal data class HuaweiTapSlot(
 internal data class HuaweiGestureReadback(
     val tapActions: Map<HuaweiTapSlot, HuaweiTapAction> = emptyMap(),
     val swipeActions: Map<HuaweiGestureSide, HuaweiSwipeAction> = emptyMap(),
+    val longPressActions: Map<HuaweiGestureSide, FreeBudsPro3LongPressAction> = emptyMap(),
 ) {
     fun mergedWith(update: HuaweiGestureReadback): HuaweiGestureReadback = HuaweiGestureReadback(
         tapActions = tapActions + update.tapActions,
         swipeActions = swipeActions + update.swipeActions,
+        longPressActions = longPressActions + update.longPressActions,
     )
 }
 
@@ -748,6 +816,8 @@ internal fun huaweiGestureReadback(
     tripleRight: String? = null,
     swipeLeft: String? = null,
     swipeRight: String? = null,
+    longPressLeft: String? = null,
+    longPressRight: String? = null,
 ): HuaweiGestureReadback {
     val tapActions = buildMap {
         listOf(
@@ -771,7 +841,22 @@ internal fun huaweiGestureReadback(
                 ?.let { put(side, it) }
         }
     }
-    return HuaweiGestureReadback(tapActions = tapActions, swipeActions = swipeActions)
+    val longPressActions = buildMap {
+        listOf(
+            HuaweiGestureSide.LEFT to longPressLeft,
+            HuaweiGestureSide.RIGHT to longPressRight,
+        ).forEach { (side, rawAction) ->
+            FreeBudsPro3LongPressAction.entries
+                .firstOrNull { it.extraValue.equals(rawAction, ignoreCase = true) }
+                ?.takeIf { it in FreeBudsPro3LongPressAction.availableFor(route) }
+                ?.let { put(side, it) }
+        }
+    }
+    return HuaweiGestureReadback(
+        tapActions = tapActions,
+        swipeActions = swipeActions,
+        longPressActions = longPressActions,
+    )
 }
 
 private fun persistHuaweiGestureReadback(
@@ -793,18 +878,26 @@ private fun persistHuaweiGestureReadback(
             action.extraValue,
         )
     }
+    readback.longPressActions.forEach { (side, action) ->
+        editor.putString(
+            modernLongPressPreferenceKey(route, address, side),
+            action.extraValue,
+        )
+    }
     editor.apply()
 }
 
 internal data class HuaweiGestureControlLayout(
     val tapKinds: List<HuaweiGestureKind> = emptyList(),
     val hasSwipe: Boolean = false,
+    val hasFixedSwipeVolume: Boolean = false,
     val hasModernLongPressControls: Boolean = false,
     val hasModernSwipeVolumeToggle: Boolean = false,
     val hasWearDetection: Boolean = false,
 ) {
     val isVisible: Boolean
-        get() = tapKinds.isNotEmpty() || hasSwipe || hasModernLongPressControls || hasWearDetection
+        get() = tapKinds.isNotEmpty() || hasSwipe || hasFixedSwipeVolume ||
+            hasModernLongPressControls || hasWearDetection
 }
 
 internal fun huaweiGestureControlLayout(route: HuaweiDeviceRoute): HuaweiGestureControlLayout {
@@ -814,12 +907,15 @@ internal fun huaweiGestureControlLayout(route: HuaweiDeviceRoute): HuaweiGesture
     return HuaweiGestureControlLayout(
         tapKinds = tapKinds,
         hasSwipe = HuaweiSwipeAction.availableFor(route).isNotEmpty(),
-        hasModernLongPressControls = route == HuaweiDeviceRoute.HUAWEI_FREEBUDS6I ||
+        hasFixedSwipeVolume = route == HuaweiDeviceRoute.HUAWEI_FREEBUDS4E,
+        hasModernLongPressControls = route == HuaweiDeviceRoute.HUAWEI_FREEBUDS4E ||
+            route == HuaweiDeviceRoute.HUAWEI_FREEBUDS6I ||
             route == HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3 ||
             route == HuaweiDeviceRoute.HUAWEI_FREEBUDS7I,
         hasModernSwipeVolumeToggle = route == HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3 ||
             route == HuaweiDeviceRoute.HUAWEI_FREEBUDS7I,
         hasWearDetection = route == HuaweiDeviceRoute.HUAWEI_FREEBUDS6I ||
+            route == HuaweiDeviceRoute.HUAWEI_FREEBUDS4E ||
             route == HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3,
     )
 }
@@ -884,9 +980,13 @@ private fun swipeTitleRes(side: HuaweiGestureSide): Int = when (side) {
 }
 
 @StringRes
-private fun longPressTitleRes(side: HuaweiGestureSide): Int = when (side) {
-    HuaweiGestureSide.LEFT -> R.string.huawei_gesture_left_long_press
-    HuaweiGestureSide.RIGHT -> R.string.huawei_gesture_right_long_press
+private fun longPressTitleRes(route: HuaweiDeviceRoute, side: HuaweiGestureSide): Int = when {
+    route == HuaweiDeviceRoute.HUAWEI_FREEBUDS4E && side == HuaweiGestureSide.LEFT ->
+        R.string.huawei_gesture_left_hold
+    route == HuaweiDeviceRoute.HUAWEI_FREEBUDS4E && side == HuaweiGestureSide.RIGHT ->
+        R.string.huawei_gesture_right_hold
+    side == HuaweiGestureSide.LEFT -> R.string.huawei_gesture_left_long_press
+    else -> R.string.huawei_gesture_right_long_press
 }
 
 @StringRes
@@ -911,6 +1011,7 @@ private fun HuaweiSwipeAction.labelRes(): Int = when (this) {
 private fun FreeBudsPro3LongPressAction.labelRes(): Int = when (this) {
     FreeBudsPro3LongPressAction.VOICE_ASSISTANT -> R.string.huawei_gesture_action_voice_assistant
     FreeBudsPro3LongPressAction.NOISE_CONTROL -> R.string.huawei_gesture_action_noise_control
+    FreeBudsPro3LongPressAction.SONG_RECOGNITION -> R.string.huawei_gesture_action_song_recognition
     FreeBudsPro3LongPressAction.NONE -> R.string.huawei_gesture_action_none
 }
 

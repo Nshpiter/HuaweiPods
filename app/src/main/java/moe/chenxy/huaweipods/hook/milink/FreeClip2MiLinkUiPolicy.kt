@@ -44,9 +44,19 @@ internal object FreeClip2MiLinkUiPolicy {
         return spatialAudioTitles.any { it.equals(normalized, ignoreCase = true) }
     }
 
+    fun alignedTitleTranslation(
+        originalTranslation: Float,
+        referenceStart: Int,
+        targetStart: Int,
+    ): Float = originalTranslation + referenceStart - targetStart
+
     /** 三个选项必须正好占据同一容器的连续位置，才允许移动宿主 View。 */
     fun isSafeConsecutiveOrder(indices: Collection<Int>): Boolean {
         val sorted = indices.distinct().sorted()
         return sorted.size == 3 && sorted.last() - sorted.first() == 2
     }
+
+    /** 宿主按该标志计算详情弹窗高度；无 ANC 型号必须同时关闭，不能只隐藏子 View。 */
+    fun shouldCollapseHostAncSection(isSupported: Boolean, supportsAnc: Boolean): Boolean =
+        isSupported && !supportsAnc
 }

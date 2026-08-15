@@ -58,6 +58,7 @@ import moe.chenxy.huaweipods.pods.HuaweiGestureController
 import moe.chenxy.huaweipods.pods.HuaweiGestureSide
 import moe.chenxy.huaweipods.ui.components.AncSwitch
 import moe.chenxy.huaweipods.ui.components.FreeBuds5Controls
+import moe.chenxy.huaweipods.ui.components.FreeBuds4eControls
 import moe.chenxy.huaweipods.ui.components.FreeBuds7iControls
 import moe.chenxy.huaweipods.ui.components.FreeClip2Controls
 import moe.chenxy.huaweipods.ui.components.HuaweiGestureControls
@@ -344,6 +345,16 @@ private fun LazyListScope.podControlItems(
         }
     }
 
+    if (deviceRoute == HuaweiDeviceRoute.HUAWEI_FREEBUDS4E) {
+        item {
+            Card(
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
+            ) {
+                FreeBuds4eControls(address = connectedDeviceAddress)
+            }
+        }
+    }
+
     if (deviceRoute == HuaweiDeviceRoute.HUAWEI_FREEBUDS6I) {
         item {
             Card(
@@ -351,7 +362,7 @@ private fun LazyListScope.podControlItems(
             ) {
                 HuaweiEqualizerPreference(
                     address = connectedDeviceAddress,
-                    route = HuaweiDeviceRoute.HUAWEI_FREEBUDS6I,
+                    route = deviceRoute,
                 )
             }
         }

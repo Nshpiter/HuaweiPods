@@ -108,7 +108,9 @@
     <string name="island_mode">Super Island</string>
     <string name="island_mode_summary">Choose which battery island is displayed</string>
     <string name="lockscreen_notification">Lock screen notifications</string>
-    <string name="lockscreen_notification_summary">Allow the persistent headset notification to appear on the lock screen and AOD</string>
+    <string name="lockscreen_notification_summary">Allow an enabled persistent headset notification to appear on the lock screen and AOD</string>
+    <string name="persistent_notification">Persistent headset notification</string>
+    <string name="persistent_notification_summary">Show headset connection status and battery in the notification shade</string>
     <string name="island_mode_none">none</string>
     <string name="island_mode_official">System native (limited models)</string>
     <string name="island_mode_module">Module (recommended)</string>

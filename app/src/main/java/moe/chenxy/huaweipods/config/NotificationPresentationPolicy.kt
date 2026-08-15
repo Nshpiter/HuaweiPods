@@ -24,4 +24,6 @@ internal object NotificationPresentationPolicy {
 
     fun attachesOfficialIsland(effectiveMode: Int): Boolean =
         effectiveMode == ConfigManager.ISLAND_MODE_OFFICIAL
+
+    fun shouldPostPersistentNotification(enabled: Boolean): Boolean = enabled
 }

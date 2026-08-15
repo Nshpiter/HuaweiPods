@@ -21,6 +21,9 @@ class SmartAudioFreeClip2BridgePolicyTest {
         assertEquals(FreeClip2SpatialAudioMode.HEAD_TRACKING, SmartAudioFreeClip2BridgePolicy.modeFromOfficial(1))
         assertEquals(FreeClip2SpatialAudioMode.FIXED, SmartAudioFreeClip2BridgePolicy.modeFromOfficial(2))
         assertNull(SmartAudioFreeClip2BridgePolicy.modeFromOfficial(3))
+        FreeClip2SpatialAudioMode.entries.forEach { mode ->
+            assertEquals(mode.protocolValue, SmartAudioFreeClip2BridgePolicy.officialModeFor(mode))
+        }
     }
 
     @Test

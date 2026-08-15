@@ -43,12 +43,16 @@ import moe.chenxy.huaweipods.pods.FreeClip2SpatialAudioMode
 import moe.chenxy.huaweipods.pods.HuaweiFreeBuds7iController
 import moe.chenxy.huaweipods.pods.HuaweiEqualizerCodec
 import moe.chenxy.huaweipods.pods.HuaweiEqualizerController
+import moe.chenxy.huaweipods.pods.HuaweiEqualizerPreset
+import moe.chenxy.huaweipods.pods.HuaweiEqualizerPresetPolicy
 import moe.chenxy.huaweipods.pods.HuaweiEqualizerState
 import moe.chenxy.huaweipods.pods.HuaweiDeviceRoute
 import moe.chenxy.huaweipods.pods.mergeFreeBuds7iSettingsState
+import moe.chenxy.huaweipods.ui.dialogs.responsiveOverlayDialogModifier
 import top.yukonga.miuix.kmp.basic.Checkbox
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
+import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
@@ -321,14 +325,49 @@ internal fun HuaweiEqualizerPreference(
     var currentState by remember(address) { mutableStateOf(readback) }
     var showDialog by remember(address) { mutableStateOf(false) }
     var pending by remember(address) { mutableStateOf(false) }
+    var editingPresetId by remember(address) {
+        mutableStateOf(HuaweiEqualizerPresetPolicy.FIRST_CUSTOM_ID)
+    }
+    var editingPresetName by remember(address) { mutableStateOf("") }
+    val defaultPresetNames = (HuaweiEqualizerPresetPolicy.FIRST_CUSTOM_ID..
+        HuaweiEqualizerPresetPolicy.LAST_CUSTOM_ID).associateWith { presetId ->
+        stringResource(
+            R.string.freeclip2_custom_effect_default_name,
+            presetId - HuaweiEqualizerPresetPolicy.FIRST_CUSTOM_ID + 1,
+        )
+    }
+
+    fun openPresetEditor(preset: HuaweiEqualizerPreset?) {
+        val customPresets = currentState?.customPresets.orEmpty()
+        val target = preset ?: currentState?.selectedId
+            ?.let { selectedId -> customPresets.singleOrNull { it.id == selectedId } }
+        val targetId = target?.id
+            ?: HuaweiEqualizerPresetPolicy.nextAvailableId(customPresets)
+            ?: customPresets.firstOrNull()?.id
+            ?: HuaweiEqualizerPresetPolicy.FIRST_CUSTOM_ID
+        val existing = target ?: customPresets.singleOrNull { it.id == targetId }
+        editingPresetId = targetId
+        editingPresetName = existing?.name?.takeIf(String::isNotBlank)
+            ?: defaultPresetNames.getValue(targetId)
+        editing = existing?.gains
+            ?.takeIf { it.size == HuaweiEqualizerCodec.BAND_COUNT }
+            ?: gains
+        showDialog = true
+    }
 
     LaunchedEffect(readback) {
         readback?.let { state ->
             currentState = state
             state.selectedGains?.takeIf { it.size == HuaweiEqualizerCodec.BAND_COUNT }?.let {
                 gains = it
-                editing = it
+                if (!showDialog) editing = it
                 prefs.edit().putString(prefix + "equalizer", it.joinToString(",")).apply()
+            }
+            if (!showDialog) {
+                state.customPresets.singleOrNull { it.id == state.selectedId }?.let { selected ->
+                    editingPresetId = selected.id
+                    editingPresetName = selected.name
+                }
             }
         }
     }
@@ -342,7 +381,7 @@ internal fun HuaweiEqualizerPreference(
                 currentState = state
                 state.selectedGains?.takeIf { it.size == HuaweiEqualizerCodec.BAND_COUNT }?.let {
                     gains = it
-                    editing = it
+                    if (!showDialog) editing = it
                     prefs.edit().putString(prefix + "equalizer", it.joinToString(",")).apply()
                 }
             }
@@ -354,31 +393,134 @@ internal fun HuaweiEqualizerPreference(
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
             .clickable(enabled = editable && !pending, role = Role.Button) {
-                editing = gains
-                showDialog = true
+                openPresetEditor(null)
             }
             .padding(horizontal = 24.dp, vertical = 14.dp),
     ) {
         Text(
-            stringResource(R.string.huawei_equalizer_title),
+            stringResource(
+                if (route == HuaweiDeviceRoute.HUAWEI_FREECLIP2) {
+                    R.string.freeclip2_custom_effect_title
+                } else {
+                    R.string.huawei_equalizer_title
+                },
+            ),
             color = MiuixTheme.colorScheme.onSurface,
             style = MiuixTheme.textStyles.headline1,
         )
         Text(
             currentState?.selectedName?.takeIf(String::isNotBlank)
-                ?: stringResource(R.string.huawei_equalizer_summary),
+                ?: stringResource(
+                    if (route == HuaweiDeviceRoute.HUAWEI_FREECLIP2) {
+                        R.string.freeclip2_custom_effect_summary
+                    } else {
+                        R.string.huawei_equalizer_summary
+                    },
+                ),
             color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
             style = MiuixTheme.textStyles.body2,
         )
     }
     OverlayDialog(
-        title = stringResource(R.string.huawei_equalizer_title),
+        title = stringResource(
+            if (route == HuaweiDeviceRoute.HUAWEI_FREECLIP2) {
+                R.string.freeclip2_custom_effect_title
+            } else {
+                R.string.huawei_equalizer_title
+            },
+        ),
         summary = currentState?.selectedName?.takeIf(String::isNotBlank)
-            ?: stringResource(R.string.huawei_equalizer_summary),
+            ?: stringResource(
+                if (route == HuaweiDeviceRoute.HUAWEI_FREECLIP2) {
+                    R.string.freeclip2_custom_effect_summary
+                } else {
+                    R.string.huawei_equalizer_summary
+                },
+            ),
         show = showDialog,
         onDismissRequest = { if (!pending) showDialog = false },
     ) {
-        Column(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .then(responsiveOverlayDialogModifier())
+                .padding(bottom = 8.dp),
+        ) {
+            if (route == HuaweiDeviceRoute.HUAWEI_FREECLIP2) {
+                val customPresets = currentState?.customPresets.orEmpty()
+                if (customPresets.isNotEmpty()) {
+                    Text(
+                        text = stringResource(R.string.freeclip2_custom_effect_existing),
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                        style = MiuixTheme.textStyles.body2,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                    )
+                    customPresets.forEach { preset ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable(enabled = !pending, role = Role.RadioButton) {
+                                    openPresetEditor(preset)
+                                }
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    preset.name.ifBlank {
+                                        stringResource(
+                                            R.string.freeclip2_custom_effect_default_name,
+                                            preset.id - HuaweiEqualizerPresetPolicy.FIRST_CUSTOM_ID + 1,
+                                        )
+                                    },
+                                    style = MiuixTheme.textStyles.headline1,
+                                )
+                                Text(
+                                    stringResource(R.string.freeclip2_custom_effect_edit_hint),
+                                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                    style = MiuixTheme.textStyles.body2,
+                                )
+                            }
+                            Checkbox(
+                                state = ToggleableState(preset.id == editingPresetId),
+                                enabled = !pending,
+                                onClick = null,
+                            )
+                        }
+                    }
+                }
+                HuaweiEqualizerPresetPolicy.nextAvailableId(customPresets)?.let { nextId ->
+                    TextButton(
+                        text = stringResource(R.string.freeclip2_custom_effect_add),
+                        enabled = !pending,
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                        onClick = {
+                            editingPresetId = nextId
+                            editingPresetName = defaultPresetNames.getValue(nextId)
+                            editing = gains
+                        },
+                    )
+                }
+                Text(
+                    text = stringResource(R.string.freeclip2_custom_effect_name),
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    style = MiuixTheme.textStyles.body2,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                )
+                TextField(
+                    value = editingPresetName,
+                    onValueChange = { editingPresetName = it },
+                    enabled = !pending,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp),
+                )
+                Text(
+                    text = stringResource(R.string.freeclip2_custom_effect_bridge_hint),
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    style = MiuixTheme.textStyles.body2,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
+                )
+            }
             editing.forEachIndexed { index, gain ->
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
@@ -418,7 +560,10 @@ internal fun HuaweiEqualizerPreference(
                 )
                 TextButton(
                     text = stringResource(R.string.freebuds7i_eq_apply),
-                    enabled = !pending,
+                    enabled = !pending && (
+                        route != HuaweiDeviceRoute.HUAWEI_FREECLIP2 ||
+                            HuaweiEqualizerPresetPolicy.normalizeName(editingPresetName) != null
+                        ),
                     modifier = Modifier.weight(1f).heightIn(min = 48.dp),
                     onClick = {
                         pending = true
@@ -433,19 +578,39 @@ internal fun HuaweiEqualizerPreference(
                             }
                         }
                         if (route == HuaweiDeviceRoute.HUAWEI_FREECLIP2) {
-                            val selectedId = currentState?.selectedId
-                                ?.takeIf { it in 0x64..0x66 }
-                                ?: 0x64
-                            val presetName = currentState?.selectedName
-                                ?.takeIf(String::isNotBlank)
-                                ?: "HuaweiPods"
+                            val presetName = HuaweiEqualizerPresetPolicy.normalizeName(
+                                editingPresetName,
+                            ) ?: return@TextButton
+                            val selectedId = editingPresetId
                             SmartAudioEqualizerClient.setCustom(
                                 context = context,
                                 address = address,
                                 presetId = selectedId,
                                 name = presetName,
                                 gains = editing,
-                                complete = onComplete,
+                                complete = { success ->
+                                    if (success) {
+                                        val preset = HuaweiEqualizerPreset(
+                                            id = selectedId,
+                                            name = presetName,
+                                            gains = editing,
+                                        )
+                                        val previous = currentState
+                                        currentState = HuaweiEqualizerState(
+                                            supported = previous?.supported ?: true,
+                                            selectedId = selectedId,
+                                            builtInIds = previous?.builtInIds.orEmpty(),
+                                            bandCount = HuaweiEqualizerCodec.BAND_COUNT,
+                                            selectedName = presetName,
+                                            selectedGains = editing,
+                                            customPresets = HuaweiEqualizerPresetPolicy.upsert(
+                                                previous?.customPresets.orEmpty(),
+                                                preset,
+                                            ),
+                                        )
+                                    }
+                                    onComplete(success)
+                                },
                             )
                         } else {
                             context.setHuaweiCustomEqualizer(address, route, editing, onComplete)

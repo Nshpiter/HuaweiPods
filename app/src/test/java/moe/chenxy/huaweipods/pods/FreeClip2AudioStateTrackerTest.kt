@@ -7,6 +7,26 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class FreeClip2AudioStateTrackerTest {
+
+    @Test
+    fun `stable refresh snapshot is withheld while a write is pending`() {
+        val tracker = FreeClip2AudioStateTracker()
+        tracker.acceptExternalConfirmation(
+            FreeClip2AudioState(mode = FreeClip2SpatialAudioMode.HEAD_TRACKING),
+        )
+        assertEquals(FreeClip2SpatialAudioMode.HEAD_TRACKING, tracker.stableRefreshSnapshot()?.mode)
+
+        tracker.beginWrite(
+            FreeClip2AudioState(mode = FreeClip2SpatialAudioMode.FIXED),
+            nowMs = 100L,
+        )
+        assertNull(tracker.stableRefreshSnapshot())
+
+        tracker.acceptExternalConfirmation(
+            FreeClip2AudioState(mode = FreeClip2SpatialAudioMode.FIXED),
+        )
+        assertEquals(FreeClip2SpatialAudioMode.FIXED, tracker.stableRefreshSnapshot()?.mode)
+    }
     @Test
     fun `write success stays pending until verified readback`() {
         val tracker = FreeClip2AudioStateTracker()

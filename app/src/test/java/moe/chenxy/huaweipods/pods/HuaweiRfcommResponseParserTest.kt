@@ -281,7 +281,7 @@ class HuaweiRfcommResponseParserTest {
     }
 
     @Test
-    fun `uses FreeBuds Pro 5 reported availability while retaining the raw level`() {
+    fun `uses FreeBuds Pro 5 out-of-case state while retaining the raw level`() {
         val response = hex("5A001B0001080101640203646455030300000004020A140502000106010A4D9B")
 
         val battery = HuaweiRfcommResponseParser.parseBattery(
@@ -291,14 +291,14 @@ class HuaweiRfcommResponseParserTest {
         assertNotNull(battery)
 
         assertEquals(100, battery?.left?.battery)
-        assertEquals(false, battery?.left?.isConnected)
+        assertEquals(true, battery?.left?.isConnected)
         assertEquals(100, battery?.right?.battery)
-        assertEquals(true, battery?.right?.isConnected)
+        assertEquals(false, battery?.right?.isConnected)
         assertEquals(85, battery?.case?.battery)
     }
 
     @Test
-    fun `keeps both FreeBuds Pro 5 earbuds available when reported in use`() {
+    fun `marks both FreeBuds Pro 5 earbuds unavailable when stored in the case`() {
         val response = hex("5A001B0001080101640203646455030300000004020A140502010106010AE7CA")
 
         val battery = HuaweiRfcommResponseParser.parseBattery(
@@ -307,14 +307,14 @@ class HuaweiRfcommResponseParserTest {
         )
 
         assertEquals(100, battery?.left?.battery)
-        assertEquals(true, battery?.left?.isConnected)
+        assertEquals(false, battery?.left?.isConnected)
         assertEquals(100, battery?.right?.battery)
-        assertEquals(true, battery?.right?.isConnected)
+        assertEquals(false, battery?.right?.isConnected)
     }
 
     @Test
-    fun `keeps a zero-percent FreeBuds Pro 5 earbud available when reported in use`() {
-        val response = hex("5A001B0001080101640203006455030300000004020A140502010106010AE7CA")
+    fun `keeps a zero-percent FreeBuds Pro 5 earbud available when out of the case`() {
+        val response = hex("5A001B0001080101640203006455030300000004020A140502000006010A0000")
 
         val battery = HuaweiRfcommResponseParser.parseBattery(
             response,
@@ -445,6 +445,35 @@ class HuaweiRfcommResponseParserTest {
         assertEquals(HuaweiTapAction.PLAY_PREVIOUS, state.tripleTap?.left)
         assertEquals(HuaweiSwipeAction.VOLUME_CONTROL, state.swipe?.left)
         assertEquals(HuaweiSwipeAction.NONE, state.swipe?.right)
+    }
+
+    @Test
+    fun `parses FreeBuds 4E long press state captured from official app`() {
+        val response = hex("5A0018002B170101FF0201FF030D000102030405060708090A0E0F5714")
+
+        val state = HuaweiRfcommResponseParser.parseLongPressState(
+            response,
+            HuaweiDeviceRoute.HUAWEI_FREEBUDS4E,
+        )
+
+        assertEquals(FreeBudsPro3LongPressAction.NONE, state?.left)
+        assertEquals(FreeBudsPro3LongPressAction.NONE, state?.right)
+    }
+
+    @Test
+    fun `parses FreeBuds 4E double tap and long press from one RFCOMM read`() {
+        val doubleTap = hex("5A001A000120010101020101030501020700FF040100050100060200FFB2DD")
+        val longPress = hex("5A0018002B1701010302010E030D000102030405060708090A0E0FC50C")
+
+        val state = HuaweiRfcommResponseParser.parseGestureState(
+            doubleTap + longPress,
+            HuaweiDeviceRoute.HUAWEI_FREEBUDS4E,
+        )
+
+        assertEquals(HuaweiTapAction.PLAY_PAUSE, state.doubleTap?.left)
+        assertEquals(HuaweiTapAction.PLAY_PAUSE, state.doubleTap?.right)
+        assertEquals(FreeBudsPro3LongPressAction.NOISE_CONTROL, state.longPress?.left)
+        assertEquals(FreeBudsPro3LongPressAction.SONG_RECOGNITION, state.longPress?.right)
     }
 
     @Test

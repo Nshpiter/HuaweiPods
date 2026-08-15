@@ -91,6 +91,7 @@ object SettingsHeadsetHook : HookContext() {
     private const val PREFS_NAME = "huaweipods_milink_state"
     private const val PREF_DEVICE_ROUTE = "device_route"
     private const val SETTINGS_REFRESH_INTERVAL_MS = 5_000L
+    private const val SETTINGS_SCROLL_SETTLE_MS = 180L
     private const val SETTINGS_FREEBUDS_ANC_OPTIONS = "0100"
     private const val SETTINGS_FREEBUDS_SUPPORT_FLAGS = "000000000000000010000000"
     private const val HUAWEI_ANC_LEVEL_LAST = 8
@@ -149,7 +150,7 @@ object SettingsHeadsetHook : HookContext() {
     private val hiddenSettingsCapabilityViews = WeakHashMap<View, HiddenSettingsCapabilityView>()
     private val relabeledFreeBuds6iTransparencyTexts = WeakHashMap<TextView, CharSequence>()
     private val observedSettingsRoots = WeakHashMap<View, Boolean>()
-    private val pendingSettingsScrollPrunes = WeakHashMap<View, Boolean>()
+    private val pendingSettingsScrollPrunes = WeakHashMap<View, Runnable>()
     private val refreshHandler = Handler(Looper.getMainLooper())
     private var refreshLoopStarted = false
     private val refreshRunnable = object : Runnable {
@@ -771,6 +772,13 @@ object SettingsHeadsetHook : HookContext() {
                         )
                         saveCurrentFreeClip2AudioState(context)
                         updateFragments()
+                        Log.i(
+                            TAG,
+                            "Settings FreeClip 2 audio confirmed " +
+                                "mode=${currentFreeClip2AudioState.spatialMode} " +
+                                "scene=${currentFreeClip2AudioState.spatialScene} " +
+                                "effect=${currentFreeClip2AudioState.soundEffect}",
+                        )
                     }
                 }
                 Log.d(TAG, "state action=${receivedIntent.action} address=$currentAddress anc=$currentAnc battery=${settingsBatteryString()}")
@@ -1695,13 +1703,31 @@ object SettingsHeadsetHook : HookContext() {
     private fun observeSettingsScroll(root: View) {
         if (observedSettingsRoots.put(root, true) == true) return
         root.viewTreeObserver.addOnScrollChangedListener {
-            if (!root.isAttachedToWindow || pendingSettingsScrollPrunes.put(root, true) == true) {
-                return@addOnScrollChangedListener
+            if (!root.isAttachedToWindow) return@addOnScrollChangedListener
+
+            // RecyclerView 滚动时会高频触发回调。整棵树的恢复、关键词扫描和布局裁剪都必须
+            // 留到滚动停止后再做，否则会与每一帧 measure/layout 争用主线程，造成明显掉帧。
+            pendingSettingsScrollPrunes.remove(root)?.let(root::removeCallbacks)
+            val expectedAddress = currentAddress?.takeIf(String::isNotBlank)
+                ?: return@addOnScrollChangedListener
+            val expectedRoute = currentHuaweiRoute()
+            val task = object : Runnable {
+                override fun run() {
+                    if (pendingSettingsScrollPrunes[root] !== this) return
+                    pendingSettingsScrollPrunes.remove(root)
+                    if (
+                        !root.isAttachedToWindow ||
+                        !expectedAddress.equals(currentAddress, ignoreCase = true) ||
+                        expectedRoute != currentHuaweiRoute()
+                    ) {
+                        return
+                    }
+                    runCatching { pruneFreeBudsUnsupportedViews(root) }
+                        .onFailure { Log.w(TAG, "Settings post-scroll prune failed", it) }
+                }
             }
-            root.postDelayed({
-                pendingSettingsScrollPrunes.remove(root)
-                if (root.isAttachedToWindow) schedulePruneFreeBudsUnsupportedViews(root)
-            }, 80L)
+            pendingSettingsScrollPrunes[root] = task
+            root.postDelayed(task, SETTINGS_SCROLL_SETTLE_MS)
         }
     }
 
@@ -1715,6 +1741,11 @@ object SettingsHeadsetHook : HookContext() {
         val modeContainer = modeButtonContainer(root)
         modeContainer?.let { setSettingsCapabilityViewVisible(it, policy.showAnc) }
         setSettingsRowsVisible(root, settingsEarTipFitKeywords, policy.showEarTipFitTest)
+        setSettingsRowsVisible(
+            root,
+            settingsNotificationDisplayKeywords,
+            visible = !route.isSupported,
+        )
         setSettingsRowsVisible(root, gestureEntryKeywords, policy.showGestureConfiguration)
         syncFreeClip2AudioControls(root, modeContainer)
         if (policy.showAnc) configureTransparencyModeView(root, modeContainer, route)

@@ -1,5 +1,6 @@
 package moe.chenxy.huaweipods.ui.components
 
+import moe.chenxy.huaweipods.pods.FreeBudsPro3LongPressAction
 import moe.chenxy.huaweipods.pods.HuaweiDeviceRoute
 import moe.chenxy.huaweipods.pods.HuaweiGestureKind
 import moe.chenxy.huaweipods.pods.HuaweiGestureSide
@@ -23,6 +24,14 @@ class HuaweiGestureControlsTest {
         assertTrue(freeBuds6i.hasModernLongPressControls)
         assertFalse(freeBuds6i.hasModernSwipeVolumeToggle)
         assertTrue(freeBuds6i.hasWearDetection)
+
+        val freeBuds4e = huaweiGestureControlLayout(HuaweiDeviceRoute.HUAWEI_FREEBUDS4E)
+        assertEquals(listOf(HuaweiGestureKind.DOUBLE_TAP), freeBuds4e.tapKinds)
+        assertFalse(freeBuds4e.hasSwipe)
+        assertTrue(freeBuds4e.hasFixedSwipeVolume)
+        assertTrue(freeBuds4e.hasModernLongPressControls)
+        assertFalse(freeBuds4e.hasModernSwipeVolumeToggle)
+        assertTrue(freeBuds4e.hasWearDetection)
 
         val freeClip2 = huaweiGestureControlLayout(HuaweiDeviceRoute.HUAWEI_FREECLIP2)
         assertEquals(
@@ -120,5 +129,29 @@ class HuaweiGestureControlsTest {
             merged.tapActions[HuaweiTapSlot(HuaweiGestureKind.DOUBLE_TAP, HuaweiGestureSide.LEFT)],
         )
         assertEquals(HuaweiSwipeAction.NONE, merged.swipeActions[HuaweiGestureSide.RIGHT])
+    }
+
+    @Test
+    fun `FreeBuds 4E readback accepts only its verified long press actions`() {
+        val state = huaweiGestureReadback(
+            route = HuaweiDeviceRoute.HUAWEI_FREEBUDS4E,
+            longPressLeft = "noise_control",
+            longPressRight = "song_recognition",
+        )
+
+        assertEquals(
+            FreeBudsPro3LongPressAction.NOISE_CONTROL,
+            state.longPressActions[HuaweiGestureSide.LEFT],
+        )
+        assertEquals(
+            FreeBudsPro3LongPressAction.SONG_RECOGNITION,
+            state.longPressActions[HuaweiGestureSide.RIGHT],
+        )
+
+        val rejected = huaweiGestureReadback(
+            route = HuaweiDeviceRoute.HUAWEI_FREEBUDS4E,
+            longPressLeft = "voice_assistant",
+        )
+        assertFalse(rejected.longPressActions.containsKey(HuaweiGestureSide.LEFT))
     }
 }

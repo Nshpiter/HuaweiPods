@@ -146,6 +146,7 @@ object DeviceRoutePrefs {
 
     private fun HuaweiDeviceRoute.storageId(): String = when (this) {
         HuaweiDeviceRoute.HUAWEI_FREEBUDS3 -> "freebuds3"
+        HuaweiDeviceRoute.HUAWEI_FREEBUDS4E -> "freebuds4e"
         HuaweiDeviceRoute.HUAWEI_FREEBUDS5 -> "freebuds5"
         HuaweiDeviceRoute.HUAWEI_FREEBUDS6I -> "freebuds6i"
         HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3 -> "freebuds_pro3"
@@ -161,6 +162,7 @@ object DeviceRoutePrefs {
 
     private fun routeFromStorage(value: String): HuaweiDeviceRoute? = when (value) {
         "freebuds3" -> HuaweiDeviceRoute.HUAWEI_FREEBUDS3
+        "freebuds4e" -> HuaweiDeviceRoute.HUAWEI_FREEBUDS4E
         "freebuds5" -> HuaweiDeviceRoute.HUAWEI_FREEBUDS5
         "freebuds6i" -> HuaweiDeviceRoute.HUAWEI_FREEBUDS6I
         "freebuds_pro3" -> HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3

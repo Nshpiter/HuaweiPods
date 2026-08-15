@@ -2,6 +2,7 @@ package moe.chenxy.huaweipods.pods
 
 enum class HuaweiDeviceRoute {
     HUAWEI_FREEBUDS3,
+    HUAWEI_FREEBUDS4E,
     HUAWEI_FREEBUDS5,
     HUAWEI_FREEBUDS6I,
     HUAWEI_FREEBUDS_PRO3,
@@ -37,6 +38,16 @@ private val routeCapabilities = linkedMapOf(
         aliases = setOf("huaweifreebuds3", "freebuds3"),
         supportsAnc = true,
         supportsAncDirectionDial = true,
+        supportsGestureConfiguration = true,
+        hasChargingCase = true,
+    ),
+    HuaweiDeviceRoute.HUAWEI_FREEBUDS4E to HuaweiDeviceCapabilities(
+        displayName = "HUAWEI FreeBuds 4E",
+        aliases = setOf("huaweifreebuds4e", "freebuds4e"),
+        supportsAnc = true,
+        supportsAncStateReadback = true,
+        supportsDiscreteAncLevels = true,
+        supportsRfcommBattery = true,
         supportsGestureConfiguration = true,
         hasChargingCase = true,
     ),
@@ -141,6 +152,7 @@ private val normalizedAliasRoutes: Map<String, HuaweiDeviceRoute> = buildMap {
 
 private val broadcastValueByRoute = mapOf(
     HuaweiDeviceRoute.HUAWEI_FREEBUDS3 to "HUAWEI_FREEBUDS3",
+    HuaweiDeviceRoute.HUAWEI_FREEBUDS4E to "HUAWEI_FREEBUDS4E",
     HuaweiDeviceRoute.HUAWEI_FREEBUDS5 to "HUAWEI_FREEBUDS5",
     HuaweiDeviceRoute.HUAWEI_FREEBUDS6I to "HUAWEI_FREEBUDS6I",
     HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3 to "HUAWEI_FREEBUDS_PRO3",

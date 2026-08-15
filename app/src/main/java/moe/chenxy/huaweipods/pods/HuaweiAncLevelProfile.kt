@@ -33,9 +33,17 @@ private val freeBuds5AncOptions = listOf(
     HuaweiAncLevelOption(HuaweiAncLevel.BALANCED, protocolValue = 0x00, miuiValue = 0x00),
 )
 
+/** FreeBuds 4E 000135/00 实机抓包确认：深度=FF、均衡=00、轻度=01，没有智慧动态。 */
+private val freeBuds4eAncOptions = listOf(
+    HuaweiAncLevelOption(HuaweiAncLevel.DEEP, protocolValue = 0xFF, miuiValue = 0x02),
+    HuaweiAncLevelOption(HuaweiAncLevel.BALANCED, protocolValue = 0x00, miuiValue = 0x00),
+    HuaweiAncLevelOption(HuaweiAncLevel.LIGHT, protocolValue = 0x01, miuiValue = 0x01),
+)
+
 internal val HuaweiDeviceRoute.ancLevelOptions: List<HuaweiAncLevelOption>
     get() = when (this) {
         HuaweiDeviceRoute.HUAWEI_FREEBUDS5 -> freeBuds5AncOptions
+        HuaweiDeviceRoute.HUAWEI_FREEBUDS4E -> freeBuds4eAncOptions
         HuaweiDeviceRoute.HUAWEI_FREEBUDS6I -> freeBuds6iAncOptions
         HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3,
         HuaweiDeviceRoute.HUAWEI_FREEBUDS7I,
@@ -45,6 +53,7 @@ internal val HuaweiDeviceRoute.ancLevelOptions: List<HuaweiAncLevelOption>
 
 internal val HuaweiDeviceRoute.defaultAncSubMode: Int?
     get() = ancLevelOptions.firstOrNull { it.level == HuaweiAncLevel.ADAPTIVE }?.protocolValue
+        ?: ancLevelOptions.firstOrNull()?.protocolValue
 
 internal fun HuaweiDeviceRoute.ancLevelOptionForProtocolValue(value: Int): HuaweiAncLevelOption? =
     ancLevelOptions.firstOrNull { it.protocolValue == value }

@@ -1,6 +1,7 @@
 package moe.chenxy.huaweipods.hook
 
 import android.annotation.SuppressLint
+import android.app.Application
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -31,6 +32,7 @@ import moe.chenxy.huaweipods.utils.miuiStrongToast.data.HuaweiPodsAction
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.addHuaweiPodsAction
 import moe.chenxy.huaweipods.BuildConfig
 import moe.chenxy.huaweipods.R
+import java.util.concurrent.ConcurrentHashMap
 
 internal fun shouldOfferNotificationAncAction(route: HuaweiDeviceRoute): Boolean = route.supportsAnc
 
@@ -39,10 +41,38 @@ object MiBluetoothToastHook : HookContext() {
 
     // ANC 模式本地缓存，用于在 FreeBuds 3 已验证的关/开状态之间切换。
     private val receiverRegistrationLock = Any()
+    private val activeNotificationAddresses = ConcurrentHashMap.newKeySet<String>()
     @Volatile
     private var receiverRegistered = false
 
     override fun onHook() {
+
+        fun cancelNotificationForAddress(address: String, context: Context) {
+            if (address.isBlank()) return
+            val notificationManager = context.getSystemService("notification") as NotificationManager
+            notificationManager.cancelAsUser(
+                "BTHeadset$address",
+                10003,
+                SystemApisUtils.getUserAllUserHandle(),
+            )
+            activeNotificationAddresses.remove(address)
+        }
+
+        fun cancelAllPodsNotifications(context: Context) {
+            activeNotificationAddresses.toList().forEach { address ->
+                runCatching { cancelNotificationForAddress(address, context) }
+                    .onFailure { Log.w("HuaweiPods", "Failed to cancel disabled Pod Notification", it) }
+            }
+            // Hook 进程重启后内存集合为空，但旧通知仍可能留在 SystemUI；按本模块固定 tag/id 补扫。
+            runCatching {
+                val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                manager.activeNotifications
+                    .filter { it.id == 10003 && it.tag?.startsWith("BTHeadset") == true }
+                    .forEach { manager.cancelAsUser(it.tag, it.id, SystemApisUtils.getUserAllUserHandle()) }
+            }.onFailure {
+                Log.w("HuaweiPods", "Failed to scan disabled Pod Notifications", it)
+            }
+        }
 
         fun deleteIntent(context: Context, bluetoothDevice: BluetoothDevice): PendingIntent? {
             val intent = Intent("com.android.bluetooth.headset.notification.cancle")
@@ -68,6 +98,14 @@ object MiBluetoothToastHook : HookContext() {
             }
             try {
                 val address: String = bluetoothDevice.address
+                if (!NotificationPresentationPolicy.shouldPostPersistentNotification(
+                        ConfigManager.persistentNotificationEnabled(),
+                    )
+                ) {
+                    cancelNotificationForAddress(address, context)
+                    Log.d("HuaweiPods", "skip persistent notification: disabled")
+                    return
+                }
                 var alias: String? = bluetoothDevice.alias
                 if (alias?.isEmpty() == true) {
                     alias = bluetoothDevice.name
@@ -78,12 +116,7 @@ object MiBluetoothToastHook : HookContext() {
                     return
                 }
                 if (!ModuleResourceResolver.isCurrentModuleBuild(moduleContext)) {
-                    (context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
-                        .cancelAsUser(
-                            "BTHeadset$address",
-                            10003,
-                            SystemApisUtils.getUserAllUserHandle(),
-                        )
+                    cancelNotificationForAddress(address, context)
                     Log.w("HuaweiPods", "skip notification: stale Hook build")
                     FocusIslandUtil.cancelBatteryIsland(context)
                     return
@@ -277,6 +310,7 @@ object MiBluetoothToastHook : HookContext() {
                     notification,
                     SystemApisUtils.getUserAllUserHandle()
                 )
+                activeNotificationAddresses.add(address)
             } catch (e: Exception) {
                 Log.e("HuaweiPods", "Failed to create Pod Notification", e)
             }
@@ -286,18 +320,17 @@ object MiBluetoothToastHook : HookContext() {
             try {
                 val address = bluetoothDevice.address
                 if (address.isNotEmpty()) {
-                    val notificationManager = context.getSystemService("notification") as NotificationManager
-                    notificationManager.cancelAsUser("BTHeadset$address", 10003, SystemApisUtils.getUserAllUserHandle())
+                    cancelNotificationForAddress(address, context)
                 }
             } catch (e: Exception) {
                 Log.e("HuaweiPods", "Failed to cancel Pod Notification!", e)
             }
         }
 
-
-        hookConstructorAfter(findConstructorByParamCount("com.android.bluetooth.ble.app.MiuiBluetoothNotification", 2)) {
-            val context = (getObjectField(instance, "mContext") as? Context)?.applicationContext
-                ?: return@hookConstructorAfter
+        fun registerNotificationReceiver(sourceContext: Context) {
+            // Application.attach() 的早期阶段 applicationContext 在部分 HyperOS 构建上仍可能为空。
+            // 使用传入的 Context 兜底，避免首次启动时漏注册通知更新接收器。
+            val context = sourceContext.applicationContext ?: sourceContext
             synchronized(receiverRegistrationLock) {
                 if (receiverRegistered) return@synchronized
 
@@ -326,6 +359,9 @@ object MiBluetoothToastHook : HookContext() {
                                 }
                                 HuaweiPodsAction.ACTION_CONFIG_CHANGED -> {
                                     ConfigManager.refreshFromPrefs(prefs)
+                                    if (!ConfigManager.persistentNotificationEnabled()) {
+                                        cancelAllPodsNotifications(context)
+                                    }
                                     if (ConfigManager.islandMode() != ConfigManager.ISLAND_MODE_MODULE) {
                                         FocusIslandUtil.cancelBatteryIsland(context)
                                     }
@@ -383,6 +419,30 @@ object MiBluetoothToastHook : HookContext() {
                     Log.e("HuaweiPods", "Failed to register Bluetooth notification receiver", it)
                 }
             }
+        }
+
+        // HyperOS 4 不再保证 MiuiBluetoothNotification 会在连接阶段及时构造。接收器注册
+        // 绑定到 com.xiaomi.bluetooth 的 Application 生命周期，旧构造器 Hook 仅作为兼容兜底。
+        hookAfter(
+            Application::class.java.getDeclaredMethod("attach", Context::class.java).apply {
+                isAccessible = true
+            },
+        ) {
+            if (Application.getProcessName() != "com.xiaomi.bluetooth") return@hookAfter
+            (args[0] as? Context)?.let(::registerNotificationReceiver)
+        }
+        runCatching {
+            hookConstructorAfter(
+                findConstructorByParamCount(
+                    "com.android.bluetooth.ble.app.MiuiBluetoothNotification",
+                    2,
+                ),
+            ) {
+                (getObjectField(instance, "mContext") as? Context)
+                    ?.let(::registerNotificationReceiver)
+            }
+        }.onFailure {
+            Log.w("HuaweiPods", "legacy MiuiBluetoothNotification receiver hook skipped", it)
         }
     }
 

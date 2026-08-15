@@ -57,6 +57,28 @@ object HuaweiEqualizerController {
         )
     }
 
+    fun setBuiltInPreset(
+        context: Context,
+        device: BluetoothDevice,
+        route: HuaweiDeviceRoute,
+        presetId: Int,
+        onComplete: (Boolean) -> Unit,
+    ) {
+        val packet = HuaweiEqualizerCodec.buildBuiltInPresetPacket(route, presetId)
+        if (!isTarget(context, device, route) || packet == null) {
+            onComplete(false)
+            return
+        }
+        HuaweiL2capAncController.sendRawPacketOnce(
+            context = context,
+            device = device,
+            route = route,
+            packet = packet,
+            description = "built-in-equalizer route=$route preset=$presetId",
+            onComplete = onComplete,
+        )
+    }
+
     @SuppressLint("MissingPermission")
     private fun isTarget(
         context: Context,

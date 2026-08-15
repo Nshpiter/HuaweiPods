@@ -125,14 +125,20 @@ object HuaweiFreeClip2Controller {
      * Parses the latest verified spatial-audio frame from a possibly concatenated RFCOMM read.
      * Unknown enum values are rejected instead of being exposed as a misleading UI state.
      */
-    fun parseSpatialAudioState(stream: ByteArray): FreeClip2AudioState? {
+    fun parseSpatialAudioState(stream: ByteArray): FreeClip2AudioState? =
+        parseSpatialAudioState(stream, FreeClip2SpatialAudioMode::fromStateReportValue)
+
+    internal fun parseSpatialAudioState(
+        stream: ByteArray,
+        modeFromStateReportValue: (Int) -> FreeClip2SpatialAudioMode?,
+    ): FreeClip2AudioState? {
         var latest: FreeClip2AudioState? = null
         frames(stream).forEach { frame ->
             val marker = frame.indexOfSequence(SPATIAL_AUDIO_RESPONSE_PREFIX, startIndex = 4)
             if (marker < 0 || marker + SPATIAL_AUDIO_RESPONSE_SIZE > frame.size - CHECKSUM_SIZE) {
                 return@forEach
             }
-            val mode = FreeClip2SpatialAudioMode.fromStateReportValue(frame.u8(marker + 7))
+            val mode = modeFromStateReportValue(frame.u8(marker + 7))
                 ?: return@forEach
             val scene = FreeClip2SpatialScene.fromProtocolValue(frame.u8(marker + 10))
                 ?: return@forEach
@@ -287,8 +293,10 @@ enum class FreeClip2BooleanFeature(
 }
 
 /**
- * 耳机 AAM 空间音频协议：0=关闭、1=固定、2=头部跟踪。
- * 智慧音频的独立 MBB API 使用另一套枚举，转换只允许发生在桥接策略中。
+ * FreeClip 2 耳机 AAM 空间音频协议：0=关闭、1=头部跟踪、2=固定。
+ *
+ * 该顺序同时由官方 API 和真机实际效果确认。FreeBuds 7i 的同类命令顺序不同，
+ * 必须由它自己的控制器转换，不能再共用这里的 wire value。
  */
 enum class FreeClip2SpatialAudioMode(
     val extraValue: String,
@@ -296,8 +304,8 @@ enum class FreeClip2SpatialAudioMode(
     private val packetBytes: ByteArray,
 ) {
     OFF("off", 0x00, hex("5A0009002BB401011802010060ED")),
-    FIXED("fixed", 0x01, hex("5A0009002BB401011802010170CC")),
-    HEAD_TRACKING("head_tracking", 0x02, hex("5A0009002BB401011802010240AF"));
+    FIXED("fixed", 0x02, hex("5A0009002BB401011802010240AF")),
+    HEAD_TRACKING("head_tracking", 0x01, hex("5A0009002BB401011802010170CC"));
 
     fun packet(): ByteArray = packetBytes.copyOf()
 
@@ -308,11 +316,11 @@ enum class FreeClip2SpatialAudioMode(
         fun fromProtocolValue(value: Int): FreeClip2SpatialAudioMode? =
             entries.firstOrNull { it.protocolValue == value }
 
-        /** 耳机 AAM 状态回报与写命令一致：1=固定、2=头部跟踪。 */
+        /** FreeClip 2 AAM 状态回报与写命令一致：1=头部跟踪、2=固定。 */
         fun fromStateReportValue(value: Int): FreeClip2SpatialAudioMode? = when (value) {
             0 -> OFF
-            1 -> FIXED
-            2 -> HEAD_TRACKING
+            1 -> HEAD_TRACKING
+            2 -> FIXED
             else -> null
         }
     }

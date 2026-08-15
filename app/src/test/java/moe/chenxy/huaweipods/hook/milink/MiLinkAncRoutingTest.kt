@@ -10,17 +10,73 @@ import org.junit.Test
 
 class MiLinkAncRoutingTest {
     @Test
+    fun `MiLink ANC host selects legacy first and HyperOS 4 by compatible constructor`() {
+        assertEquals(
+            "legacy",
+            selectMiLinkAncHostSpec { className -> className.endsWith(".j") }?.adapterName,
+        )
+        assertEquals(
+            "hyperos4-v18",
+            selectMiLinkAncHostSpec { className -> className.endsWith(".r") }?.adapterName,
+        )
+        assertEquals(
+            "anc_card_text",
+            miLinkAncHostSpecs.first { it.adapterName == "hyperos4-v18" }.titleIdNames.first(),
+        )
+        assertEquals(
+            "W",
+            miLinkAncHostSpecs.first { it.adapterName == "hyperos4-v18" }.heightMethodName,
+        )
+        assertFalse(
+            miLinkAncHostSpecs.first { it.adapterName == "hyperos4-v18" }
+                .recomputeHeightWhenHidden,
+        )
+        assertEquals(
+            setOf("M"),
+            miLinkAncHostSpecs.first { it.adapterName == "hyperos4-v18" }
+                .refreshMethodNames,
+        )
+        assertNull(
+            miLinkAncHostSpecs.first { it.adapterName == "legacy" }
+                .refreshMethodNames,
+        )
+        assertTrue(
+            miLinkAncHostSpecs.first { it.adapterName == "legacy" }
+                .recomputeHeightWhenHidden,
+        )
+        assertNull(selectMiLinkAncHostSpec { false })
+    }
+
+    @Test
+    fun `MiLink audio effect host supports legacy and HyperOS 4 cards`() {
+        assertEquals(
+            "o",
+            selectMiLinkAudioEffectHostSpec { className -> className.endsWith(".w0") }
+                ?.renderMethodName,
+        )
+        assertEquals(
+            "w",
+            selectMiLinkAudioEffectHostSpec { className -> className.endsWith(".h1") }
+                ?.renderMethodName,
+        )
+        val hyperOs4 = miLinkAudioEffectHostSpecs.first { it.adapterName == "hyperos4-v18" }
+        assertEquals("mi_audio_effect_card_text", hyperOs4.titleIdName)
+        assertEquals("mi_audio_effect_select_card", hyperOs4.selectCardIdName)
+        assertNull(selectMiLinkAudioEffectHostSpec { false })
+    }
+
+    @Test
     fun `FreeClip2 spatial effect accepts native and offset MiLink states`() {
         assertEquals(
             FreeClip2SpatialAudioMode.OFF,
             freeClip2SpatialModeForMiLinkAudioEffect(0),
         )
         assertEquals(
-            FreeClip2SpatialAudioMode.HEAD_TRACKING,
+            FreeClip2SpatialAudioMode.FIXED,
             freeClip2SpatialModeForMiLinkAudioEffect(21),
         )
         assertEquals(
-            FreeClip2SpatialAudioMode.FIXED,
+            FreeClip2SpatialAudioMode.HEAD_TRACKING,
             freeClip2SpatialModeForMiLinkAudioEffect(32),
         )
         assertNull(freeClip2SpatialModeForMiLinkAudioEffect(3))
@@ -32,8 +88,8 @@ class MiLinkAncRoutingTest {
             val hostValue = miLinkAudioEffectForFreeClip2SpatialMode(mode)
             assertEquals(mode, freeClip2SpatialModeForMiLinkAudioEffect(hostValue))
         }
-        assertEquals(2, miLinkAudioEffectForFreeClip2SpatialMode(FreeClip2SpatialAudioMode.FIXED))
-        assertEquals(1, miLinkAudioEffectForFreeClip2SpatialMode(FreeClip2SpatialAudioMode.HEAD_TRACKING))
+        assertEquals(1, miLinkAudioEffectForFreeClip2SpatialMode(FreeClip2SpatialAudioMode.FIXED))
+        assertEquals(2, miLinkAudioEffectForFreeClip2SpatialMode(FreeClip2SpatialAudioMode.HEAD_TRACKING))
     }
 
     @Test
@@ -137,6 +193,66 @@ class MiLinkAncRoutingTest {
                 candidateAddressCount = 0,
                 liveAncCardCount = 1,
             ),
+        )
+    }
+
+    @Test
+    fun `headset icon preflight requires one confirmed active detail`() {
+        assertTrue(
+            shouldUseActiveMiLinkIconFallback(
+                activeRoute = HuaweiDeviceRoute.HUAWEI_FREEBUDS3,
+                activeAddress = "AA:BB:CC:DD:EE:FF",
+                sessionConfirmed = true,
+                liveHeadsetDetailCount = 1,
+            ),
+        )
+        assertFalse(
+            shouldUseActiveMiLinkIconFallback(
+                activeRoute = HuaweiDeviceRoute.HUAWEI_FREEBUDS3,
+                activeAddress = "AA:BB:CC:DD:EE:FF",
+                sessionConfirmed = true,
+                liveHeadsetDetailCount = 2,
+            ),
+        )
+        assertFalse(
+            shouldUseActiveMiLinkIconFallback(
+                activeRoute = HuaweiDeviceRoute.HUAWEI_FREEBUDS3,
+                activeAddress = null,
+                sessionConfirmed = true,
+                liveHeadsetDetailCount = 1,
+            ),
+        )
+        assertFalse(
+            shouldUseActiveMiLinkIconFallback(
+                activeRoute = HuaweiDeviceRoute.HUAWEI_FREEBUDS3,
+                activeAddress = "AA:BB:CC:DD:EE:FF",
+                sessionConfirmed = false,
+                liveHeadsetDetailCount = 1,
+            ),
+        )
+    }
+
+    @Test
+    fun `title fallback only restores presentation for a unique no ANC model`() {
+        assertEquals(
+            HuaweiDeviceRoute.HUAWEI_FREECLIP2,
+            noAncMiLinkPresentationRoute(listOf("HUAWEI FreeClip 2", "已连接")),
+        )
+        assertEquals(
+            HuaweiDeviceRoute.HUAWEI_EYEWEAR2,
+            noAncMiLinkPresentationRoute(listOf("HUAWEI Eyewear 2")),
+        )
+        assertEquals(
+            HuaweiDeviceRoute.UNSUPPORTED,
+            noAncMiLinkPresentationRoute(listOf("HUAWEI FreeBuds Pro 5")),
+        )
+        assertEquals(
+            HuaweiDeviceRoute.UNSUPPORTED,
+            noAncMiLinkPresentationRoute(listOf("HUAWEI FreeClip 2", "HUAWEI Eyewear 2")),
+        )
+        assertEquals(
+            HuaweiDeviceRoute.UNSUPPORTED,
+            noAncMiLinkPresentationRoute(listOf("Bluetooth headset")),
         )
     }
 

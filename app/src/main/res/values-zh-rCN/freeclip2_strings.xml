@@ -23,6 +23,14 @@
     <string name="freeclip2_sound_effect_treble">高音增强</string>
     <string name="freeclip2_sound_effect_clear_voice">清晰人声</string>
     <string name="freeclip2_sound_effect_custom">官方/自定义音效</string>
+    <string name="freeclip2_custom_effect_title">自定义音效</string>
+    <string name="freeclip2_custom_effect_summary">读取并编辑耳机中的 10 段自定义曲线</string>
+    <string name="freeclip2_custom_effect_existing">已有自定义音效</string>
+    <string name="freeclip2_custom_effect_add">添加自定义音效</string>
+    <string name="freeclip2_custom_effect_name">音效名称</string>
+    <string name="freeclip2_custom_effect_default_name">我的音效 %1$d</string>
+    <string name="freeclip2_custom_effect_edit_hint">选择后可修改名称与 10 段曲线</string>
+    <string name="freeclip2_custom_effect_bridge_hint">最多保存 3 个；写入复用智慧音频官方通道，需先运行智慧音频。</string>
     <string name="freeclip2_sound_quality_priority">声音质量优先</string>
     <string name="freeclip2_low_latency">低时延模式</string>
     <string name="freeclip2_dual_device">双设备连接</string>

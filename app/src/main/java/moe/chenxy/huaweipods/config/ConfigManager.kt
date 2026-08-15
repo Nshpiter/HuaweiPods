@@ -12,6 +12,7 @@ data class AppConfig(
     val logLevel: Int = ConfigManager.LOG_LEVEL_BASIC,
     val islandMode: Int = ConfigManager.ISLAND_MODE_OFFICIAL,
     val superIslandEnabled: Boolean = true,
+    val persistentNotificationEnabled: Boolean = true,
     val lockscreenNotificationEnabled: Boolean = true,
     val notificationClickAction: Int = ConfigManager.NOTIFICATION_CLICK_MODULE_POPUP,
     val moreClickAction: Int = ConfigManager.MORE_CLICK_MODULE,
@@ -26,6 +27,7 @@ object ConfigManager {
     const val PREF_KEY_LOG_LEVEL = "log_level"
     const val PREF_KEY_ISLAND_MODE = "island_mode"
     const val PREF_KEY_SUPER_ISLAND_ENABLED = "super_island_enabled"
+    const val PREF_KEY_PERSISTENT_NOTIFICATION_ENABLED = "persistent_notification_enabled"
     const val PREF_KEY_LOCKSCREEN_NOTIFICATION_ENABLED = "lockscreen_notification_enabled"
     const val PREF_KEY_NOTIFICATION_CLICK_ACTION = "notification_click_action"
     const val PREF_KEY_MORE_CLICK_ACTION = "more_click_action"
@@ -75,6 +77,8 @@ object ConfigManager {
     )
 
     fun superIslandEnabled(): Boolean = current().superIslandEnabled
+
+    fun persistentNotificationEnabled(): Boolean = current().persistentNotificationEnabled
 
     fun lockscreenNotificationEnabled(): Boolean = current().lockscreenNotificationEnabled
 
@@ -127,6 +131,14 @@ object ConfigManager {
         save(prefs, service, current().copy(lockscreenNotificationEnabled = enabled))
     }
 
+    fun updatePersistentNotificationEnabled(
+        prefs: SharedPreferences,
+        service: XposedService?,
+        enabled: Boolean,
+    ) {
+        save(prefs, service, current().copy(persistentNotificationEnabled = enabled))
+    }
+
     fun updateNotificationClickAction(prefs: SharedPreferences, service: XposedService?, action: Int) {
         val config = current().copy(notificationClickAction = action.normalizedNotificationClickAction())
         save(prefs, service, config)
@@ -164,6 +176,7 @@ object ConfigManager {
             .putInt(PREF_KEY_LOG_LEVEL, config.logLevel)
             .putInt(PREF_KEY_ISLAND_MODE, config.islandMode)
             .putBoolean(PREF_KEY_SUPER_ISLAND_ENABLED, config.superIslandEnabled)
+            .putBoolean(PREF_KEY_PERSISTENT_NOTIFICATION_ENABLED, config.persistentNotificationEnabled)
             .putBoolean(PREF_KEY_LOCKSCREEN_NOTIFICATION_ENABLED, config.lockscreenNotificationEnabled)
             .putInt(PREF_KEY_NOTIFICATION_CLICK_ACTION, config.notificationClickAction)
             .putInt(PREF_KEY_MORE_CLICK_ACTION, config.moreClickAction)
@@ -175,6 +188,9 @@ object ConfigManager {
         val directLogLevel = prefs.getInt(PREF_KEY_LOG_LEVEL, Int.MIN_VALUE)
         val directIslandMode = prefs.getInt(PREF_KEY_ISLAND_MODE, Int.MIN_VALUE)
         val directSuperIslandEnabled = prefs.booleanOrNull(PREF_KEY_SUPER_ISLAND_ENABLED)
+        val directPersistentNotificationEnabled = prefs.booleanOrNull(
+            PREF_KEY_PERSISTENT_NOTIFICATION_ENABLED,
+        )
         val directLockscreenNotificationEnabled = prefs.booleanOrNull(
             PREF_KEY_LOCKSCREEN_NOTIFICATION_ENABLED,
         )
@@ -197,6 +213,8 @@ object ConfigManager {
                 logLevel = directLogLevel.takeIf { it != Int.MIN_VALUE } ?: config.logLevel,
                 islandMode = selectedIslandMode,
                 superIslandEnabled = islandEnabled,
+                persistentNotificationEnabled = directPersistentNotificationEnabled
+                    ?: config.persistentNotificationEnabled,
                 lockscreenNotificationEnabled = directLockscreenNotificationEnabled
                     ?: config.lockscreenNotificationEnabled,
                 notificationClickAction = directNotificationClickAction.takeIf { it != Int.MIN_VALUE } ?: config.notificationClickAction,
@@ -208,6 +226,8 @@ object ConfigManager {
             logLevel = directLogLevel.takeIf { it != Int.MIN_VALUE } ?: config.logLevel,
             islandMode = selectedIslandMode,
             superIslandEnabled = islandEnabled,
+            persistentNotificationEnabled = directPersistentNotificationEnabled
+                ?: config.persistentNotificationEnabled,
             lockscreenNotificationEnabled = directLockscreenNotificationEnabled
                 ?: config.lockscreenNotificationEnabled,
             notificationClickAction = directNotificationClickAction.takeIf { it != Int.MIN_VALUE } ?: config.notificationClickAction,
@@ -265,6 +285,12 @@ object ConfigManager {
             }
             if (oldConfig.superIslandEnabled != newConfig.superIslandEnabled) {
                 add("superIslandEnabled=${oldConfig.superIslandEnabled}->${newConfig.superIslandEnabled}")
+            }
+            if (oldConfig.persistentNotificationEnabled != newConfig.persistentNotificationEnabled) {
+                add(
+                    "persistentNotificationEnabled=${oldConfig.persistentNotificationEnabled}->" +
+                        newConfig.persistentNotificationEnabled,
+                )
             }
             if (oldConfig.lockscreenNotificationEnabled != newConfig.lockscreenNotificationEnabled) {
                 add(

@@ -5,7 +5,7 @@ description: 在小米 HyperOS 上安装、启用并检查 HuaweiPods。
 
 # 快速开始
 
-HuaweiPods 是面向小米 HyperOS 的 Xposed 模块。从 1.2.0 起，支持表中的 11 个型号使用同一个正式 APK；各型号的实机验证程度和可用控制并不相同，请先查看[支持状态](../support/index.md)。
+HuaweiPods 是面向小米 HyperOS 的 Xposed 模块。从 1.2.0 起项目使用统一 APK，1.5.1 已接入 12 个型号；各型号的实机验证程度和可用控制并不相同，请先查看[支持状态](../support/index.md)。
 
 ::: warning 安装前确认
 HuaweiPods 需要正常工作的 LSPosed 环境，并会修改系统蓝牙相关进程的行为。请先确认你了解 Xposed 模块的启用、停用与恢复方式。

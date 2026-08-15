@@ -8,6 +8,90 @@ import org.junit.Test
 
 class HuaweiGestureControllerTest {
     @Test
+    fun `FreeBuds 4E gesture packets and queries match capture`() {
+        val route = HuaweiDeviceRoute.HUAWEI_FREEBUDS4E
+        val expected = linkedMapOf(
+            HuaweiTapAction.PLAY_PAUSE to "5A000600011F01010133A2",
+            HuaweiTapAction.PLAY_NEXT to "5A000600011F01010203C1",
+            HuaweiTapAction.PLAY_PREVIOUS to "5A000600011F0101075364",
+            HuaweiTapAction.VOICE_ASSISTANT to "5A000600011F0101002383",
+            HuaweiTapAction.NONE to "5A000600011F0101FF3D73",
+        )
+        expected.forEach { (action, packet) ->
+            assertArrayEquals(
+                action.name,
+                hex(packet),
+                HuaweiGestureController.buildDoubleTapPacket(
+                    route,
+                    HuaweiGestureSide.LEFT,
+                    action,
+                ),
+            )
+        }
+        val expectedRight = linkedMapOf(
+            HuaweiTapAction.PLAY_PAUSE to "5A000600011F0201016AF2",
+            HuaweiTapAction.PLAY_NEXT to "5A000600011F0201025A91",
+            HuaweiTapAction.PLAY_PREVIOUS to "5A000600011F0201070A34",
+            HuaweiTapAction.VOICE_ASSISTANT to "5A000600011F0201007AD3",
+            HuaweiTapAction.NONE to "5A000600011F0201FF6423",
+        )
+        expectedRight.forEach { (action, packet) ->
+            assertArrayEquals(
+                action.name,
+                hex(packet),
+                HuaweiGestureController.buildDoubleTapPacket(
+                    route,
+                    HuaweiGestureSide.RIGHT,
+                    action,
+                ),
+            )
+        }
+        assertArrayEquals(
+            hex(
+                "5A000700012001000200E897" +
+                    "5A0007002B170100020030A7",
+            ),
+            HuaweiGestureController.buildGestureStateQuery(route),
+        )
+        val longPressPackets = listOf(
+            Triple(HuaweiGestureSide.LEFT, FreeBudsPro3LongPressAction.NOISE_CONTROL, "5A0006002B16010103AE8D"),
+            Triple(HuaweiGestureSide.LEFT, FreeBudsPro3LongPressAction.SONG_RECOGNITION, "5A0006002B1601010E7F20"),
+            Triple(HuaweiGestureSide.LEFT, FreeBudsPro3LongPressAction.NONE, "5A0006002B160101FF801E"),
+            Triple(HuaweiGestureSide.RIGHT, FreeBudsPro3LongPressAction.NOISE_CONTROL, "5A0006002B16020103F7DD"),
+            Triple(HuaweiGestureSide.RIGHT, FreeBudsPro3LongPressAction.SONG_RECOGNITION, "5A0006002B1602010E2670"),
+            Triple(HuaweiGestureSide.RIGHT, FreeBudsPro3LongPressAction.NONE, "5A0006002B160201FFD94E"),
+        )
+        longPressPackets.forEach { (side, action, packet) ->
+            assertArrayEquals(
+                "$side/$action",
+                hex(packet),
+                HuaweiGestureController.buildModernEarbudsLongPressPacket(route, side, action),
+            )
+        }
+        assertNull(
+            HuaweiGestureController.buildModernEarbudsLongPressPacket(
+                route,
+                HuaweiGestureSide.LEFT,
+                FreeBudsPro3LongPressAction.VOICE_ASSISTANT,
+            ),
+        )
+        assertNull(
+            HuaweiGestureController.buildModernEarbudsLongPressPacket(
+                HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3,
+                HuaweiGestureSide.LEFT,
+                FreeBudsPro3LongPressAction.SONG_RECOGNITION,
+            ),
+        )
+        assertNull(
+            HuaweiGestureController.buildTripleTapPacket(
+                route,
+                HuaweiGestureSide.LEFT,
+                HuaweiTapAction.PLAY_NEXT,
+            ),
+        )
+    }
+
+    @Test
     fun `FreeBuds 3 legacy double tap packets stay unchanged`() {
         assertArrayEquals(
             hex("5A000600011F0101046307"),

@@ -46,6 +46,7 @@ class SettingsHeadsetPolicyTest {
 
         val expected = linkedMapOf(
             HuaweiDeviceRoute.HUAWEI_FREEBUDS3 to expectedPolicy(true, false, true),
+            HuaweiDeviceRoute.HUAWEI_FREEBUDS4E to expectedPolicy(true, false, true),
             HuaweiDeviceRoute.HUAWEI_FREEBUDS5 to expectedPolicy(true, false, false),
             HuaweiDeviceRoute.HUAWEI_FREEBUDS6I to expectedPolicy(true, true, true),
             HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3 to expectedPolicy(true, true, true),
@@ -94,6 +95,23 @@ class SettingsHeadsetPolicyTest {
             "打开耳塞贴合度检测可获得更准确的结果",
             "Run the Ear tip fit test after changing ear tips",
         ).forEach { label -> assertFalse(label, isSettingsEarTipFitText(label)) }
+    }
+
+    @Test
+    fun `fake Xiaomi notification setting uses exact Chinese and English titles`() {
+        listOf(
+            "通知栏显示",
+            "耳机连接后在通知栏显示状态信息",
+            "Notification display",
+            "Show in notification shade",
+        ).forEach { label -> assertTrue(label, isSettingsNotificationDisplayText(label)) }
+
+        listOf(
+            "通知与状态栏",
+            "锁屏通知",
+            "Show notification history",
+            "关闭通知栏显示后仍可在模块中管理通知",
+        ).forEach { label -> assertFalse(label, isSettingsNotificationDisplayText(label)) }
     }
 
     @Test

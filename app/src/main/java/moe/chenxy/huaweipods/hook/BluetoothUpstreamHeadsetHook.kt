@@ -101,7 +101,11 @@ class BluetoothUpstreamHeadsetHook : HookContext() {
                     val battery = effectiveBattery() ?: return@hookBefore
                     val leftBattery = displayBattery(battery.left) ?: (args[1] as? Int ?: 0)
                     val rightBattery = displayBattery(battery.right) ?: (args[2] as? Int ?: 0)
-                    val wearState = displayWearState(battery, args[3] as? Int ?: 1)
+                    val wearState = upstreamHuaweiWearState(
+                        battery = battery,
+                        fallback = args[3] as? Int ?: 1,
+                        hasReportedAvailability = currentHuaweiRoute().usesReportedEarbudAvailability,
+                    )
                     val notification = currentMiuiBluetoothNotification() ?: return@hookBefore
                     result = null
                     callMethod(
@@ -150,7 +154,11 @@ class BluetoothUpstreamHeadsetHook : HookContext() {
                     val battery = effectiveBattery() ?: return@hookAfter
                     val leftBattery = displayBattery(battery.left)
                     val rightBattery = displayBattery(battery.right)
-                    val wearState = displayWearState(battery, getObjectField(request, "f18109d") as? Int ?: 1)
+                    val wearState = upstreamHuaweiWearState(
+                        battery = battery,
+                        fallback = getObjectField(request, "f18109d") as? Int ?: 1,
+                        hasReportedAvailability = currentHuaweiRoute().usesReportedEarbudAvailability,
+                    )
                     leftBattery?.let { setObjectField(request, "f18107b", it) }
                     rightBattery?.let { setObjectField(request, "f18108c", it) }
                     setObjectField(request, "f18109d", wearState)
@@ -1041,18 +1049,6 @@ class BluetoothUpstreamHeadsetHook : HookContext() {
         return params.battery.coerceIn(0, 100)
     }
 
-    private fun displayWearState(battery: BatteryParams, fallback: Int): Int {
-        val leftConnected = battery.left?.isConnected == true
-        val rightConnected = battery.right?.isConnected == true
-        return when {
-            leftConnected && rightConnected -> 1
-            leftConnected -> 3
-            rightConnected -> 2
-            fallback != 0 -> fallback
-            else -> 1
-        }
-    }
-
     private fun currentMiuiBluetoothNotification(): Any? {
         return runCatching {
             findClass("com.android.bluetooth.ble.app.headset.BluetoothHeadsetService")
@@ -1316,6 +1312,23 @@ class BluetoothUpstreamHeadsetHook : HookContext() {
         val name = runCatching { this.name }.getOrNull()
         val alias = runCatching { this.alias }.getOrNull()
         return "BluetoothDevice(address=$address,name=$name,alias=$alias)"
+    }
+}
+
+internal fun upstreamHuaweiWearState(
+    battery: BatteryParams,
+    fallback: Int,
+    hasReportedAvailability: Boolean,
+): Int {
+    val leftConnected = battery.left?.isConnected == true
+    val rightConnected = battery.right?.isConnected == true
+    return when {
+        leftConnected && rightConnected -> 1
+        leftConnected -> 3
+        rightConnected -> 2
+        hasReportedAvailability -> 0
+        fallback != 0 -> fallback
+        else -> 1
     }
 }
 
