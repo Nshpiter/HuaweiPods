@@ -291,6 +291,52 @@ class HuaweiGestureControllerTest {
     }
 
     @Test
+    fun `FreeBuds 5i exposes only the captured double tap control`() {
+        val route = HuaweiDeviceRoute.HUAWEI_FREEBUDS5I
+        assertArrayEquals(
+            hex("5A000700012001000200E897"),
+            HuaweiGestureController.buildGestureStateQuery(route),
+        )
+        assertArrayEquals(
+            hex("5A000600011F01010203C1"),
+            HuaweiGestureController.buildDoubleTapPacket(
+                route,
+                HuaweiGestureSide.LEFT,
+                HuaweiTapAction.PLAY_NEXT,
+            ),
+        )
+        assertArrayEquals(
+            hex("5A000600011F01010133A2"),
+            HuaweiGestureController.buildDoubleTapPacket(
+                route,
+                HuaweiGestureSide.LEFT,
+                HuaweiTapAction.PLAY_PAUSE,
+            ),
+        )
+        assertNull(
+            HuaweiGestureController.buildTripleTapPacket(
+                route,
+                HuaweiGestureSide.LEFT,
+                HuaweiTapAction.PLAY_NEXT,
+            ),
+        )
+        assertNull(
+            HuaweiGestureController.buildSwipePacket(
+                route,
+                HuaweiGestureSide.LEFT,
+                HuaweiSwipeAction.VOLUME_CONTROL,
+            ),
+        )
+        assertNull(
+            HuaweiGestureController.buildModernEarbudsLongPressPacket(
+                route,
+                HuaweiGestureSide.LEFT,
+                FreeBudsPro3LongPressAction.NOISE_CONTROL,
+            ),
+        )
+    }
+
+    @Test
     fun `FreeBuds 6i captured tap packet matrix remains exact`() {
         val packets = listOf(
             Triple(
@@ -489,6 +535,60 @@ class HuaweiGestureControllerTest {
         assertArrayEquals(
             hex("5A0009002B1E0101FF0202FFC8C8"),
             HuaweiGestureController.buildFreeBudsPro3SwipeVolumePacket(false),
+        )
+    }
+
+    @Test
+    fun `FreeArc gesture packets and state query match capture`() {
+        val route = HuaweiDeviceRoute.HUAWEI_FREEARC
+
+        assertArrayEquals(
+            hex(
+                "5A000700012001000200E897" +
+                    "5A0007000126010002002512" +
+                    "5A0007002B170100020030A7" +
+                    "5A0007002B1F01000200328A",
+            ),
+            HuaweiGestureController.buildGestureStateQuery(route),
+        )
+        assertArrayEquals(
+            hex("5A000600011F01010133A2"),
+            HuaweiGestureController.buildDoubleTapPacket(
+                route,
+                HuaweiGestureSide.LEFT,
+                HuaweiTapAction.PLAY_PAUSE,
+            ),
+        )
+        assertArrayEquals(
+            hex("5A00060001250201021ED3"),
+            HuaweiGestureController.buildTripleTapPacket(
+                route,
+                HuaweiGestureSide.RIGHT,
+                HuaweiTapAction.PLAY_NEXT,
+            ),
+        )
+        assertArrayEquals(
+            hex("5A0006002B1E0101001B2D"),
+            HuaweiGestureController.buildSwipePacket(
+                route,
+                HuaweiGestureSide.LEFT,
+                HuaweiSwipeAction.VOLUME_CONTROL,
+            ),
+        )
+        assertArrayEquals(
+            hex("5A0006002B160201FFD94E"),
+            HuaweiGestureController.buildModernEarbudsLongPressPacket(
+                route,
+                HuaweiGestureSide.RIGHT,
+                FreeBudsPro3LongPressAction.NONE,
+            ),
+        )
+        assertNull(
+            HuaweiGestureController.buildModernEarbudsLongPressPacket(
+                route,
+                HuaweiGestureSide.LEFT,
+                FreeBudsPro3LongPressAction.NOISE_CONTROL,
+            ),
         )
     }
 

@@ -10,6 +10,17 @@ import org.junit.Test
 
 class MiLinkAncRoutingTest {
     @Test
+    fun `only Eyewear routes use the MiLink audio glasses presentation`() {
+        val glassesRoutes = setOf(
+            HuaweiDeviceRoute.HUAWEI_EYEWEAR,
+            HuaweiDeviceRoute.HUAWEI_EYEWEAR2,
+        )
+        HuaweiDeviceRoute.entries.forEach { route ->
+            assertEquals(route in glassesRoutes, shouldPresentAsMiLinkAudioGlasses(route))
+        }
+    }
+
+    @Test
     fun `MiLink ANC host selects legacy first and HyperOS 4 by compatible constructor`() {
         assertEquals(
             "legacy",
@@ -66,6 +77,16 @@ class MiLinkAncRoutingTest {
     }
 
     @Test
+    fun `HyperOS 4 FreeClip2 sound effect replaces the reserved ANC card slot`() {
+        val hyperOs4 = miLinkAudioEffectHostSpecs.first { it.adapterName == "hyperos4-v18" }
+        assertEquals("anc_select_card", hyperOs4.soundEffectSlotIdName)
+        assertNull(
+            miLinkAudioEffectHostSpecs.first { it.adapterName == "legacy" }
+                .soundEffectSlotIdName,
+        )
+    }
+
+    @Test
     fun `FreeClip2 spatial effect accepts native and offset MiLink states`() {
         assertEquals(
             FreeClip2SpatialAudioMode.OFF,
@@ -93,10 +114,11 @@ class MiLinkAncRoutingTest {
     }
 
     @Test
-    fun `clip and eyewear routes never expose ANC`() {
+    fun `open-ear and eyewear routes never expose ANC`() {
         listOf(
             HuaweiDeviceRoute.HUAWEI_FREECLIP,
             HuaweiDeviceRoute.HUAWEI_FREECLIP2,
+            HuaweiDeviceRoute.HUAWEI_FREEARC,
             HuaweiDeviceRoute.HUAWEI_EYEWEAR,
             HuaweiDeviceRoute.HUAWEI_EYEWEAR2,
         ).forEach { route ->
@@ -111,6 +133,7 @@ class MiLinkAncRoutingTest {
     @Test
     fun `three-state routes preserve off ANC and transparency`() {
         listOf(
+            HuaweiDeviceRoute.HUAWEI_FREEBUDS5I,
             HuaweiDeviceRoute.HUAWEI_FREEBUDS6I,
             HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3,
             HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5,
@@ -147,11 +170,13 @@ class MiLinkAncRoutingTest {
         ).forEach { route -> assertTrue(shouldDetachMiLinkTransparency(route)) }
 
         listOf(
+            HuaweiDeviceRoute.HUAWEI_FREEBUDS5I,
             HuaweiDeviceRoute.HUAWEI_FREEBUDS6I,
             HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3,
             HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5,
             HuaweiDeviceRoute.HUAWEI_FREEBUDS7I,
             HuaweiDeviceRoute.HUAWEI_FREECLIP2,
+            HuaweiDeviceRoute.HUAWEI_FREEARC,
             HuaweiDeviceRoute.HUAWEI_EYEWEAR2,
         ).forEach { route -> assertFalse(shouldDetachMiLinkTransparency(route)) }
     }
@@ -233,6 +258,66 @@ class MiLinkAncRoutingTest {
     }
 
     @Test
+    fun `headset icon refresh keeps a strictly identified route before the next frame`() {
+        assertEquals(
+            HuaweiDeviceRoute.HUAWEI_FREEBUDS3,
+            immediateMiLinkHeadsetIconRoute(
+                strictRoute = HuaweiDeviceRoute.HUAWEI_FREEBUDS3,
+                activeRoute = HuaweiDeviceRoute.UNSUPPORTED,
+                activeAddress = null,
+                sessionConfirmed = false,
+                liveHeadsetDetailCount = 2,
+            ),
+        )
+        assertEquals(
+            HuaweiDeviceRoute.HUAWEI_FREECLIP2,
+            immediateMiLinkHeadsetIconRoute(
+                strictRoute = HuaweiDeviceRoute.UNSUPPORTED,
+                activeRoute = HuaweiDeviceRoute.HUAWEI_FREECLIP2,
+                activeAddress = "AA:BB:CC:DD:EE:FF",
+                sessionConfirmed = true,
+                liveHeadsetDetailCount = 1,
+            ),
+        )
+        assertEquals(
+            HuaweiDeviceRoute.UNSUPPORTED,
+            immediateMiLinkHeadsetIconRoute(
+                strictRoute = HuaweiDeviceRoute.UNSUPPORTED,
+                activeRoute = HuaweiDeviceRoute.HUAWEI_FREEBUDS3,
+                activeAddress = "AA:BB:CC:DD:EE:FF",
+                sessionConfirmed = false,
+                liveHeadsetDetailCount = 1,
+            ),
+        )
+    }
+
+    @Test
+    fun `posted headset icon refresh keeps the confirmed route while host identity is rebinding`() {
+        assertEquals(
+            HuaweiDeviceRoute.HUAWEI_FREEBUDS3,
+            refreshedMiLinkHeadsetIconRoute(
+                strictRoute = HuaweiDeviceRoute.UNSUPPORTED,
+                labelRoute = HuaweiDeviceRoute.UNSUPPORTED,
+                activeRoute = HuaweiDeviceRoute.HUAWEI_FREEBUDS3,
+                activeAddress = "AA:BB:CC:DD:EE:FF",
+                sessionConfirmed = true,
+                liveHeadsetDetailCount = 1,
+            ),
+        )
+        assertEquals(
+            HuaweiDeviceRoute.UNSUPPORTED,
+            refreshedMiLinkHeadsetIconRoute(
+                strictRoute = HuaweiDeviceRoute.UNSUPPORTED,
+                labelRoute = HuaweiDeviceRoute.UNSUPPORTED,
+                activeRoute = HuaweiDeviceRoute.HUAWEI_FREEBUDS3,
+                activeAddress = "AA:BB:CC:DD:EE:FF",
+                sessionConfirmed = true,
+                liveHeadsetDetailCount = 2,
+            ),
+        )
+    }
+
+    @Test
     fun `title fallback only restores presentation for a unique no ANC model`() {
         assertEquals(
             HuaweiDeviceRoute.HUAWEI_FREECLIP2,
@@ -241,6 +326,10 @@ class MiLinkAncRoutingTest {
         assertEquals(
             HuaweiDeviceRoute.HUAWEI_EYEWEAR2,
             noAncMiLinkPresentationRoute(listOf("HUAWEI Eyewear 2")),
+        )
+        assertEquals(
+            HuaweiDeviceRoute.HUAWEI_FREEARC,
+            noAncMiLinkPresentationRoute(listOf("HUAWEI FreeArc", "已连接")),
         )
         assertEquals(
             HuaweiDeviceRoute.UNSUPPORTED,
@@ -258,6 +347,15 @@ class MiLinkAncRoutingTest {
 
     @Test
     fun `three-state models use their captured submode defaults`() {
+        assertEquals(
+            0x03,
+            normalizeMiLinkAncSubMode(
+                HuaweiDeviceRoute.HUAWEI_FREEBUDS5I,
+                huaweiStatus = 2,
+                requestedSubMode = null,
+                storedSubMode = null,
+            ),
+        )
         assertEquals(
             0x03,
             normalizeMiLinkAncSubMode(

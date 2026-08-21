@@ -19,10 +19,10 @@ class HuaweiEqualizerCodecFreeBuds4eTest {
     }
 
     @Test
-    fun `does not reuse FreeBuds 4E preset writes for another route`() {
+    fun `does not reuse FreeBuds 4E preset writes for an unverified route`() {
         assertNull(
             HuaweiEqualizerCodec.buildBuiltInPresetPacket(
-                HuaweiDeviceRoute.HUAWEI_FREEBUDS6I,
+                HuaweiDeviceRoute.HUAWEI_FREEBUDS3,
                 1,
             ),
         )

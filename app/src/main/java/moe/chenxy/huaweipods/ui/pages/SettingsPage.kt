@@ -37,6 +37,8 @@ fun SettingsPage(
     onLockscreenNotificationEnabledChange: (Boolean) -> Unit = {},
     appLanguage: MutableState<Int> = mutableStateOf(AppLocale.SYSTEM),
     onAppLanguageChange: (Int) -> Unit = {},
+    milinkLowLatencyCardEnabled: MutableState<Boolean> = mutableStateOf(true),
+    onMilinkLowLatencyCardEnabledChange: (Boolean) -> Unit = {},
     notificationClickAction: MutableState<Int> = mutableStateOf(ConfigManager.NOTIFICATION_CLICK_MODULE_POPUP),
     onNotificationClickActionChange: (Int) -> Unit = {},
     moreClickAction: MutableState<Int> = mutableStateOf(ConfigManager.MORE_CLICK_MODULE),
@@ -69,18 +71,22 @@ fun SettingsPage(
     )
     val notificationClickActionValues = listOf(
         ConfigManager.NOTIFICATION_CLICK_MODULE_POPUP,
+        ConfigManager.NOTIFICATION_CLICK_SMART_AUDIO,
         ConfigManager.NOTIFICATION_CLICK_SYSTEM_SETTINGS,
     )
     val notificationClickActionOptions = listOf(
         stringResource(R.string.notification_click_module_popup),
+        stringResource(R.string.click_action_smart_audio),
         stringResource(R.string.click_action_system_settings),
     )
     val moreClickActionValues = listOf(
         ConfigManager.MORE_CLICK_MODULE,
+        ConfigManager.MORE_CLICK_SMART_AUDIO,
         ConfigManager.MORE_CLICK_SYSTEM_SETTINGS,
     )
     val moreClickActionOptions = listOf(
         stringResource(R.string.click_action_module),
+        stringResource(R.string.click_action_smart_audio),
         stringResource(R.string.click_action_system_settings),
     )
     LazyColumn(
@@ -153,6 +159,12 @@ fun SettingsPage(
                     summary = stringResource(R.string.lockscreen_notification_summary),
                     checked = lockscreenNotificationEnabled.value,
                     onCheckedChange = onLockscreenNotificationEnabledChange,
+                )
+                SwitchPreference(
+                    title = stringResource(R.string.milink_low_latency_card),
+                    summary = stringResource(R.string.milink_low_latency_card_summary),
+                    checked = milinkLowLatencyCardEnabled.value,
+                    onCheckedChange = onMilinkLowLatencyCardEnabledChange,
                 )
                 OverlayDropdownPreference(
                     title = stringResource(R.string.notification_click_action),

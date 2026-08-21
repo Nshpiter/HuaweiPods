@@ -82,6 +82,35 @@ class LowLatencyPrefsTest {
         assertTrue(local.getBoolean(freeClipKey, false))
     }
 
+    @Test
+    fun `hook processes share the same desired state writer`() {
+        val prefs = inMemoryPreferences()
+        LowLatencyPrefs.attachHookPreferences(prefs)
+
+        assertTrue(
+            LowLatencyPrefs.setDesiredFromHook(
+                address,
+                HuaweiDeviceRoute.HUAWEI_FREEBUDS5,
+                true,
+            ),
+        )
+        assertTrue(
+            requireNotNull(
+                LowLatencyPrefs.desiredForHook(
+                    address,
+                    HuaweiDeviceRoute.HUAWEI_FREEBUDS5,
+                ),
+            ),
+        )
+        assertFalse(
+            LowLatencyPrefs.setDesiredFromHook(
+                address,
+                HuaweiDeviceRoute.HUAWEI_FREEBUDS3,
+                true,
+            ),
+        )
+    }
+
     private fun inMemoryPreferences(): SharedPreferences {
         val values = ConcurrentHashMap<String, Any>()
         return Proxy.newProxyInstance(

@@ -16,6 +16,7 @@ data class AppConfig(
     val lockscreenNotificationEnabled: Boolean = true,
     val notificationClickAction: Int = ConfigManager.NOTIFICATION_CLICK_MODULE_POPUP,
     val moreClickAction: Int = ConfigManager.MORE_CLICK_MODULE,
+    val milinkLowLatencyCardEnabled: Boolean = true,
 )
 
 object ConfigManager {
@@ -31,6 +32,7 @@ object ConfigManager {
     const val PREF_KEY_LOCKSCREEN_NOTIFICATION_ENABLED = "lockscreen_notification_enabled"
     const val PREF_KEY_NOTIFICATION_CLICK_ACTION = "notification_click_action"
     const val PREF_KEY_MORE_CLICK_ACTION = "more_click_action"
+    const val PREF_KEY_MILINK_LOW_LATENCY_CARD_ENABLED = "milink_low_latency_card_enabled"
     const val DEFAULT_FAKE_DEVICE_ID = "01010607"
     const val LOG_LEVEL_OFF = 0
     const val LOG_LEVEL_BASIC = 1
@@ -40,6 +42,8 @@ object ConfigManager {
     const val ISLAND_MODE_MODULE = 2
     const val NOTIFICATION_CLICK_MODULE_POPUP = 0
     const val NOTIFICATION_CLICK_SYSTEM_SETTINGS = 1
+    const val NOTIFICATION_CLICK_SMART_AUDIO = 2
+    const val MORE_CLICK_SMART_AUDIO = 0
     const val MORE_CLICK_SYSTEM_SETTINGS = 1
     const val MORE_CLICK_MODULE = 2
 
@@ -85,6 +89,8 @@ object ConfigManager {
     fun notificationClickAction(): Int = current().notificationClickAction.normalizedNotificationClickAction()
 
     fun moreClickAction(): Int = current().moreClickAction.normalizedMoreClickAction()
+
+    fun milinkLowLatencyCardEnabled(): Boolean = current().milinkLowLatencyCardEnabled
 
     fun fakeSupport(): String = "${fakeDeviceId()},000000000000000010000000"
 
@@ -149,6 +155,14 @@ object ConfigManager {
         save(prefs, service, config)
     }
 
+    fun updateMilinkLowLatencyCardEnabled(
+        prefs: SharedPreferences,
+        service: XposedService?,
+        enabled: Boolean,
+    ) {
+        save(prefs, service, current().copy(milinkLowLatencyCardEnabled = enabled))
+    }
+
     fun save(prefs: SharedPreferences, config: AppConfig) {
         val oldConfig = cachedConfig
         val normalized = config.copy(fakeDeviceId = config.fakeDeviceId.normalizedFakeDeviceId())
@@ -180,6 +194,10 @@ object ConfigManager {
             .putBoolean(PREF_KEY_LOCKSCREEN_NOTIFICATION_ENABLED, config.lockscreenNotificationEnabled)
             .putInt(PREF_KEY_NOTIFICATION_CLICK_ACTION, config.notificationClickAction)
             .putInt(PREF_KEY_MORE_CLICK_ACTION, config.moreClickAction)
+            .putBoolean(
+                PREF_KEY_MILINK_LOW_LATENCY_CARD_ENABLED,
+                config.milinkLowLatencyCardEnabled,
+            )
             .commit()
     }
 
@@ -196,6 +214,9 @@ object ConfigManager {
         )
         val directNotificationClickAction = prefs.getInt(PREF_KEY_NOTIFICATION_CLICK_ACTION, Int.MIN_VALUE)
         val directMoreClickAction = prefs.getInt(PREF_KEY_MORE_CLICK_ACTION, Int.MIN_VALUE)
+        val directMilinkLowLatencyCardEnabled = prefs.booleanOrNull(
+            PREF_KEY_MILINK_LOW_LATENCY_CARD_ENABLED,
+        )
         val raw = prefs.getString(PREF_KEY_CONFIG_JSON, null)
         logPrefsSnapshot(source, prefs, directFakeDeviceId, raw)
         val config = raw?.let {
@@ -219,6 +240,8 @@ object ConfigManager {
                     ?: config.lockscreenNotificationEnabled,
                 notificationClickAction = directNotificationClickAction.takeIf { it != Int.MIN_VALUE } ?: config.notificationClickAction,
                 moreClickAction = directMoreClickAction.takeIf { it != Int.MIN_VALUE } ?: config.moreClickAction,
+                milinkLowLatencyCardEnabled = directMilinkLowLatencyCardEnabled
+                    ?: config.milinkLowLatencyCardEnabled,
             ).normalized()
         }
         return config.copy(
@@ -232,6 +255,8 @@ object ConfigManager {
                 ?: config.lockscreenNotificationEnabled,
             notificationClickAction = directNotificationClickAction.takeIf { it != Int.MIN_VALUE } ?: config.notificationClickAction,
             moreClickAction = directMoreClickAction.takeIf { it != Int.MIN_VALUE } ?: config.moreClickAction,
+            milinkLowLatencyCardEnabled = directMilinkLowLatencyCardEnabled
+                ?: config.milinkLowLatencyCardEnabled,
         ).normalized()
     }
 
@@ -245,11 +270,20 @@ object ConfigManager {
 
     private fun String.normalizedFakeDeviceId(): String = trim().takeIf { it.isNotEmpty() } ?: DEFAULT_FAKE_DEVICE_ID
 
-    private fun Int.normalizedNotificationClickAction(): Int =
-        if (this == NOTIFICATION_CLICK_SYSTEM_SETTINGS) NOTIFICATION_CLICK_SYSTEM_SETTINGS else NOTIFICATION_CLICK_MODULE_POPUP
+    internal fun Int.normalizedNotificationClickAction(): Int = when (this) {
+        NOTIFICATION_CLICK_SYSTEM_SETTINGS,
+        NOTIFICATION_CLICK_SMART_AUDIO,
+        -> this
+        else -> NOTIFICATION_CLICK_MODULE_POPUP
+    }
 
-    private fun Int.normalizedMoreClickAction(): Int =
-        if (this == MORE_CLICK_SYSTEM_SETTINGS) MORE_CLICK_SYSTEM_SETTINGS else MORE_CLICK_MODULE
+    internal fun Int.normalizedMoreClickAction(): Int = when (this) {
+        MORE_CLICK_SMART_AUDIO,
+        MORE_CLICK_SYSTEM_SETTINGS,
+        MORE_CLICK_MODULE,
+        -> this
+        else -> MORE_CLICK_MODULE
+    }
 
     private fun SharedPreferences.booleanOrNull(key: String): Boolean? =
         if (contains(key)) getBoolean(key, false) else null
@@ -303,6 +337,12 @@ object ConfigManager {
             }
             if (oldConfig.moreClickAction != newConfig.moreClickAction) {
                 add("moreClickAction=${oldConfig.moreClickAction}->${newConfig.moreClickAction}")
+            }
+            if (oldConfig.milinkLowLatencyCardEnabled != newConfig.milinkLowLatencyCardEnabled) {
+                add(
+                    "milinkLowLatencyCardEnabled=${oldConfig.milinkLowLatencyCardEnabled}->" +
+                        newConfig.milinkLowLatencyCardEnabled,
+                )
             }
         }
     }

@@ -42,13 +42,23 @@ import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
-/** FreeBuds 5-only settings backed by the 2026-07-20 guided capture. */
+/** Shared FreeBuds 5 / 5i settings backed by their guided captures. */
 @Composable
-fun FreeBuds5Controls(address: String) {
+fun FreeBuds5Controls(
+    address: String,
+    route: HuaweiDeviceRoute = HuaweiDeviceRoute.HUAWEI_FREEBUDS5,
+) {
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences(ConfigManager.PREFS_NAME, Context.MODE_PRIVATE) }
-    val keyPrefix = remember(address) { "freebuds5_${address.uppercase().ifBlank { "unknown" }}_" }
-    var settingsState by remember(address) {
+    val keyPrefix = remember(address, route) {
+        val modelPrefix = if (route == HuaweiDeviceRoute.HUAWEI_FREEBUDS5I) {
+            "freebuds5i"
+        } else {
+            "freebuds5"
+        }
+        "${modelPrefix}_${address.uppercase().ifBlank { "unknown" }}_"
+    }
+    var settingsState by remember(address, route) {
         mutableStateOf(
             FreeBuds5SettingsState(
                 wearDetection = prefs.nullableBoolean(keyPrefix + "wear_detection"),
@@ -58,17 +68,17 @@ fun FreeBuds5Controls(address: String) {
             ),
         )
     }
-    var lowLatency by remember(address) {
+    var lowLatency by remember(address, route) {
         mutableStateOf(
             LowLatencyPrefs.desiredOrNull(
                 prefs,
                 address,
-                HuaweiDeviceRoute.HUAWEI_FREEBUDS5,
+                route,
             ),
         )
     }
 
-    FreeBuds5ReadbackEffect(address) { update ->
+    FreeBuds5ReadbackEffect(address, route) { update ->
         settingsState = mergeFreeBuds5SettingsState(settingsState, update)
         update.wearDetection?.let {
             prefs.edit().putBoolean(keyPrefix + "wear_detection", it).apply()
@@ -87,7 +97,7 @@ fun FreeBuds5Controls(address: String) {
             titleRes = R.string.freebuds5_wear_detection,
             value = settingsState.wearDetection,
             onChange = { enabled, complete ->
-                context.setFreeBuds5WearDetection(address, enabled) { success ->
+                context.setFreeBuds5WearDetection(address, route, enabled) { success ->
                     if (success) {
                         settingsState = mergeFreeBuds5SettingsState(
                             settingsState,
@@ -104,7 +114,7 @@ fun FreeBuds5Controls(address: String) {
         FreeBuds5SoundEffectPreference(
             selected = settingsState.soundEffect,
             onSelected = { effect, complete ->
-                context.setFreeBuds5SoundEffect(address, effect) { success ->
+                context.setFreeBuds5SoundEffect(address, route, effect) { success ->
                     if (success) {
                         settingsState = mergeFreeBuds5SettingsState(
                             settingsState,
@@ -120,7 +130,7 @@ fun FreeBuds5Controls(address: String) {
             titleRes = R.string.freebuds5_high_quality_audio,
             value = settingsState.highQualityAudio,
             onChange = { enabled, complete ->
-                context.setFreeBuds5HighQualityAudio(address, enabled) { success ->
+                context.setFreeBuds5HighQualityAudio(address, route, enabled) { success ->
                     if (success) {
                         settingsState = mergeFreeBuds5SettingsState(
                             settingsState,
@@ -136,13 +146,13 @@ fun FreeBuds5Controls(address: String) {
             titleRes = R.string.freebuds5_low_latency,
             value = lowLatency,
             onChange = { enabled, complete ->
-                context.setFreeBuds5LowLatency(address, enabled) { success ->
+                context.setFreeBuds5LowLatency(address, route, enabled) { success ->
                     if (success) {
                         val stored = LowLatencyPrefs.setDesired(
                             prefs = prefs,
                             service = HuaweiPodsApp.xposedService,
                             address = address,
-                            route = HuaweiDeviceRoute.HUAWEI_FREEBUDS5,
+                            route = route,
                             enabled = enabled,
                         )
                         if (stored) lowLatency = enabled
@@ -289,24 +299,25 @@ private fun FreeBuds5SoundEffectPreference(
 @Composable
 private fun FreeBuds5ReadbackEffect(
     address: String,
+    route: HuaweiDeviceRoute,
     onReadback: (FreeBuds5SettingsState) -> Unit,
 ) {
     val context = LocalContext.current
     val currentOnReadback by rememberUpdatedState(onReadback)
-    DisposableEffect(address, context) {
+    DisposableEffect(address, route, context) {
         val device = context.freeBuds5Device(address)
             ?: return@DisposableEffect onDispose { }
         var disposed = false
         fun publish(update: FreeBuds5SettingsState) {
             if (!disposed) currentOnReadback(update)
         }
-        HuaweiFreeBuds5Controller.requestWearDetectionState(context, device) { value ->
+        HuaweiFreeBuds5Controller.requestWearDetectionState(context, device, route) { value ->
             value?.let { publish(FreeBuds5SettingsState(wearDetection = it)) }
         }
-        HuaweiFreeBuds5Controller.requestSoundEffectState(context, device) { value ->
+        HuaweiFreeBuds5Controller.requestSoundEffectState(context, device, route) { value ->
             value?.let { publish(FreeBuds5SettingsState(soundEffect = it)) }
         }
-        HuaweiFreeBuds5Controller.requestHighQualityAudioState(context, device) { value ->
+        HuaweiFreeBuds5Controller.requestHighQualityAudioState(context, device, route) { value ->
             value?.let { publish(FreeBuds5SettingsState(highQualityAudio = it)) }
         }
         onDispose { disposed = true }
@@ -322,38 +333,42 @@ private fun Context.freeBuds5Device(address: String) =
 
 private fun Context.setFreeBuds5WearDetection(
     address: String,
+    route: HuaweiDeviceRoute,
     enabled: Boolean,
     complete: (Boolean) -> Unit,
 ) {
     val device = freeBuds5Device(address) ?: return complete(false)
-    HuaweiFreeBuds5Controller.setWearDetection(this, device, enabled, complete)
+    HuaweiFreeBuds5Controller.setWearDetection(this, device, route, enabled, complete)
 }
 
 private fun Context.setFreeBuds5SoundEffect(
     address: String,
+    route: HuaweiDeviceRoute,
     effect: FreeBuds5SoundEffect,
     complete: (Boolean) -> Unit,
 ) {
     val device = freeBuds5Device(address) ?: return complete(false)
-    HuaweiFreeBuds5Controller.setSoundEffect(this, device, effect, complete)
+    HuaweiFreeBuds5Controller.setSoundEffect(this, device, route, effect, complete)
 }
 
 private fun Context.setFreeBuds5HighQualityAudio(
     address: String,
+    route: HuaweiDeviceRoute,
     enabled: Boolean,
     complete: (Boolean) -> Unit,
 ) {
     val device = freeBuds5Device(address) ?: return complete(false)
-    HuaweiFreeBuds5Controller.setHighQualityAudio(this, device, enabled, complete)
+    HuaweiFreeBuds5Controller.setHighQualityAudio(this, device, route, enabled, complete)
 }
 
 private fun Context.setFreeBuds5LowLatency(
     address: String,
+    route: HuaweiDeviceRoute,
     enabled: Boolean,
     complete: (Boolean) -> Unit,
 ) {
     val device = freeBuds5Device(address) ?: return complete(false)
-    HuaweiFreeBuds5Controller.setLowLatency(this, device, enabled, complete)
+    HuaweiFreeBuds5Controller.setLowLatency(this, device, route, enabled, complete)
 }
 
 private fun FreeBuds5SoundEffect.labelRes(): Int = when (this) {

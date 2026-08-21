@@ -86,14 +86,16 @@ object HuaweiEqualizerCodec {
     }
 
     /**
-     * Builds the official built-in preset command captured from FreeBuds 4E.
+     * Builds the official built-in preset command captured from supported models.
      *
      * 4E only exposed ids 1=default, 2=bass enhance and 3=treble enhance in the guided
-     * capture. Do not accept the clear-voice id used by newer models without protocol evidence.
+     * capture. FreeBuds 6i reported ids 1/2/3/9 in its verified 0x2B/0x4A state frame.
      */
     fun buildBuiltInPresetPacket(route: HuaweiDeviceRoute, presetId: Int): ByteArray? {
         val allowedIds = when (route) {
-            HuaweiDeviceRoute.HUAWEI_FREEBUDS4E -> 1..3
+            HuaweiDeviceRoute.HUAWEI_FREEBUDS4E -> setOf(1, 2, 3)
+            HuaweiDeviceRoute.HUAWEI_FREEBUDS6I -> setOf(0x01, 0x02, 0x03, 0x09)
+            HuaweiDeviceRoute.HUAWEI_FREEARC -> setOf(0x01, 0x0A, 0x02, 0x03, 0x09)
             else -> return null
         }
         if (presetId !in allowedIds) return null
@@ -111,6 +113,7 @@ object HuaweiEqualizerCodec {
     fun customWriteOperation(route: HuaweiDeviceRoute): Int? = when (route) {
         HuaweiDeviceRoute.HUAWEI_FREEBUDS6I -> 0x01
         HuaweiDeviceRoute.HUAWEI_FREEBUDS7I -> 0x00
+        HuaweiDeviceRoute.HUAWEI_FREEARC -> 0x01
         else -> null
     }
 
@@ -120,6 +123,7 @@ object HuaweiEqualizerCodec {
         HuaweiDeviceRoute.HUAWEI_FREEBUDS6I,
         HuaweiDeviceRoute.HUAWEI_FREEBUDS7I,
         HuaweiDeviceRoute.HUAWEI_FREECLIP2,
+        HuaweiDeviceRoute.HUAWEI_FREEARC,
     )
 
     private fun parseCustomPresets(bytes: ByteArray?): List<HuaweiEqualizerPreset>? {

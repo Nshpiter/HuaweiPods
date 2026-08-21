@@ -14,16 +14,14 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.calculateEndPadding
-import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -31,13 +29,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -52,10 +49,8 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import moe.chenxy.huaweipods.MainActivity
 import moe.chenxy.huaweipods.R
@@ -67,9 +62,14 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TextField
+import top.yukonga.miuix.kmp.basic.TopAppBar
+import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.GridView
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /** Debug 构建专用的协议采集入口；Release 源集中不存在此 Activity。 */
@@ -107,7 +107,6 @@ private const val PREF_ISSUE = "issue"
 private const val PREF_OFFICIAL_PACKAGE = "official_package"
 private const val PREF_HANDLED_SESSION_ID = "handled_session_id"
 private const val STATUS_PREFIX = "status."
-private const val FEATURE_CATALOG_VERSION = "huawei-headset-v1"
 private const val NAME_SOURCE_MANUAL = "manual"
 
 private const val SMART_AUDIO_PACKAGE = SmartAudioCaptureTarget.PACKAGE_NAME
@@ -120,6 +119,35 @@ private enum class StepStatus {
     ABORTED,
 }
 
+private enum class StepAction(
+    val markerSuffix: String,
+    val targetStatus: StepStatus,
+) {
+    START("start", StepStatus.ACTIVE),
+    COMPLETE("done", StepStatus.DONE),
+    SKIP("skipped", StepStatus.SKIPPED),
+    RESET("reset", StepStatus.PENDING),
+}
+
+private val StepStatus.isResolved: Boolean
+    get() = this == StepStatus.DONE || this == StepStatus.SKIPPED || this == StepStatus.ABORTED
+
+private fun StepStatus.accepts(action: StepAction): Boolean = when (action) {
+    StepAction.START -> this == StepStatus.PENDING
+    StepAction.COMPLETE -> this == StepStatus.ACTIVE
+    StepAction.SKIP -> this == StepStatus.PENDING || this == StepStatus.ACTIVE
+    StepAction.RESET -> isResolved
+}
+
+private enum class CaptureStepGroup(@StringRes val titleRes: Int) {
+    DEVICE(R.string.debug_capture_group_device),
+    NOISE_VOLUME(R.string.debug_capture_group_noise_volume),
+    GESTURE_WEAR(R.string.debug_capture_group_gesture_wear),
+    SOUND_QUALITY(R.string.debug_capture_group_sound_quality),
+    CONNECTION_CASE(R.string.debug_capture_group_connection_case),
+    REVIEW(R.string.debug_capture_group_review),
+}
+
 private data class OfficialApp(
     val packageName: String,
     @StringRes val labelRes: Int,
@@ -129,6 +157,7 @@ private data class CaptureStep(
     val key: String,
     @StringRes val titleRes: Int,
     @StringRes val descriptionRes: Int,
+    val group: CaptureStepGroup,
 )
 
 private val officialApps = listOf(
@@ -140,30 +169,36 @@ private val officialApps = listOf(
  * 任意设备缺少的项目都可以明确跳过。
  */
 private val allHuaweiHeadsetSteps = listOf(
-    CaptureStep("device_overview", R.string.debug_capture_step_device_overview_title, R.string.debug_capture_step_device_overview_desc),
-    CaptureStep("device_info", R.string.debug_capture_step_device_info_title, R.string.debug_capture_step_device_info_desc),
-    CaptureStep("battery_state", R.string.debug_capture_step_battery_state_title, R.string.debug_capture_step_battery_state_desc),
-    CaptureStep("noise_modes", R.string.debug_capture_step_noise_modes_title, R.string.debug_capture_step_noise_modes_desc),
-    CaptureStep("noise_submodes", R.string.debug_capture_step_noise_submodes_title, R.string.debug_capture_step_noise_submodes_desc),
-    CaptureStep("gesture_tap", R.string.debug_capture_step_gesture_tap_title, R.string.debug_capture_step_gesture_tap_desc),
-    CaptureStep("gesture_press", R.string.debug_capture_step_gesture_press_title, R.string.debug_capture_step_gesture_press_desc),
-    CaptureStep("gesture_swipe_buttons", R.string.debug_capture_step_gesture_swipe_buttons_title, R.string.debug_capture_step_gesture_swipe_buttons_desc),
-    CaptureStep("wear_detection", R.string.debug_capture_step_wear_detection_title, R.string.debug_capture_step_wear_detection_desc),
-    CaptureStep("drop_reminder", R.string.debug_capture_step_drop_reminder_title, R.string.debug_capture_step_drop_reminder_desc),
-    CaptureStep("adaptive_audio", R.string.debug_capture_step_adaptive_audio_title, R.string.debug_capture_step_adaptive_audio_desc),
-    CaptureStep("head_motion", R.string.debug_capture_step_head_motion_title, R.string.debug_capture_step_head_motion_desc),
-    CaptureStep("voice_control", R.string.debug_capture_step_voice_control_title, R.string.debug_capture_step_voice_control_desc),
-    CaptureStep("equalizer", R.string.debug_capture_step_equalizer_title, R.string.debug_capture_step_equalizer_desc),
-    CaptureStep("spatial_audio", R.string.debug_capture_step_spatial_audio_title, R.string.debug_capture_step_spatial_audio_desc),
-    CaptureStep("audio_quality", R.string.debug_capture_step_audio_quality_title, R.string.debug_capture_step_audio_quality_desc),
-    CaptureStep("low_latency", R.string.debug_capture_step_low_latency_title, R.string.debug_capture_step_low_latency_desc),
-    CaptureStep("dual_device", R.string.debug_capture_step_dual_device_title, R.string.debug_capture_step_dual_device_desc),
-    CaptureStep("case_settings", R.string.debug_capture_step_case_settings_title, R.string.debug_capture_step_case_settings_desc),
-    CaptureStep("ear_fit", R.string.debug_capture_step_ear_fit_title, R.string.debug_capture_step_ear_fit_desc),
-    CaptureStep("magnetic_power", R.string.debug_capture_step_magnetic_power_title, R.string.debug_capture_step_magnetic_power_desc),
-    CaptureStep("disconnect_reconnect", R.string.debug_capture_step_disconnect_reconnect_title, R.string.debug_capture_step_disconnect_reconnect_desc),
-    CaptureStep("other_feature", R.string.debug_capture_step_other_feature_title, R.string.debug_capture_step_other_feature_desc),
+    CaptureStep("device_overview", R.string.debug_capture_step_device_overview_title, R.string.debug_capture_step_device_overview_desc, CaptureStepGroup.DEVICE),
+    CaptureStep("device_info", R.string.debug_capture_step_device_info_title, R.string.debug_capture_step_device_info_desc, CaptureStepGroup.DEVICE),
+    CaptureStep("battery_state", R.string.debug_capture_step_battery_state_title, R.string.debug_capture_step_battery_state_desc, CaptureStepGroup.DEVICE),
+    CaptureStep("noise_modes", R.string.debug_capture_step_noise_modes_title, R.string.debug_capture_step_noise_modes_desc, CaptureStepGroup.NOISE_VOLUME),
+    CaptureStep("noise_submodes", R.string.debug_capture_step_noise_submodes_title, R.string.debug_capture_step_noise_submodes_desc, CaptureStepGroup.NOISE_VOLUME),
+    CaptureStep("adaptive_audio", R.string.debug_capture_step_adaptive_audio_title, R.string.debug_capture_step_adaptive_audio_desc, CaptureStepGroup.NOISE_VOLUME),
+    CaptureStep("noisy_volume_boost", R.string.debug_capture_step_noisy_volume_boost_title, R.string.debug_capture_step_noisy_volume_boost_desc, CaptureStepGroup.NOISE_VOLUME),
+    CaptureStep("gesture_tap", R.string.debug_capture_step_gesture_tap_title, R.string.debug_capture_step_gesture_tap_desc, CaptureStepGroup.GESTURE_WEAR),
+    CaptureStep("gesture_press", R.string.debug_capture_step_gesture_press_title, R.string.debug_capture_step_gesture_press_desc, CaptureStepGroup.GESTURE_WEAR),
+    CaptureStep("gesture_swipe_buttons", R.string.debug_capture_step_gesture_swipe_buttons_title, R.string.debug_capture_step_gesture_swipe_buttons_desc, CaptureStepGroup.GESTURE_WEAR),
+    CaptureStep("wear_detection", R.string.debug_capture_step_wear_detection_title, R.string.debug_capture_step_wear_detection_desc, CaptureStepGroup.GESTURE_WEAR),
+    CaptureStep("drop_reminder", R.string.debug_capture_step_drop_reminder_title, R.string.debug_capture_step_drop_reminder_desc, CaptureStepGroup.GESTURE_WEAR),
+    CaptureStep("head_motion", R.string.debug_capture_step_head_motion_title, R.string.debug_capture_step_head_motion_desc, CaptureStepGroup.GESTURE_WEAR),
+    CaptureStep("voice_control", R.string.debug_capture_step_voice_control_title, R.string.debug_capture_step_voice_control_desc, CaptureStepGroup.GESTURE_WEAR),
+    CaptureStep("equalizer", R.string.debug_capture_step_equalizer_title, R.string.debug_capture_step_equalizer_desc, CaptureStepGroup.SOUND_QUALITY),
+    CaptureStep("spatial_audio", R.string.debug_capture_step_spatial_audio_title, R.string.debug_capture_step_spatial_audio_desc, CaptureStepGroup.SOUND_QUALITY),
+    CaptureStep("audio_quality", R.string.debug_capture_step_audio_quality_title, R.string.debug_capture_step_audio_quality_desc, CaptureStepGroup.SOUND_QUALITY),
+    CaptureStep("low_latency", R.string.debug_capture_step_low_latency_title, R.string.debug_capture_step_low_latency_desc, CaptureStepGroup.SOUND_QUALITY),
+    CaptureStep("dual_device", R.string.debug_capture_step_dual_device_title, R.string.debug_capture_step_dual_device_desc, CaptureStepGroup.CONNECTION_CASE),
+    CaptureStep("connection_center", R.string.debug_capture_step_connection_center_title, R.string.debug_capture_step_connection_center_desc, CaptureStepGroup.CONNECTION_CASE),
+    CaptureStep("case_sound", R.string.debug_capture_step_case_sound_title, R.string.debug_capture_step_case_sound_desc, CaptureStepGroup.CONNECTION_CASE),
+    CaptureStep("smart_charging", R.string.debug_capture_step_smart_charging_title, R.string.debug_capture_step_smart_charging_desc, CaptureStepGroup.CONNECTION_CASE),
+    CaptureStep("case_settings", R.string.debug_capture_step_case_settings_title, R.string.debug_capture_step_case_settings_desc, CaptureStepGroup.CONNECTION_CASE),
+    CaptureStep("ear_fit", R.string.debug_capture_step_ear_fit_title, R.string.debug_capture_step_ear_fit_desc, CaptureStepGroup.REVIEW),
+    CaptureStep("magnetic_power", R.string.debug_capture_step_magnetic_power_title, R.string.debug_capture_step_magnetic_power_desc, CaptureStepGroup.REVIEW),
+    CaptureStep("disconnect_reconnect", R.string.debug_capture_step_disconnect_reconnect_title, R.string.debug_capture_step_disconnect_reconnect_desc, CaptureStepGroup.REVIEW),
+    CaptureStep("other_feature", R.string.debug_capture_step_other_feature_title, R.string.debug_capture_step_other_feature_desc, CaptureStepGroup.REVIEW),
 )
+
+private val groupedHuaweiHeadsetSteps = allHuaweiHeadsetSteps.groupBy(CaptureStep::group)
 
 @Composable
 private fun CaptureGuideScreen(
@@ -171,12 +206,10 @@ private fun CaptureGuideScreen(
     onOpenMain: () -> Unit,
 ) {
     val context = LocalContext.current
-    val resources = LocalResources.current
     val coroutineScope = rememberCoroutineScope()
     val startFailedPrefix = stringResource(R.string.debug_capture_start_failed, "")
     val stopFailedPrefix = stringResource(R.string.debug_capture_stop_failed, "")
     val exportFailedPrefix = stringResource(R.string.debug_capture_export_failed, "")
-    val assetsImportFailedPrefix = stringResource(R.string.debug_capture_assets_import_failed, "")
     val prefs = remember { context.getSharedPreferences(GUIDE_PREFS, Context.MODE_PRIVATE) }
     val installedApps = remember(resumeToken) {
         officialApps.filter { context.isPackageInstalled(it.packageName) }
@@ -221,10 +254,7 @@ private fun CaptureGuideScreen(
         )
     }
     var onlyTargetChecked by rememberSaveable { mutableStateOf(false) }
-    var officialAppChecked by rememberSaveable { mutableStateOf(false) }
     var scopeChecked by rememberSaveable { mutableStateOf(false) }
-    var privacyChecked by rememberSaveable { mutableStateOf(false) }
-    var includeHciSnoop by rememberSaveable { mutableStateOf(false) }
     var smartAudioAssetsAttached by rememberSaveable {
         mutableStateOf(
             CaptureStore.hasSmartAudioAssets(
@@ -276,38 +306,6 @@ private fun CaptureGuideScreen(
         bluetoothPermissionGranted = granted
         if (granted) detectionRefreshToken++
     }
-    val smartAudioAssetsLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocument(),
-    ) { uri ->
-        if (uri == null || storageBusy) return@rememberLauncherForActivityResult
-        val targetSessionId = latestSessionId ?: return@rememberLauncherForActivityResult
-        storageBusy = true
-        coroutineScope.launch {
-            runCatching {
-                withContext(Dispatchers.IO) {
-                    CaptureStore.attachSmartAudioAssets(
-                        context = context,
-                        expectedSessionId = targetSessionId,
-                        sourceUri = uri,
-                    )
-                }
-            }.onSuccess { attachment ->
-                smartAudioAssetsAttached = true
-                context.toast(
-                    resources.getString(
-                        R.string.debug_capture_assets_imported,
-                        attachment.mainImageCount,
-                        attachment.leftImageCount,
-                        attachment.rightImageCount,
-                    ),
-                )
-            }.onFailure {
-                context.toast(assetsImportFailedPrefix + it.userMessage())
-            }
-            storageBusy = false
-        }
-    }
-
     LaunchedEffect(installedApps, selectedOfficialPackage, captureActive) {
         if (!captureActive && selectedOfficialPackage !in installedApps.map { it.packageName }) {
             selectedOfficialPackage = installedApps.firstOrNull()?.packageName
@@ -377,10 +375,9 @@ private fun CaptureGuideScreen(
     }
 
     val steps = allHuaweiHeadsetSteps
+    val groupedSteps = groupedHuaweiHeadsetSteps
     val activeStep = steps.firstOrNull { statusByKey[it.key] == StepStatus.ACTIVE }
-    val completedCount = steps.count {
-        statusByKey[it.key] in setOf(StepStatus.DONE, StepStatus.SKIPPED, StepStatus.ABORTED)
-    }
+    val completedCount = steps.count { statusByKey[it.key]?.isResolved == true }
     var currentProtocolEventCount by remember {
         mutableStateOf(
             (initialStoreState?.activeSession ?: initialStoreState?.latestSession)
@@ -440,29 +437,92 @@ private fun CaptureGuideScreen(
         selectedOfficialPackage == SMART_AUDIO_PACKAGE &&
         !detectingHeadsets &&
         selectedConnectedHeadset != null &&
-        onlyTargetChecked && officialAppChecked && scopeChecked && privacyChecked && issueValid
+        onlyTargetChecked && scopeChecked && issueValid
 
-    val safeDrawing = WindowInsets.safeDrawing.asPaddingValues()
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(
-            start = safeDrawing.calculateStartPadding(LayoutDirection.Ltr) + 12.dp,
-            top = safeDrawing.calculateTopPadding() + 16.dp,
-            end = safeDrawing.calculateEndPadding(LayoutDirection.Ltr) + 12.dp,
-            bottom = safeDrawing.calculateBottomPadding() + 24.dp,
-        ),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+    fun runStepAction(
+        step: CaptureStep,
+        action: StepAction,
+        details: String,
+        onSuccess: () -> Unit = {},
     ) {
-        item {
-            CaptureHeader(onOpenMain = onOpenMain)
-        }
-        item {
-            PrivacyCard()
-        }
+        val currentStatus = statusByKey[step.key] ?: StepStatus.PENDING
+        if (storageBusy || !currentStatus.accepts(action)) return
 
-        when {
+        storageBusy = true
+        coroutineScope.launch {
+            try {
+                val marked = addMarkerSafely(
+                    context = context,
+                    label = "operation.${step.key}.${action.markerSuffix}",
+                    details = details,
+                )
+                if (marked) {
+                    updateStatus(
+                        contextPrefs = prefs,
+                        statuses = statusByKey,
+                        sessionId = activeSessionId,
+                        key = step.key,
+                        status = action.targetStatus,
+                    )
+                    onSuccess()
+                } else {
+                    context.toast(R.string.debug_capture_marker_failed)
+                }
+            } finally {
+                storageBusy = false
+            }
+        }
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = stringResource(R.string.debug_capture_title),
+                navigationIcon = {
+                    Row(
+                        modifier = Modifier
+                            .padding(start = 12.dp)
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(MiuixTheme.colorScheme.primary.copy(alpha = 0.12f))
+                            .clickable(onClick = onOpenMain)
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            imageVector = MiuixIcons.GridView,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                            tint = MiuixTheme.colorScheme.primary,
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = stringResource(R.string.debug_capture_open_main_short),
+                            color = MiuixTheme.colorScheme.primary,
+                            style = MiuixTheme.textStyles.body2,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
+                },
+            )
+        },
+    ) { pagePadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(
+                    PaddingValues(
+                        start = 16.dp,
+                        top = pagePadding.calculateTopPadding() + 12.dp,
+                        end = 16.dp,
+                        bottom = pagePadding.calculateBottomPadding() + 24.dp,
+                    ),
+                ),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            when {
             captureActive -> {
-                item {
+                key("capture_progress") {
                     SectionCard(title = stringResource(R.string.debug_capture_active_title)) {
                         StatusBadge(
                             text = stringResource(R.string.debug_capture_active_badge),
@@ -518,112 +578,98 @@ private fun CaptureGuideScreen(
                         }
                     }
                 }
-                items(steps, key = { it.key }) { step ->
-                    val status = statusByKey[step.key] ?: StepStatus.PENDING
-                    val title = stringResource(step.titleRes)
-                    val description = stringResource(step.descriptionRes)
-                    OperationCard(
-                        step = step,
-                        status = status,
-                        blockedByAnotherStep = currentHookReadyCount == 0L ||
-                            storageBusy ||
-                            (activeStep != null && activeStep.key != step.key),
-                        busy = storageBusy,
-                        onStart = startStep@{
-                            if (storageBusy) return@startStep
-                            val details = markerDetails(activeHeadsetName, title, description)
-                            storageBusy = true
-                            coroutineScope.launch {
-                                try {
-                                    val marked = addMarkerSafely(
-                                        context,
-                                        "operation.${step.key}.start",
-                                        details,
-                                    )
-                                    if (marked) {
-                                        updateStatus(
-                                            prefs,
-                                            statusByKey,
-                                            activeSessionId,
-                                            step.key,
-                                            StepStatus.ACTIVE,
-                                        )
+                // 步骤数量固定且较少，进入页面时一次完成组合，避免快速滑动期间逐项组合造成掉帧。
+                groupedSteps.forEach { (group, groupSteps) ->
+                    key("group.${group.name}") {
+                        StepGroupHeader(
+                            group = group,
+                            completed = groupSteps.count {
+                                statusByKey[it.key]?.isResolved == true
+                            },
+                            total = groupSteps.size,
+                        )
+                    }
+                    groupSteps.forEach { step ->
+                        val status = statusByKey[step.key] ?: StepStatus.PENDING
+                        val title = stringResource(step.titleRes)
+                        val description = stringResource(step.descriptionRes)
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(18.dp))
+                                .background(MiuixTheme.colorScheme.surfaceContainer),
+                        ) {
+                            OperationRow(
+                                step = step,
+                                status = status,
+                                blockedByAnotherStep = currentHookReadyCount == 0L ||
+                                    storageBusy ||
+                                    (activeStep != null && activeStep.key != step.key),
+                                busy = storageBusy,
+                                onStart = {
+                                    runStepAction(
+                                        step = step,
+                                        action = StepAction.START,
+                                        details = markerDetails(
+                                            activeHeadsetName,
+                                            title,
+                                            description,
+                                        ),
+                                    ) {
                                         if (!context.openOfficialApp(selectedOfficialPackage)) {
-                                            context.toast(R.string.debug_capture_official_open_failed)
+                                            context.toast(
+                                                R.string.debug_capture_official_open_failed,
+                                            )
                                         }
-                                    } else {
-                                        context.toast(R.string.debug_capture_marker_failed)
                                     }
-                                } finally {
-                                    storageBusy = false
-                                }
-                            }
-                        },
-                        onOpenOfficial = {
-                            if (!context.openOfficialApp(selectedOfficialPackage)) {
-                                context.toast(R.string.debug_capture_official_open_failed)
-                            }
-                        },
-                        onComplete = completeStep@{
-                            if (storageBusy) return@completeStep
-                            val details = markerDetails(activeHeadsetName, title, description)
-                            storageBusy = true
-                            coroutineScope.launch {
-                                try {
-                                    val marked = addMarkerSafely(
-                                        context,
-                                        "operation.${step.key}.done",
-                                        details,
-                                    )
-                                    if (marked) {
-                                        updateStatus(
-                                            prefs,
-                                            statusByKey,
-                                            activeSessionId,
-                                            step.key,
-                                            StepStatus.DONE,
+                                },
+                                onOpenOfficial = {
+                                    if (!context.openOfficialApp(selectedOfficialPackage)) {
+                                        context.toast(
+                                            R.string.debug_capture_official_open_failed,
                                         )
-                                    } else {
-                                        context.toast(R.string.debug_capture_marker_failed)
                                     }
-                                } finally {
-                                    storageBusy = false
-                                }
-                            }
-                        },
-                        onSkip = skipStep@{
-                            if (storageBusy) return@skipStep
-                            val details = markerDetails(activeHeadsetName, title, "设备界面未提供此功能")
-                            storageBusy = true
-                            coroutineScope.launch {
-                                try {
-                                    val marked = addMarkerSafely(
-                                        context,
-                                        "operation.${step.key}.skipped",
-                                        details,
+                                },
+                                onComplete = {
+                                    runStepAction(
+                                        step = step,
+                                        action = StepAction.COMPLETE,
+                                        details = markerDetails(
+                                            activeHeadsetName,
+                                            title,
+                                            description,
+                                        ),
                                     )
-                                    if (marked) {
-                                        updateStatus(
-                                            prefs,
-                                            statusByKey,
-                                            activeSessionId,
-                                            step.key,
-                                            StepStatus.SKIPPED,
-                                        )
-                                    } else {
-                                        context.toast(R.string.debug_capture_marker_failed)
-                                    }
-                                } finally {
-                                    storageBusy = false
-                                }
-                            }
-                        },
-                    )
+                                },
+                                onSkip = {
+                                    runStepAction(
+                                        step = step,
+                                        action = StepAction.SKIP,
+                                        details = markerDetails(
+                                            activeHeadsetName,
+                                            title,
+                                            "设备界面未提供此功能",
+                                        ),
+                                    )
+                                },
+                                onReset = resetStep@{
+                                    if (activeStep != null) return@resetStep
+                                    runStepAction(
+                                        step = step,
+                                        action = StepAction.RESET,
+                                        details = markerDetails(
+                                            activeHeadsetName,
+                                            title,
+                                            "用户点了重做",
+                                        ),
+                                    )
+                                },
+                            )
+                        }
+                    }
                 }
-                item {
+                key("capture_stop") {
                     SectionCard(title = stringResource(R.string.debug_capture_stop_title)) {
-                        SummaryText(stringResource(R.string.debug_capture_stop_hint))
-                        Spacer(Modifier.height(12.dp))
                         TextButton(
                             text = stringResource(R.string.debug_capture_stop),
                             onClick = stopCapture@{
@@ -680,46 +726,6 @@ private fun CaptureGuideScreen(
                                             autoAssets.status == SmartAudioAutoAttachmentStatus.ATTACHED ||
                                             autoAssets.status == SmartAudioAutoAttachmentStatus.ALREADY_ATTACHED ||
                                             CaptureStore.hasSmartAudioAssets(context, stoppedSession.id)
-                                        when (autoAssets.status) {
-                                            SmartAudioAutoAttachmentStatus.ATTACHED -> context.toast(
-                                                resources.getString(
-                                                    R.string.debug_capture_assets_auto_imported,
-                                                    autoAssets.modelId,
-                                                    autoAssets.subModelId,
-                                                ),
-                                            )
-
-                                            SmartAudioAutoAttachmentStatus.NOT_OBSERVED -> context.toast(
-                                                R.string.debug_capture_assets_auto_not_observed,
-                                            )
-
-                                            SmartAudioAutoAttachmentStatus.NEEDS_DEVICE_IDENTITY -> context.toast(
-                                                resources.getString(
-                                                    R.string.debug_capture_assets_auto_needs_device_identity,
-                                                    autoAssets.modelId,
-                                                ),
-                                            )
-
-                                            SmartAudioAutoAttachmentStatus.NEEDS_SUBMODEL -> context.toast(
-                                                resources.getString(
-                                                    R.string.debug_capture_assets_auto_needs_submodel,
-                                                    autoAssets.modelId,
-                                                ),
-                                            )
-
-                                            SmartAudioAutoAttachmentStatus.AMBIGUOUS -> context.toast(
-                                                R.string.debug_capture_assets_auto_ambiguous,
-                                            )
-
-                                            SmartAudioAutoAttachmentStatus.FAILED -> context.toast(
-                                                resources.getString(
-                                                    R.string.debug_capture_assets_auto_failed,
-                                                    autoAssets.message.orEmpty(),
-                                                ),
-                                            )
-
-                                            SmartAudioAutoAttachmentStatus.ALREADY_ATTACHED -> Unit
-                                        }
                                     }
                                     .onFailure {
                                         context.toast(stopFailedPrefix + it.userMessage())
@@ -735,7 +741,7 @@ private fun CaptureGuideScreen(
             }
 
             captureFinished -> {
-                item {
+                key("capture_finished") {
                     SectionCard(title = stringResource(R.string.debug_capture_finished_title)) {
                         SummaryText(stringResource(R.string.debug_capture_finished_body))
                         SummaryText(
@@ -751,68 +757,18 @@ private fun CaptureGuideScreen(
                             )
                         }
                         Spacer(Modifier.height(12.dp))
-                        SummaryText(stringResource(R.string.debug_capture_assets_hint))
-                        Spacer(Modifier.height(8.dp))
-                        TextButton(
-                            text = stringResource(
-                                if (smartAudioAssetsAttached) {
-                                    R.string.debug_capture_assets_replace
-                                } else {
-                                    R.string.debug_capture_assets_select
-                                },
-                            ),
-                            onClick = {
-                                if (!storageBusy) {
-                                    smartAudioAssetsLauncher.launch(
-                                        arrayOf(
-                                            "application/zip",
-                                            "application/x-zip-compressed",
-                                            "application/octet-stream",
-                                        ),
-                                    )
-                                }
-                            },
-                            modifier = Modifier.fillMaxWidth().alpha(if (storageBusy) 0.45f else 1f),
-                        )
-                        if (smartAudioAssetsAttached) {
-                            SummaryText(
-                                text = stringResource(R.string.debug_capture_assets_ready),
-                                color = Color(0xFF2E7D32),
-                            )
-                        }
-                        Spacer(Modifier.height(12.dp))
-                        ChecklistRow(
-                            text = stringResource(R.string.debug_capture_include_hci),
-                            checked = includeHciSnoop,
-                            onCheckedChange = { if (!storageBusy) includeHciSnoop = it },
-                        )
-                        if (includeHciSnoop) {
-                            SummaryText(
-                                text = stringResource(R.string.debug_capture_include_hci_warning),
-                                color = Color(0xFFC62828),
-                            )
-                            Spacer(Modifier.height(8.dp))
-                        }
                         TextButton(
                             text = stringResource(R.string.debug_capture_export),
                             onClick = exportCapture@{
                                 if (
                                     storageBusy ||
-                                    (
-                                        currentProtocolEventCount == 0L &&
-                                            !includeHciSnoop &&
-                                            !smartAudioAssetsAttached
-                                    )
+                                    (currentProtocolEventCount == 0L && !smartAudioAssetsAttached)
                                 ) return@exportCapture
-                                val includeHciForExport = includeHciSnoop
                                 storageBusy = true
                                 coroutineScope.launch {
                                     runCatching {
                                         withContext(Dispatchers.IO) {
-                                            CaptureStore.exportLatest(
-                                                context,
-                                                includeHciSnoop = includeHciForExport,
-                                            )
+                                            CaptureStore.exportLatest(context)
                                         }
                                     }
                                     .onSuccess { export ->
@@ -830,7 +786,6 @@ private fun CaptureGuideScreen(
                                     !storageBusy &&
                                     (
                                         currentProtocolEventCount > 0L ||
-                                            includeHciSnoop ||
                                             smartAudioAssetsAttached
                                     )
                                 ) 1f else 0.45f,
@@ -843,12 +798,9 @@ private fun CaptureGuideScreen(
                             onClick = {
                                 if (storageBusy) return@TextButton
                                 captureFinished = false
-                                includeHciSnoop = false
                                 smartAudioAssetsAttached = false
                                 latestSessionId?.let { handledSessionId ->
-                                    prefs.edit()
-                                        .putString(PREF_HANDLED_SESSION_ID, handledSessionId)
-                                        .apply()
+                                    markSessionHandled(prefs, handledSessionId)
                                 }
                                 activeSessionId = null
                                 activeHeadsetName = ""
@@ -858,9 +810,7 @@ private fun CaptureGuideScreen(
                                 headsetNameSource = NAME_SOURCE_MANUAL
                                 selectedHeadsetAddress = null
                                 onlyTargetChecked = false
-                                officialAppChecked = false
                                 scopeChecked = false
-                                privacyChecked = false
                                 detectionRefreshToken++
                             },
                             modifier = Modifier.fillMaxWidth(),
@@ -870,20 +820,16 @@ private fun CaptureGuideScreen(
             }
 
             else -> {
-                item {
+                key("capture_prepare") {
                     PreparationCard(
                         installedApps = installedApps,
                         onlyTargetChecked = onlyTargetChecked,
                         onOnlyTargetChecked = { onlyTargetChecked = it },
-                        officialAppChecked = officialAppChecked,
-                        onOfficialAppChecked = { officialAppChecked = it },
                         scopeChecked = scopeChecked,
                         onScopeChecked = { scopeChecked = it },
-                        privacyChecked = privacyChecked,
-                        onPrivacyChecked = { privacyChecked = it },
                     )
                 }
-                item {
+                key("capture_metadata") {
                     SectionCard(title = stringResource(R.string.debug_capture_metadata_title)) {
                         Text(
                             text = stringResource(R.string.debug_capture_model_title),
@@ -905,18 +851,6 @@ private fun CaptureGuideScreen(
                                 selectedHeadsetAddress = device.address
                             },
                         )
-                        Spacer(Modifier.height(8.dp))
-                        TextField(
-                            value = headsetNameInput,
-                            onValueChange = { value ->
-                                headsetNameInput = value.take(120)
-                                headsetNameSource = NAME_SOURCE_MANUAL
-                                selectedHeadsetAddress = null
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                        SummaryText(stringResource(R.string.debug_capture_model_hint))
-                        SummaryText(stringResource(R.string.debug_capture_model_manual_hint))
                         if (selectedConnectedHeadset == null) {
                             SummaryText(
                                 text = stringResource(R.string.debug_capture_model_selection_required),
@@ -956,7 +890,7 @@ private fun CaptureGuideScreen(
                                     officialAppPackage = selectedOfficialPackage,
                                     headsetAddress = captureTarget.address,
                                     headsetNameSource = CONNECTED_HEADSET_NAME_SOURCE,
-                                    featureCatalogVersion = FEATURE_CATALOG_VERSION,
+                                    featureCatalogVersion = DEFAULT_FEATURE_CATALOG_VERSION,
                                     notes = null,
                                 )
                                 storageBusy = true
@@ -1001,49 +935,8 @@ private fun CaptureGuideScreen(
                 }
             }
         }
-
-        item {
-            SectionCard(title = stringResource(R.string.debug_capture_hci_title)) {
-                SummaryText(stringResource(R.string.debug_capture_hci_body))
-            }
-        }
     }
 }
-
-@Composable
-private fun CaptureHeader(onOpenMain: () -> Unit) {
-    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp)) {
-        StatusBadge(
-            text = stringResource(R.string.debug_capture_badge),
-            color = Color(0xFFD84315),
-        )
-        Spacer(Modifier.height(10.dp))
-        Text(
-            text = stringResource(R.string.debug_capture_title),
-            style = MiuixTheme.textStyles.title1,
-            fontWeight = FontWeight.Bold,
-        )
-        Text(
-            text = stringResource(R.string.debug_capture_subtitle),
-            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-            style = MiuixTheme.textStyles.body2,
-        )
-        Spacer(Modifier.height(8.dp))
-        TextButton(
-            text = stringResource(R.string.debug_capture_open_main),
-            onClick = onOpenMain,
-        )
-    }
-}
-
-@Composable
-private fun PrivacyCard() {
-    SectionCard(title = stringResource(R.string.debug_capture_privacy_title)) {
-        SummaryText(
-            text = stringResource(R.string.debug_capture_privacy_body),
-            color = Color(0xFFC62828),
-        )
-    }
 }
 
 @Composable
@@ -1051,12 +944,8 @@ private fun PreparationCard(
     installedApps: List<OfficialApp>,
     onlyTargetChecked: Boolean,
     onOnlyTargetChecked: (Boolean) -> Unit,
-    officialAppChecked: Boolean,
-    onOfficialAppChecked: (Boolean) -> Unit,
     scopeChecked: Boolean,
     onScopeChecked: (Boolean) -> Unit,
-    privacyChecked: Boolean,
-    onPrivacyChecked: (Boolean) -> Unit,
 ) {
     SectionCard(title = stringResource(R.string.debug_capture_prepare_title)) {
         SummaryText(stringResource(R.string.debug_capture_prepare_hint))
@@ -1067,19 +956,9 @@ private fun PreparationCard(
             onCheckedChange = onOnlyTargetChecked,
         )
         ChecklistRow(
-            text = stringResource(R.string.debug_capture_prepare_official_app),
-            checked = officialAppChecked,
-            onCheckedChange = onOfficialAppChecked,
-        )
-        ChecklistRow(
             text = stringResource(R.string.debug_capture_prepare_lsp_scope),
             checked = scopeChecked,
             onCheckedChange = onScopeChecked,
-        )
-        ChecklistRow(
-            text = stringResource(R.string.debug_capture_prepare_privacy),
-            checked = privacyChecked,
-            onCheckedChange = onPrivacyChecked,
         )
         Spacer(Modifier.height(8.dp))
         if (installedApps.isEmpty()) {
@@ -1188,7 +1067,7 @@ private fun HeadsetDetectionContent(
 }
 
 @Composable
-private fun OperationCard(
+private fun OperationRow(
     step: CaptureStep,
     status: StepStatus,
     blockedByAnotherStep: Boolean,
@@ -1197,66 +1076,140 @@ private fun OperationCard(
     onOpenOfficial: () -> Unit,
     onComplete: () -> Unit,
     onSkip: () -> Unit,
+    onReset: () -> Unit,
 ) {
-    SectionCard(title = stringResource(step.titleRes)) {
-        StatusBadge(
-            text = stringResource(
+    val description = stringResource(step.descriptionRes)
+    val summaryText = when (status) {
+        StepStatus.PENDING -> description
+        StepStatus.ACTIVE ->
+            "${stringResource(R.string.debug_capture_status_active)} · $description"
+        StepStatus.DONE -> stringResource(R.string.debug_capture_status_done)
+        StepStatus.SKIPPED -> stringResource(R.string.debug_capture_status_skipped)
+        StepStatus.ABORTED -> stringResource(R.string.debug_capture_status_aborted)
+    }
+    val statusColor = when (status) {
+        StepStatus.PENDING -> Color(0xFF8A8A8A)
+        StepStatus.ACTIVE -> MiuixTheme.colorScheme.primary
+        StepStatus.DONE -> Color(0xFF2E8B57)
+        StepStatus.SKIPPED -> Color(0xFF78909C)
+        StepStatus.ABORTED -> Color(0xFF8D6E63)
+    }
+    val primaryEnabled = when (status) {
+        StepStatus.PENDING -> !blockedByAnotherStep
+        StepStatus.ACTIVE -> !busy
+        StepStatus.DONE, StepStatus.SKIPPED, StepStatus.ABORTED ->
+            !blockedByAnotherStep && !busy
+    }
+    val rowEnabled = when (status) {
+        StepStatus.PENDING -> primaryEnabled
+        StepStatus.ACTIVE -> !busy
+        StepStatus.DONE, StepStatus.SKIPPED, StepStatus.ABORTED -> false
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = rowEnabled) {
                 when (status) {
-                    StepStatus.PENDING -> R.string.debug_capture_status_pending
-                    StepStatus.ACTIVE -> R.string.debug_capture_status_active
-                    StepStatus.DONE -> R.string.debug_capture_status_done
-                    StepStatus.SKIPPED -> R.string.debug_capture_status_skipped
-                    StepStatus.ABORTED -> R.string.debug_capture_status_aborted
+                    StepStatus.PENDING -> onStart()
+                    StepStatus.ACTIVE -> onOpenOfficial()
+                    StepStatus.DONE, StepStatus.SKIPPED, StepStatus.ABORTED -> Unit
                 }
-            ),
-            color = when (status) {
-                StepStatus.PENDING -> Color(0xFF616161)
-                StepStatus.ACTIVE -> Color(0xFFD84315)
-                StepStatus.DONE -> Color(0xFF2E7D32)
-                StepStatus.SKIPPED -> Color(0xFF546E7A)
-                StepStatus.ABORTED -> Color(0xFF6D4C41)
-            },
+            }
+            .padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(8.dp)
+                .clip(CircleShape)
+                .background(statusColor),
         )
-        Spacer(Modifier.height(8.dp))
-        SummaryText(stringResource(step.descriptionRes))
-        Spacer(Modifier.height(12.dp))
-        when (status) {
-            StepStatus.PENDING -> {
-                val enabled = !blockedByAnotherStep
-                TextButton(
-                    text = stringResource(R.string.debug_capture_start_step),
-                    onClick = { if (enabled) onStart() },
-                    modifier = Modifier.fillMaxWidth().alpha(if (enabled) 1f else 0.45f),
-                    colors = ButtonDefaults.textButtonColorsPrimary(),
-                )
-                TextButton(
-                    text = stringResource(R.string.debug_capture_skip_step),
-                    onClick = { if (enabled) onSkip() },
-                    modifier = Modifier.fillMaxWidth().alpha(if (enabled) 1f else 0.45f),
-                )
-            }
-
-            StepStatus.ACTIVE -> {
-                TextButton(
-                    text = stringResource(R.string.debug_capture_open_official),
-                    onClick = onOpenOfficial,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                TextButton(
-                    text = stringResource(R.string.debug_capture_complete_step),
-                    onClick = { if (!busy) onComplete() },
-                    modifier = Modifier.fillMaxWidth().alpha(if (busy) 0.45f else 1f),
-                    colors = ButtonDefaults.textButtonColorsPrimary(),
-                )
-                TextButton(
-                    text = stringResource(R.string.debug_capture_skip_step),
-                    onClick = { if (!busy) onSkip() },
-                    modifier = Modifier.fillMaxWidth().alpha(if (busy) 0.45f else 1f),
-                )
-            }
-
-            StepStatus.DONE, StepStatus.SKIPPED, StepStatus.ABORTED -> Unit
+        Spacer(Modifier.width(14.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = stringResource(step.titleRes),
+                color = MiuixTheme.colorScheme.onSurface,
+                style = MiuixTheme.textStyles.body1,
+                fontWeight = FontWeight.Medium,
+            )
+            Spacer(Modifier.height(3.dp))
+            Text(
+                text = summaryText,
+                color = if (status == StepStatus.ACTIVE) {
+                    MiuixTheme.colorScheme.primary
+                } else {
+                    MiuixTheme.colorScheme.onSurfaceVariantSummary
+                },
+                style = MiuixTheme.textStyles.body2,
+            )
         }
+        Spacer(Modifier.width(6.dp))
+        Column(horizontalAlignment = Alignment.End) {
+            TextButton(
+                text = stringResource(
+                    when (status) {
+                        StepStatus.PENDING -> R.string.debug_capture_skip_short
+                        StepStatus.ACTIVE -> R.string.debug_capture_complete_short
+                        StepStatus.DONE,
+                        StepStatus.SKIPPED,
+                        StepStatus.ABORTED,
+                        -> R.string.debug_capture_reset_short
+                    },
+                ),
+                onClick = {
+                    if (!primaryEnabled) return@TextButton
+                    when (status) {
+                        StepStatus.PENDING -> onSkip()
+                        StepStatus.ACTIVE -> onComplete()
+                        StepStatus.DONE,
+                        StepStatus.SKIPPED,
+                        StepStatus.ABORTED,
+                        -> onReset()
+                    }
+                },
+                modifier = Modifier.alpha(if (primaryEnabled) 1f else 0.45f),
+                colors = if (status == StepStatus.ACTIVE) {
+                    ButtonDefaults.textButtonColorsPrimary()
+                } else {
+                    ButtonDefaults.textButtonColors()
+                },
+            )
+            if (status == StepStatus.ACTIVE) {
+                TextButton(
+                    text = stringResource(R.string.debug_capture_skip_short),
+                    onClick = { if (!busy) onSkip() },
+                    modifier = Modifier.alpha(if (busy) 0.45f else 1f),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun StepGroupHeader(
+    group: CaptureStepGroup,
+    completed: Int,
+    total: Int,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 4.dp, end = 4.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = stringResource(group.titleRes),
+            style = MiuixTheme.textStyles.body2,
+            fontWeight = FontWeight.SemiBold,
+            color = MiuixTheme.colorScheme.primary,
+            modifier = Modifier.weight(1f),
+        )
+        Text(
+            text = stringResource(R.string.debug_capture_group_progress, completed, total),
+            style = MiuixTheme.textStyles.body2,
+            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+        )
     }
 }
 
@@ -1265,15 +1218,18 @@ private fun SectionCard(
     title: String,
     content: @Composable () -> Unit,
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
-            Text(
-                text = title,
-                style = MiuixTheme.textStyles.headline1,
-                fontWeight = FontWeight.SemiBold,
-            )
-            Spacer(Modifier.height(8.dp))
-            content()
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = title,
+            style = MiuixTheme.textStyles.body2,
+            fontWeight = FontWeight.SemiBold,
+            color = MiuixTheme.colorScheme.primary,
+            modifier = Modifier.padding(start = 4.dp, end = 4.dp, bottom = 8.dp),
+        )
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+                content()
+            }
         }
     }
 }
@@ -1479,6 +1435,18 @@ private fun resetStatuses(statuses: MutableMap<String, StepStatus>) {
     allHuaweiHeadsetSteps.forEach { step ->
         statuses[step.key] = StepStatus.PENDING
     }
+}
+
+private fun markSessionHandled(
+    contextPrefs: android.content.SharedPreferences,
+    sessionId: String,
+) {
+    val editor = contextPrefs.edit()
+        .putString(PREF_HANDLED_SESSION_ID, sessionId)
+    allHuaweiHeadsetSteps.forEach { step ->
+        editor.remove(statusPreferenceKey(sessionId, step.key))
+    }
+    editor.apply()
 }
 
 private fun statusPreferenceKey(sessionId: String, stepKey: String): String =

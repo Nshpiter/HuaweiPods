@@ -31,6 +31,8 @@ object HuaweiHfpController {
     private const val BACKGROUND_BATTERY_REFRESH_INTERVAL_MS = 30_000L
     private const val GESTURE_CONFIRM_DELAY_MS = 300L
     private const val GESTURE_REFRESH_MIN_INTERVAL_MS = 750L
+    private const val EQUALIZER_CONFIRM_DELAY_MS = 450L
+    private const val EQUALIZER_REFRESH_MIN_INTERVAL_MS = 750L
     private const val FREECLIP2_AUDIO_CONFIRM_DELAY_MS = 450L
     private const val FREECLIP2_SMART_AUDIO_BRIDGE_TIMEOUT_MS = 1_500L
     private const val FREECLIP2_AUDIO_REFRESH_MIN_INTERVAL_MS = 2_500L
@@ -60,11 +62,13 @@ object HuaweiHfpController {
     private var lastBatteryRequestAt = 0L
     private var lastAncRequestAt = 0L
     private var lastGestureStateRequestAt = 0L
+    private var lastEqualizerStateRequestAt = 0L
     private var lastFreeClip2AudioStateRequestAt = 0L
     private var lastDeviceInfoRequestAt = 0L
     private var batteryRequestInFlight = false
     private var ancRequestInFlight = false
     private var deviceInfoRequestInFlight = false
+    private var equalizerStateRequestInFlight = false
     private var deviceIdentityPublishInFlight = false
     private var deviceIdentityPublished = false
     private var deviceInfoQueryUnavailableLogged = false
@@ -185,6 +189,17 @@ object HuaweiHfpController {
                     if (sessionRoute == HuaweiDeviceRoute.HUAWEI_FREECLIP2) {
                         requestFreeClip2AudioState()
                     }
+                    if (sessionRoute == HuaweiDeviceRoute.HUAWEI_FREEBUDS6I) {
+                        requestHuaweiEqualizerState()
+                    }
+                    if (sessionRoute.supportsLowLatencyControl) {
+                        sendLowLatencyState(
+                            LowLatencyPrefs.desiredForHook(
+                                device?.address.orEmpty(),
+                                sessionRoute,
+                            ) ?: false,
+                        )
+                    }
                 }
                 HuaweiPodsAction.ACTION_ANC_SELECT -> {
                     if (!targetsCurrentSession(receivedIntent, requireAddress = true)) return
@@ -214,6 +229,10 @@ object HuaweiHfpController {
                     if (!targetsCurrentSession(receivedIntent, requireAddress = true)) return
                     setAncLevel(receivedIntent.getIntExtra("level", currentAncLevel))
                 }
+                HuaweiPodsAction.ACTION_HUAWEI_LOW_LATENCY_SET -> {
+                    if (!targetsCurrentSession(receivedIntent, requireAddress = true)) return
+                    setLowLatency(receivedIntent)
+                }
                 HuaweiPodsAction.ACTION_HUAWEI_LEGACY_DEBUG_SEND -> {
                     if (!targetsCurrentSession(receivedIntent, requireAddress = true)) return
                     if (BuildConfig.DEBUG) sendLegacyDebugHex(receivedIntent.getStringExtra("hex").orEmpty())
@@ -236,6 +255,16 @@ object HuaweiHfpController {
                 HuaweiPodsAction.ACTION_FREECLIP2_AUDIO_REFRESH -> {
                     if (!targetsCurrentFreeClip2Session(receivedIntent)) return
                     requestFreeClip2AudioState(
+                        force = receivedIntent.getBooleanExtra("force", false),
+                    )
+                }
+                HuaweiPodsAction.ACTION_HUAWEI_EQUALIZER_PRESET_SET -> {
+                    if (!targetsCurrentSession(receivedIntent, requireAddress = true)) return
+                    setHuaweiEqualizerPreset(receivedIntent)
+                }
+                HuaweiPodsAction.ACTION_HUAWEI_EQUALIZER_REFRESH -> {
+                    if (!targetsCurrentSession(receivedIntent, requireAddress = false)) return
+                    requestHuaweiEqualizerState(
                         force = receivedIntent.getBooleanExtra("force", false),
                     )
                 }
@@ -273,6 +302,9 @@ object HuaweiHfpController {
         if (route == HuaweiDeviceRoute.HUAWEI_FREECLIP2) {
             requestFreeClip2AudioState(force = true)
         }
+        if (route == HuaweiDeviceRoute.HUAWEI_FREEBUDS6I) {
+            requestHuaweiEqualizerState(force = true)
+        }
     }
 
     fun disconnectedPod(context: Context, device: BluetoothDevice) {
@@ -306,11 +338,13 @@ object HuaweiHfpController {
             lastBatteryRequestAt = 0L
             lastAncRequestAt = 0L
             lastGestureStateRequestAt = 0L
+            lastEqualizerStateRequestAt = 0L
             lastFreeClip2AudioStateRequestAt = 0L
             lastDeviceInfoRequestAt = 0L
             batteryRequestInFlight = false
             ancRequestInFlight = false
             deviceInfoRequestInFlight = false
+            equalizerStateRequestInFlight = false
             deviceIdentityPublishInFlight = false
             deviceIdentityPublished = false
             deviceInfoQueryUnavailableLogged = false
@@ -1150,10 +1184,12 @@ object HuaweiHfpController {
             lastBatteryRequestAt = 0L
             lastAncRequestAt = 0L
             lastGestureStateRequestAt = 0L
+            lastEqualizerStateRequestAt = 0L
             lastFreeClip2AudioStateRequestAt = 0L
             lastDeviceInfoRequestAt = 0L
             batteryRequestInFlight = false
             ancRequestInFlight = false
+            equalizerStateRequestInFlight = false
             deviceInfoRequestInFlight = false
             deviceIdentityPublishInFlight = false
             deviceIdentityPublished = false
@@ -1357,6 +1393,59 @@ object HuaweiHfpController {
         mainHandler.removeCallbacks(lowLatencyAutoApplyRunnable)
         lowLatencyAutoApplyRequest = null
         lowLatencyAppliedGeneration = null
+    }
+
+    private fun setLowLatency(intent: Intent) {
+        val currentContext = context ?: return
+        val currentDevice = device ?: return
+        val requestedRoute = sessionRoute
+        if (!requestedRoute.supportsLowLatencyControl ||
+            !intent.hasExtra(HuaweiPodsAction.EXTRA_HUAWEI_LOW_LATENCY_ENABLED)
+        ) {
+            Log.w(TAG, "Huawei low-latency command ignored route=$requestedRoute")
+            return
+        }
+        val requestedEnabled = intent.getBooleanExtra(
+            HuaweiPodsAction.EXTRA_HUAWEI_LOW_LATENCY_ENABLED,
+            false,
+        )
+        val requestedAddress = currentDevice.address
+        val requestedGeneration = sessionGeneration
+        val previousDesired = LowLatencyPrefs.desiredForHook(
+            requestedAddress,
+            requestedRoute,
+        ) ?: false
+        HuaweiLowLatencyController.setEnabled(
+            context = currentContext,
+            device = currentDevice,
+            route = requestedRoute,
+            enabled = requestedEnabled,
+        ) { success ->
+            if (!isCurrentSession(requestedGeneration, requestedAddress, requestedRoute)) {
+                return@setEnabled
+            }
+            val effectiveEnabled = if (success) {
+                LowLatencyPrefs.setDesiredFromHook(
+                    requestedAddress,
+                    requestedRoute,
+                    requestedEnabled,
+                )
+                if (requestedEnabled) {
+                    lowLatencyAppliedGeneration = requestedGeneration
+                } else {
+                    cancelAutoLowLatency()
+                }
+                requestedEnabled
+            } else {
+                previousDesired
+            }
+            sendLowLatencyState(effectiveEnabled, writeSuccess = success)
+            Log.i(
+                TAG,
+                "Huawei low-latency write route=$requestedRoute enabled=$requestedEnabled " +
+                    "success=$success device=$requestedAddress",
+            )
+        }
     }
 
     private fun requestOfficialImageIdentity(force: Boolean = false) {
@@ -1601,6 +1690,96 @@ object HuaweiHfpController {
         }
     }
 
+    private fun setHuaweiEqualizerPreset(intent: Intent) {
+        val currentContext = context ?: return
+        val currentDevice = device ?: return
+        val requestedRoute = sessionRoute
+        if (requestedRoute != HuaweiDeviceRoute.HUAWEI_FREEBUDS6I) return
+        val presetId = intent.getIntExtra(
+            HuaweiPodsAction.EXTRA_HUAWEI_EQUALIZER_SELECTED_ID,
+            -1,
+        )
+        val packet = HuaweiEqualizerCodec.buildBuiltInPresetPacket(requestedRoute, presetId)
+        if (packet == null) {
+            Log.w(TAG, "Huawei equalizer preset ignored: unsupported id=$presetId route=$requestedRoute")
+            return
+        }
+        val requestedAddress = currentDevice.address
+        val requestedGeneration = sessionGeneration
+        HuaweiL2capAncController.sendRawPacketOnce(
+            context = currentContext,
+            device = currentDevice,
+            route = requestedRoute,
+            packet = packet,
+            description = "built-in-equalizer route=$requestedRoute preset=$presetId",
+        ) { success ->
+            if (!isCurrentSession(requestedGeneration, requestedAddress, requestedRoute)) {
+                return@sendRawPacketOnce
+            }
+            if (!success) {
+                Log.w(
+                    TAG,
+                    "Huawei equalizer preset write failed id=$presetId device=$requestedAddress",
+                )
+                requestHuaweiEqualizerState(force = true)
+                return@sendRawPacketOnce
+            }
+            mainHandler.postDelayed({
+                if (isCurrentSession(requestedGeneration, requestedAddress, requestedRoute)) {
+                    requestHuaweiEqualizerState(force = true)
+                }
+            }, EQUALIZER_CONFIRM_DELAY_MS)
+        }
+    }
+
+    private fun requestHuaweiEqualizerState(force: Boolean = false) {
+        val currentContext = context ?: return
+        val currentDevice = device ?: return
+        val requestedRoute = sessionRoute
+        if (requestedRoute != HuaweiDeviceRoute.HUAWEI_FREEBUDS6I) return
+        if (equalizerStateRequestInFlight) return
+        val now = SystemClock.elapsedRealtime()
+        if (!force && now - lastEqualizerStateRequestAt < EQUALIZER_REFRESH_MIN_INTERVAL_MS) return
+        lastEqualizerStateRequestAt = now
+        equalizerStateRequestInFlight = true
+        val requestedAddress = currentDevice.address
+        val requestedGeneration = sessionGeneration
+        HuaweiL2capAncController.requestRawPacketOnce(
+            context = currentContext,
+            device = currentDevice,
+            route = requestedRoute,
+            packet = HuaweiEqualizerCodec.stateQueryPacket(),
+            description = "equalizer-state-query route=$requestedRoute",
+            responseWindowMs = 1_500L,
+            responseComplete = { HuaweiEqualizerCodec.parseState(it) != null },
+            onComplete = { success ->
+                if (!success && isCurrentSession(
+                        requestedGeneration,
+                        requestedAddress,
+                        requestedRoute,
+                    )
+                ) {
+                    equalizerStateRequestInFlight = false
+                }
+            },
+        ) { state ->
+            val parsedState = HuaweiEqualizerCodec.parseState(state)
+            if (!isCurrentSession(requestedGeneration, requestedAddress, requestedRoute)) {
+                return@requestRawPacketOnce
+            }
+            equalizerStateRequestInFlight = false
+            if (parsedState == null || !parsedState.supported) {
+                Log.w(TAG, "Huawei equalizer state query returned no verified state device=$requestedAddress")
+                return@requestRawPacketOnce
+            }
+            sendHuaweiEqualizerState(parsedState)
+            Log.i(
+                TAG,
+                "Huawei equalizer state confirmed id=${parsedState.selectedId} device=$requestedAddress",
+            )
+        }
+    }
+
     private fun restoreCurrentNotification() {
         val currentContext = context ?: return
         val currentDevice = device ?: return
@@ -1756,6 +1935,7 @@ object HuaweiHfpController {
             addHuaweiPodsAction(HuaweiPodsAction.ACTION_ANC_SELECT)
             addHuaweiPodsAction(HuaweiPodsAction.ACTION_CYCLE_ANC)
             addHuaweiPodsAction(HuaweiPodsAction.ACTION_HUAWEI_ANC_LEVEL_SET)
+            addHuaweiPodsAction(HuaweiPodsAction.ACTION_HUAWEI_LOW_LATENCY_SET)
             if (BuildConfig.DEBUG) {
                 addHuaweiPodsAction(HuaweiPodsAction.ACTION_HUAWEI_LEGACY_DEBUG_SEND)
             }
@@ -1763,6 +1943,8 @@ object HuaweiHfpController {
             addHuaweiPodsAction(HuaweiPodsAction.ACTION_HUAWEI_GESTURE_REFRESH)
             addHuaweiPodsAction(HuaweiPodsAction.ACTION_FREECLIP2_AUDIO_SET)
             addHuaweiPodsAction(HuaweiPodsAction.ACTION_FREECLIP2_AUDIO_REFRESH)
+            addHuaweiPodsAction(HuaweiPodsAction.ACTION_HUAWEI_EQUALIZER_PRESET_SET)
+            addHuaweiPodsAction(HuaweiPodsAction.ACTION_HUAWEI_EQUALIZER_REFRESH)
             addHuaweiPodsAction(HuaweiPodsAction.ACTION_SMART_AUDIO_FREECLIP2_RESULT)
             addHuaweiPodsAction(HuaweiPodsAction.ACTION_SMART_AUDIO_FREECLIP2_QUERY_RESULT)
             addHuaweiPodsAction(HuaweiPodsAction.ACTION_SMART_AUDIO_FREECLIP2_STATE)
@@ -1907,6 +2089,29 @@ object HuaweiHfpController {
         }
         sendAppBroadcast(HuaweiPodsAction.ACTION_FREECLIP2_AUDIO_CHANGED, fillState)
         sendExternalBroadcast(HuaweiPodsAction.ACTION_FREECLIP2_AUDIO_CHANGED, fillState)
+    }
+
+    private fun sendHuaweiEqualizerState(state: HuaweiEqualizerState) {
+        val fillState: Intent.() -> Unit = {
+            putExtra(HuaweiPodsAction.EXTRA_HUAWEI_EQUALIZER_CONFIRMED, true)
+            putExtra(HuaweiPodsAction.EXTRA_HUAWEI_EQUALIZER_SELECTED_ID, state.selectedId)
+        }
+        sendAppBroadcast(HuaweiPodsAction.ACTION_HUAWEI_EQUALIZER_CHANGED, fillState)
+        sendExternalBroadcast(HuaweiPodsAction.ACTION_HUAWEI_EQUALIZER_CHANGED, fillState)
+    }
+
+    private fun sendLowLatencyState(
+        enabled: Boolean,
+        writeSuccess: Boolean? = null,
+    ) {
+        val fillState: Intent.() -> Unit = {
+            putExtra(HuaweiPodsAction.EXTRA_HUAWEI_LOW_LATENCY_ENABLED, enabled)
+            writeSuccess?.let {
+                putExtra(HuaweiPodsAction.EXTRA_HUAWEI_LOW_LATENCY_WRITE_SUCCESS, it)
+            }
+        }
+        sendAppBroadcast(HuaweiPodsAction.ACTION_HUAWEI_LOW_LATENCY_CHANGED, fillState)
+        sendExternalBroadcast(HuaweiPodsAction.ACTION_HUAWEI_LOW_LATENCY_CHANGED, fillState)
     }
 
     private fun sendAppBroadcast(action: String, fill: Intent.() -> Unit = {}) {

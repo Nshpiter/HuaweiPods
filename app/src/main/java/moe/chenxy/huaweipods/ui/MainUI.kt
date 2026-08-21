@@ -174,6 +174,9 @@ fun MainUI(
     val prefs = remember { context.getSharedPreferences(ConfigManager.PREFS_NAME, Context.MODE_PRIVATE) }
     val lifecyclePrefs = remember(context) { AppLifecyclePrefs(context) }
     val appConfig = remember { ConfigManager.refreshFromPrefs(prefs) }
+    val milinkLowLatencyCardEnabled = remember {
+        mutableStateOf(appConfig.milinkLowLatencyCardEnabled)
+    }
     val notificationClickAction = remember { mutableStateOf(appConfig.notificationClickAction) }
     val moreClickAction = remember { mutableStateOf(appConfig.moreClickAction) }
     val desktopIconHidden = remember { mutableStateOf(isLauncherIconHidden(context)) }
@@ -937,6 +940,12 @@ fun MainUI(
                 onAppLanguageChange = {
                     appLanguage.value = it
                     onAppLanguageChange(it)
+                },
+                milinkLowLatencyCardEnabled = milinkLowLatencyCardEnabled,
+                onMilinkLowLatencyCardEnabledChange = {
+                    milinkLowLatencyCardEnabled.value = it
+                    ConfigManager.updateMilinkLowLatencyCardEnabled(prefs, xposedService, it)
+                    broadcastConfigChanged(context, "com.milink.service")
                 },
                 notificationClickAction = notificationClickAction,
                 onNotificationClickActionChange = {

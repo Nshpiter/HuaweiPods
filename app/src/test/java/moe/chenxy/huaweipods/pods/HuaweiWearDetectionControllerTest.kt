@@ -11,6 +11,7 @@ class HuaweiWearDetectionControllerTest {
     fun `captured models share exact wear detection packets`() {
         val supported = listOf(
             HuaweiDeviceRoute.HUAWEI_FREEBUDS5,
+            HuaweiDeviceRoute.HUAWEI_FREEBUDS5I,
             HuaweiDeviceRoute.HUAWEI_FREEBUDS4E,
             HuaweiDeviceRoute.HUAWEI_FREEBUDS6I,
             HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3,

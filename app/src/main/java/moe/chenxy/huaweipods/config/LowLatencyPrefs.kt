@@ -42,7 +42,21 @@ object LowLatencyPrefs {
     }
 
     fun isAutoApplyEnabled(address: String, route: HuaweiDeviceRoute): Boolean =
-        hookPreferences?.let { desiredOrNull(it, address, route) } == true
+        desiredForHook(address, route) == true
+
+    fun desiredForHook(address: String, route: HuaweiDeviceRoute): Boolean? =
+        hookPreferences?.let { desiredOrNull(it, address, route) }
+
+    fun setDesiredFromHook(
+        address: String,
+        route: HuaweiDeviceRoute,
+        enabled: Boolean,
+    ): Boolean {
+        val prefs = hookPreferences ?: return false
+        return synchronized(syncLock) {
+            writeDesired(prefs, address, route, enabled)
+        }
+    }
 
     fun setDesired(
         prefs: SharedPreferences,
@@ -51,9 +65,9 @@ object LowLatencyPrefs {
         route: HuaweiDeviceRoute,
         enabled: Boolean,
     ): Boolean {
-        val key = preferenceKey(address, route) ?: return false
         synchronized(syncLock) {
-            if (!prefs.edit().putBoolean(key, enabled).commit()) return false
+            if (!writeDesired(prefs, address, route, enabled)) return false
+            val key = preferenceKey(address, route) ?: return false
             runCatching {
                 service?.getRemotePreferences(ConfigManager.PREFS_NAME)
                     ?.edit()
@@ -62,6 +76,16 @@ object LowLatencyPrefs {
             }
         }
         return true
+    }
+
+    private fun writeDesired(
+        prefs: SharedPreferences,
+        address: String,
+        route: HuaweiDeviceRoute,
+        enabled: Boolean,
+    ): Boolean {
+        val key = preferenceKey(address, route) ?: return false
+        return prefs.edit().putBoolean(key, enabled).commit()
     }
 
     fun syncWithRemote(prefs: SharedPreferences, service: XposedService?) {

@@ -13,6 +13,7 @@ class SettingsHeadsetPolicyTest {
         listOf(
             HuaweiDeviceRoute.HUAWEI_FREECLIP,
             HuaweiDeviceRoute.HUAWEI_FREECLIP2,
+            HuaweiDeviceRoute.HUAWEI_FREEARC,
             HuaweiDeviceRoute.HUAWEI_EYEWEAR,
             HuaweiDeviceRoute.HUAWEI_EYEWEAR2,
         ).forEach { route ->
@@ -48,6 +49,7 @@ class SettingsHeadsetPolicyTest {
             HuaweiDeviceRoute.HUAWEI_FREEBUDS3 to expectedPolicy(true, false, true),
             HuaweiDeviceRoute.HUAWEI_FREEBUDS4E to expectedPolicy(true, false, true),
             HuaweiDeviceRoute.HUAWEI_FREEBUDS5 to expectedPolicy(true, false, false),
+            HuaweiDeviceRoute.HUAWEI_FREEBUDS5I to expectedPolicy(true, true, true),
             HuaweiDeviceRoute.HUAWEI_FREEBUDS6I to expectedPolicy(true, true, true),
             HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3 to expectedPolicy(true, true, true),
             HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO4 to expectedPolicy(true, false, false),
@@ -55,6 +57,7 @@ class SettingsHeadsetPolicyTest {
             HuaweiDeviceRoute.HUAWEI_FREEBUDS7I to expectedPolicy(true, true, true),
             HuaweiDeviceRoute.HUAWEI_FREECLIP to expectedPolicy(false, false, false),
             HuaweiDeviceRoute.HUAWEI_FREECLIP2 to expectedPolicy(false, false, true),
+            HuaweiDeviceRoute.HUAWEI_FREEARC to expectedPolicy(false, false, true),
             HuaweiDeviceRoute.HUAWEI_EYEWEAR to expectedPolicy(false, false, false),
             HuaweiDeviceRoute.HUAWEI_EYEWEAR2 to expectedPolicy(false, false, true),
         )

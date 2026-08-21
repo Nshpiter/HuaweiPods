@@ -17,6 +17,7 @@ import moe.chenxy.huaweipods.config.PodImageResource
 import moe.chenxy.huaweipods.config.cloudImageUri
 import moe.chenxy.huaweipods.config.imageUri
 import moe.chenxy.huaweipods.pods.HuaweiDeviceRoute
+import moe.chenxy.huaweipods.pods.isSupported
 
 object PodImageLoader {
     private const val MAX_CUSTOM_IMAGE_DIMENSION = 768
@@ -27,6 +28,7 @@ object PodImageLoader {
         address: String,
         resource: PodImageResource,
         fallbackResId: Int,
+        verifiedRoute: HuaweiDeviceRoute? = null,
     ): Bitmap? {
         val earphone = currentImagePreference(prefs, address)
         val custom = runCatching {
@@ -44,12 +46,16 @@ object PodImageLoader {
         val moduleContext = runCatching {
             context.createPackageContext(BuildConfig.APPLICATION_ID, Context.CONTEXT_IGNORE_SECURITY)
         }.getOrNull() ?: return null
-        val route = runCatching {
+        val configuredRoute = runCatching {
             DeviceRoutePrefs.resolve(prefs, address, earphone?.name)
         }.getOrDefault(HuaweiDeviceRoute.UNSUPPORTED)
         return BitmapFactory.decodeResource(
             moduleContext.resources,
-            modelFallbackResId(route, resource, fallbackResId),
+            modelFallbackResId(
+                imageFallbackRoute(verifiedRoute, configuredRoute),
+                resource,
+                fallbackResId,
+            ),
         )
     }
 
@@ -60,6 +66,7 @@ object PodImageLoader {
         resource: PodImageResource,
         customFallbackResource: PodImageResource,
         fallbackResId: Int,
+        verifiedRoute: HuaweiDeviceRoute? = null,
     ): Bitmap? {
         val earphone = currentImagePreference(prefs, address)
         val custom = runCatching {
@@ -78,12 +85,16 @@ object PodImageLoader {
         val moduleContext = runCatching {
             context.createPackageContext(BuildConfig.APPLICATION_ID, Context.CONTEXT_IGNORE_SECURITY)
         }.getOrNull() ?: return null
-        val route = runCatching {
+        val configuredRoute = runCatching {
             DeviceRoutePrefs.resolve(prefs, address, earphone?.name)
         }.getOrDefault(HuaweiDeviceRoute.UNSUPPORTED)
         return BitmapFactory.decodeResource(
             moduleContext.resources,
-            modelFallbackResId(route, resource, fallbackResId),
+            modelFallbackResId(
+                imageFallbackRoute(verifiedRoute, configuredRoute),
+                resource,
+                fallbackResId,
+            ),
         )
     }
 
@@ -92,6 +103,13 @@ object PodImageLoader {
         prefs: SharedPreferences,
         address: String,
     ): EarphonePref? = runCatching { PodImagePrefs.find(prefs, address) }.getOrNull()
+
+    /** 宿主已确认机型时直接用于内置图兜底，避免独立配置尚未同步时退回通用图。 */
+    internal fun imageFallbackRoute(
+        verifiedRoute: HuaweiDeviceRoute?,
+        configuredRoute: HuaweiDeviceRoute,
+    ): HuaweiDeviceRoute = verifiedRoute?.takeIf(HuaweiDeviceRoute::isSupported)
+        ?: configuredRoute
 
     /** 当前地址没有自定义图时，先使用机型专属图，最后才使用全局默认图。 */
     internal fun modelFallbackResId(
@@ -125,8 +143,20 @@ object PodImageLoader {
         else -> globalFallbackResId
     }
 
-    fun loadBoxBitmap(context: Context, prefs: SharedPreferences, address: String): Bitmap? {
-        return loadBitmap(context, prefs, address, PodImageResource.BOX, R.drawable.img_box)
+    fun loadBoxBitmap(
+        context: Context,
+        prefs: SharedPreferences,
+        address: String,
+        verifiedRoute: HuaweiDeviceRoute? = null,
+    ): Bitmap? {
+        return loadBitmap(
+            context = context,
+            prefs = prefs,
+            address = address,
+            resource = PodImageResource.BOX,
+            fallbackResId = R.drawable.img_box,
+            verifiedRoute = verifiedRoute,
+        )
     }
 
 

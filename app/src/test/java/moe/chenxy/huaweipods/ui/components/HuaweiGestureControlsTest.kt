@@ -33,6 +33,13 @@ class HuaweiGestureControlsTest {
         assertFalse(freeBuds4e.hasModernSwipeVolumeToggle)
         assertTrue(freeBuds4e.hasWearDetection)
 
+        val freeBuds5i = huaweiGestureControlLayout(HuaweiDeviceRoute.HUAWEI_FREEBUDS5I)
+        assertEquals(listOf(HuaweiGestureKind.DOUBLE_TAP), freeBuds5i.tapKinds)
+        assertFalse(freeBuds5i.hasSwipe)
+        assertFalse(freeBuds5i.hasModernLongPressControls)
+        assertFalse(freeBuds5i.hasModernSwipeVolumeToggle)
+        assertFalse(freeBuds5i.hasWearDetection)
+
         val freeClip2 = huaweiGestureControlLayout(HuaweiDeviceRoute.HUAWEI_FREECLIP2)
         assertEquals(
             listOf(HuaweiGestureKind.DOUBLE_TAP, HuaweiGestureKind.TRIPLE_TAP),
@@ -56,6 +63,16 @@ class HuaweiGestureControlsTest {
         )
         assertTrue(freeBuds7i.hasModernLongPressControls)
         assertTrue(freeBuds7i.hasModernSwipeVolumeToggle)
+
+        val freeArc = huaweiGestureControlLayout(HuaweiDeviceRoute.HUAWEI_FREEARC)
+        assertEquals(
+            listOf(HuaweiGestureKind.DOUBLE_TAP, HuaweiGestureKind.TRIPLE_TAP),
+            freeArc.tapKinds,
+        )
+        assertTrue(freeArc.hasSwipe)
+        assertTrue(freeArc.hasModernLongPressControls)
+        assertFalse(freeArc.hasModernSwipeVolumeToggle)
+        assertFalse(freeArc.hasWearDetection)
     }
 
     @Test
@@ -153,5 +170,24 @@ class HuaweiGestureControlsTest {
             longPressLeft = "voice_assistant",
         )
         assertFalse(rejected.longPressActions.containsKey(HuaweiGestureSide.LEFT))
+    }
+
+    @Test
+    fun `FreeArc readback rejects unsupported noise control and swipe none`() {
+        val state = huaweiGestureReadback(
+            route = HuaweiDeviceRoute.HUAWEI_FREEARC,
+            longPressLeft = "voice_assistant",
+            longPressRight = "noise_control",
+            swipeLeft = "track_control",
+            swipeRight = "none",
+        )
+
+        assertEquals(
+            FreeBudsPro3LongPressAction.VOICE_ASSISTANT,
+            state.longPressActions[HuaweiGestureSide.LEFT],
+        )
+        assertFalse(state.longPressActions.containsKey(HuaweiGestureSide.RIGHT))
+        assertEquals(HuaweiSwipeAction.TRACK_CONTROL, state.swipeActions[HuaweiGestureSide.LEFT])
+        assertFalse(state.swipeActions.containsKey(HuaweiGestureSide.RIGHT))
     }
 }

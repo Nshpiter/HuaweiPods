@@ -13,6 +13,7 @@ class DeviceCapabilitiesTest {
             "HUAWEI FreeBuds 3" to HuaweiDeviceRoute.HUAWEI_FREEBUDS3,
             "FreeBuds 4E" to HuaweiDeviceRoute.HUAWEI_FREEBUDS4E,
             "FreeBuds 5" to HuaweiDeviceRoute.HUAWEI_FREEBUDS5,
+            "HUAWEI FreeBuds 5i" to HuaweiDeviceRoute.HUAWEI_FREEBUDS5I,
             "HUAWEI FreeBuds 6i" to HuaweiDeviceRoute.HUAWEI_FREEBUDS6I,
             "FreeBuds Pro 3" to HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3,
             "HUAWEI FreeBuds Pro 4" to HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO4,
@@ -20,6 +21,7 @@ class DeviceCapabilitiesTest {
             "HUAWEI FreeBuds 7i" to HuaweiDeviceRoute.HUAWEI_FREEBUDS7I,
             "FreeClip" to HuaweiDeviceRoute.HUAWEI_FREECLIP,
             "HUAWEI FreeClip 2" to HuaweiDeviceRoute.HUAWEI_FREECLIP2,
+            "HUAWEI FreeArc" to HuaweiDeviceRoute.HUAWEI_FREEARC,
             "HUAWEI Eyewear" to HuaweiDeviceRoute.HUAWEI_EYEWEAR,
             "Eyewear 2" to HuaweiDeviceRoute.HUAWEI_EYEWEAR2,
         )
@@ -54,6 +56,7 @@ class DeviceCapabilitiesTest {
 
         listOf(
             HuaweiDeviceRoute.HUAWEI_FREEBUDS5,
+            HuaweiDeviceRoute.HUAWEI_FREEBUDS5I,
             HuaweiDeviceRoute.HUAWEI_FREEBUDS4E,
             HuaweiDeviceRoute.HUAWEI_FREEBUDS6I,
             HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3,
@@ -64,6 +67,7 @@ class DeviceCapabilitiesTest {
         }
         assertFalse(HuaweiDeviceRoute.HUAWEI_FREEBUDS5.supportsTransparency)
         listOf(
+            HuaweiDeviceRoute.HUAWEI_FREEBUDS5I,
             HuaweiDeviceRoute.HUAWEI_FREEBUDS6I,
             HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3,
             HuaweiDeviceRoute.HUAWEI_FREEBUDS7I,
@@ -83,10 +87,11 @@ class DeviceCapabilitiesTest {
     }
 
     @Test
-    fun `clip and eyewear families never expose traditional ANC`() {
+    fun `open-ear and eyewear families never expose traditional ANC`() {
         listOf(
             HuaweiDeviceRoute.HUAWEI_FREECLIP,
             HuaweiDeviceRoute.HUAWEI_FREECLIP2,
+            HuaweiDeviceRoute.HUAWEI_FREEARC,
             HuaweiDeviceRoute.HUAWEI_EYEWEAR,
             HuaweiDeviceRoute.HUAWEI_EYEWEAR2,
         ).forEach { route ->
@@ -118,10 +123,12 @@ class DeviceCapabilitiesTest {
         listOf(
             HuaweiDeviceRoute.HUAWEI_FREEBUDS3,
             HuaweiDeviceRoute.HUAWEI_FREEBUDS4E,
+            HuaweiDeviceRoute.HUAWEI_FREEBUDS5I,
             HuaweiDeviceRoute.HUAWEI_FREEBUDS6I,
             HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3,
             HuaweiDeviceRoute.HUAWEI_FREEBUDS7I,
             HuaweiDeviceRoute.HUAWEI_FREECLIP2,
+            HuaweiDeviceRoute.HUAWEI_FREEARC,
             HuaweiDeviceRoute.HUAWEI_EYEWEAR2,
         ).forEach { route -> assertTrue(route.displayName, route.supportsGestureConfiguration) }
         assertFalse(HuaweiDeviceRoute.HUAWEI_FREEBUDS5.supportsGestureConfiguration)
@@ -156,6 +163,7 @@ class DeviceCapabilitiesTest {
             HuaweiDeviceRoute.HUAWEI_FREEBUDS3 to "HUAWEI_FREEBUDS3",
             HuaweiDeviceRoute.HUAWEI_FREEBUDS4E to "HUAWEI_FREEBUDS4E",
             HuaweiDeviceRoute.HUAWEI_FREEBUDS5 to "HUAWEI_FREEBUDS5",
+            HuaweiDeviceRoute.HUAWEI_FREEBUDS5I to "HUAWEI_FREEBUDS5I",
             HuaweiDeviceRoute.HUAWEI_FREEBUDS6I to "HUAWEI_FREEBUDS6I",
             HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3 to "HUAWEI_FREEBUDS_PRO3",
             HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO4 to "HUAWEI_FREEBUDS_PRO4",
@@ -163,6 +171,7 @@ class DeviceCapabilitiesTest {
             HuaweiDeviceRoute.HUAWEI_FREEBUDS7I to "HUAWEI_FREEBUDS7I",
             HuaweiDeviceRoute.HUAWEI_FREECLIP to "HUAWEI_FREECLIP",
             HuaweiDeviceRoute.HUAWEI_FREECLIP2 to "HUAWEI_FREECLIP2",
+            HuaweiDeviceRoute.HUAWEI_FREEARC to "HUAWEI_FREEARC",
             HuaweiDeviceRoute.HUAWEI_EYEWEAR to "HUAWEI_EYEWEAR",
             HuaweiDeviceRoute.HUAWEI_EYEWEAR2 to "HUAWEI_EYEWEAR2",
         )

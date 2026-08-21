@@ -499,7 +499,7 @@ object AiLifeCaptureHook : HookContext() {
         val callbackClass = runCatching {
             findClass("android.bluetooth.BluetoothGatt\$1")
         }.onFailure {
-            Log.w(TAG, "BluetoothGatt framework callback unavailable; use HCI snoop fallback", it)
+            Log.w(TAG, "BluetoothGatt framework callback unavailable", it)
         }.getOrNull() ?: return
 
         val methods = callbackClass.declaredMethods.filter { method ->
@@ -507,7 +507,7 @@ object AiLifeCaptureHook : HookContext() {
                 method.parameterTypes.any { it == ByteArray::class.java }
         }
         if (methods.isEmpty()) {
-            Log.w(TAG, "BluetoothGatt inbound callback methods unavailable; use HCI snoop fallback")
+            Log.w(TAG, "BluetoothGatt inbound callback methods unavailable")
         }
         methods.forEach(::hookGattInboundCallback)
     }

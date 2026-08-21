@@ -246,17 +246,20 @@ private fun FreeBuds7iFeatureToggle(
 }
 
 @Composable
-private fun <T> FreeBuds7iChoicePreference(
+internal fun <T> FreeBuds7iChoicePreference(
     title: String,
     selected: T?,
     values: List<T>,
     label: @Composable (T) -> String,
+    summaryOverride: String? = null,
     onSelected: (T, (Boolean) -> Unit) -> Unit,
 ) {
     val context = LocalContext.current
     var showDialog by remember(title) { mutableStateOf(false) }
     var pending by remember(title) { mutableStateOf(false) }
-    val summary = selected?.let { label(it) } ?: stringResource(R.string.freebuds7i_state_unknown)
+    val summary = summaryOverride
+        ?: selected?.let { label(it) }
+        ?: stringResource(R.string.freebuds7i_state_unknown)
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -313,6 +316,7 @@ internal fun HuaweiEqualizerPreference(
     requestOnMount: Boolean = true,
     editable: Boolean = HuaweiEqualizerCodec.customWriteOperation(route) != null ||
         route == HuaweiDeviceRoute.HUAWEI_FREECLIP2,
+    onCustomApplied: ((List<Int>) -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val prefs = remember(context) {
@@ -572,6 +576,7 @@ internal fun HuaweiEqualizerPreference(
                             if (success) {
                                 gains = editing
                                 prefs.edit().putString(prefix + "equalizer", editing.joinToString(",")).apply()
+                                onCustomApplied?.invoke(editing)
                                 showDialog = false
                             } else {
                                 Toast.makeText(context, R.string.connect_failed, Toast.LENGTH_SHORT).show()

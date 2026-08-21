@@ -169,6 +169,30 @@ class HuaweiAncPacketsTest {
     }
 
     @Test
+    fun `FreeBuds 5i mode and level packets match verified capture`() {
+        val route = HuaweiDeviceRoute.HUAWEI_FREEBUDS5I
+        val packets = listOf(
+            NoiseControlMode.OFF to "5A0007002B0401020000D22D",
+            NoiseControlMode.TRANSPARENCY to "5A0007002B04010202FFAABF",
+        )
+        packets.forEach { (mode, packet) ->
+            assertArrayEquals(packet, hex(packet), HuaweiAncPackets.mode(route, mode))
+        }
+        mapOf(
+            0x03 to "5A0007002B0401020103D17F",
+            0x01 to "5A0007002B0401020101F13D",
+            0x00 to "5A0007002B0401020100E11C",
+            0x02 to "5A0007002B0401020102C15E",
+        ).forEach { (level, packet) ->
+            assertArrayEquals(
+                packet,
+                hex(packet),
+                HuaweiAncPackets.mode(route, NoiseControlMode.NOISE_CANCELLATION, level),
+            )
+        }
+    }
+
+    @Test
     fun `Pro 3 and 6i entering modes from off replay captured FF transition packets`() {
         val off = HuaweiAncState(NoiseControlMode.OFF)
         listOf(

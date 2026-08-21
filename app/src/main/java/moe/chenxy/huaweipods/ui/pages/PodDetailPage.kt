@@ -59,10 +59,11 @@ import moe.chenxy.huaweipods.pods.HuaweiGestureSide
 import moe.chenxy.huaweipods.ui.components.AncSwitch
 import moe.chenxy.huaweipods.ui.components.FreeBuds5Controls
 import moe.chenxy.huaweipods.ui.components.FreeBuds4eControls
+import moe.chenxy.huaweipods.ui.components.FreeBuds6iControls
 import moe.chenxy.huaweipods.ui.components.FreeBuds7iControls
 import moe.chenxy.huaweipods.ui.components.FreeClip2Controls
+import moe.chenxy.huaweipods.ui.components.FreeArcControls
 import moe.chenxy.huaweipods.ui.components.HuaweiGestureControls
-import moe.chenxy.huaweipods.ui.components.HuaweiEqualizerPreference
 import moe.chenxy.huaweipods.ui.components.LowLatencyControl
 import moe.chenxy.huaweipods.ui.components.PodStatus
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.BatteryParams
@@ -325,12 +326,27 @@ private fun LazyListScope.podControlItems(
         }
     }
 
-    if (deviceRoute == HuaweiDeviceRoute.HUAWEI_FREEBUDS5) {
+    if (deviceRoute == HuaweiDeviceRoute.HUAWEI_FREEBUDS5 ||
+        deviceRoute == HuaweiDeviceRoute.HUAWEI_FREEBUDS5I
+    ) {
         item {
             Card(
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
             ) {
-                FreeBuds5Controls(address = connectedDeviceAddress)
+                FreeBuds5Controls(
+                    address = connectedDeviceAddress,
+                    route = deviceRoute,
+                )
+            }
+        }
+    }
+
+    if (deviceRoute == HuaweiDeviceRoute.HUAWEI_FREEARC) {
+        item {
+            Card(
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
+            ) {
+                FreeArcControls(address = connectedDeviceAddress)
             }
         }
     }
@@ -360,16 +376,14 @@ private fun LazyListScope.podControlItems(
             Card(
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
             ) {
-                HuaweiEqualizerPreference(
-                    address = connectedDeviceAddress,
-                    route = deviceRoute,
-                )
+                FreeBuds6iControls(address = connectedDeviceAddress)
             }
         }
     }
 
     if (deviceRoute.supportsLowLatencyControl &&
         deviceRoute != HuaweiDeviceRoute.HUAWEI_FREEBUDS5 &&
+        deviceRoute != HuaweiDeviceRoute.HUAWEI_FREEBUDS5I &&
         deviceRoute != HuaweiDeviceRoute.HUAWEI_FREECLIP2 &&
         deviceRoute != HuaweiDeviceRoute.HUAWEI_FREEBUDS7I
     ) {

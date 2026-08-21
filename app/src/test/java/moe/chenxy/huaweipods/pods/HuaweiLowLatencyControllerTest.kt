@@ -22,6 +22,7 @@ class HuaweiLowLatencyControllerTest {
     fun `capability is enabled only for routes with setter capture evidence`() {
         val verified = setOf(
             HuaweiDeviceRoute.HUAWEI_FREEBUDS5,
+            HuaweiDeviceRoute.HUAWEI_FREEBUDS5I,
             HuaweiDeviceRoute.HUAWEI_FREEBUDS6I,
             HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3,
             HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5,

@@ -19,6 +19,11 @@ internal class HuaweiAncSubModeSelectorView(
     context: Context,
     private val onSelected: (Int) -> Unit,
 ) : LinearLayout(context) {
+    enum class Appearance {
+        MODULE,
+        HOST_GLASS,
+    }
+
     data class Option(
         val value: Int,
         val label: String,
@@ -32,24 +37,32 @@ internal class HuaweiAncSubModeSelectorView(
         options: List<Option>,
         selectedValue: Int,
         darkSurface: Boolean,
+        appearance: Appearance = Appearance.MODULE,
+        accentColor: Int? = null,
     ) {
         removeAllViews()
         if (options.isEmpty()) return
         setPadding(context.dp(5), context.dp(3), context.dp(5), context.dp(3))
+        val resolvedAccent = accentColor ?: resolveAccentColor()
         addView(
             LinearLayout(context).apply {
                 orientation = HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
                 setPadding(context.dp(3), context.dp(3), context.dp(3), context.dp(3))
                 background = roundedBackground(
-                    if (darkSurface) Color.argb(42, 255, 255, 255)
-                    else Color.argb(18, 35, 49, 75),
-                    13,
+                    selectorBackgroundColor(darkSurface, appearance),
+                    if (appearance == Appearance.HOST_GLASS) 18 else 13,
                 )
 
                 options.forEachIndexed { index, option ->
                     addView(
-                        optionView(option, option.value == selectedValue, darkSurface),
+                        optionView(
+                            option = option,
+                            selected = option.value == selectedValue,
+                            darkSurface = darkSurface,
+                            appearance = appearance,
+                            accent = resolvedAccent,
+                        ),
                         LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f).apply {
                             if (index > 0) marginStart = context.dp(3)
                         },
@@ -64,6 +77,8 @@ internal class HuaweiAncSubModeSelectorView(
         option: Option,
         selected: Boolean,
         darkSurface: Boolean,
+        appearance: Appearance,
+        accent: Int,
     ): TextView = TextView(context).apply {
         text = option.label
         gravity = Gravity.CENTER
@@ -77,7 +92,7 @@ internal class HuaweiAncSubModeSelectorView(
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
         }
         setTextColor(
-            if (selected) Color.WHITE else optionTextColor(darkSurface),
+            optionTextColor(selected, darkSurface, appearance, accent),
         )
         setAutoSizeTextTypeUniformWithConfiguration(
             9,
@@ -85,18 +100,26 @@ internal class HuaweiAncSubModeSelectorView(
             1,
             TypedValue.COMPLEX_UNIT_SP,
         )
-        background = segmentBackground(selected, darkSurface)
+        background = segmentBackground(selected, darkSurface, appearance, accent)
         setOnClickListener {
             if (!selected) onSelected(option.value)
         }
     }
 
-    private fun segmentBackground(selected: Boolean, darkSurface: Boolean): RippleDrawable {
-        val accent = resolveAccentColor()
-        val fill = if (selected) {
-            accent
-        } else {
-            if (darkSurface) Color.argb(8, 255, 255, 255) else Color.TRANSPARENT
+    private fun segmentBackground(
+        selected: Boolean,
+        darkSurface: Boolean,
+        appearance: Appearance,
+        accent: Int,
+    ): RippleDrawable {
+        val fill = when {
+            !selected && darkSurface -> Color.argb(6, 255, 255, 255)
+            !selected -> Color.TRANSPARENT
+            appearance == Appearance.HOST_GLASS && darkSurface ->
+                Color.argb(232, 248, 249, 252)
+            appearance == Appearance.HOST_GLASS ->
+                Color.argb(28, Color.red(accent), Color.green(accent), Color.blue(accent))
+            else -> accent
         }
         val ripple = if (selected) {
             Color.argb(40, 255, 255, 255)
@@ -105,9 +128,18 @@ internal class HuaweiAncSubModeSelectorView(
         }
         return RippleDrawable(
             ColorStateList.valueOf(ripple),
-            roundedBackground(fill, 10),
+            roundedBackground(fill, if (appearance == Appearance.HOST_GLASS) 21 else 10),
             null,
         )
+    }
+
+    private fun selectorBackgroundColor(
+        darkSurface: Boolean,
+        appearance: Appearance,
+    ): Int = when {
+        appearance == Appearance.HOST_GLASS -> Color.TRANSPARENT
+        darkSurface -> Color.argb(42, 255, 255, 255)
+        else -> Color.argb(18, 35, 49, 75)
     }
 
     private fun roundedBackground(color: Int, radiusDp: Int) = GradientDrawable().apply {
@@ -125,8 +157,16 @@ internal class HuaweiAncSubModeSelectorView(
         }
     }
 
-    private fun optionTextColor(darkSurface: Boolean): Int =
-        if (darkSurface) Color.rgb(205, 210, 220) else Color.rgb(93, 101, 116)
+    private fun optionTextColor(
+        selected: Boolean,
+        darkSurface: Boolean,
+        appearance: Appearance,
+        accent: Int,
+    ): Int {
+        if (selected && appearance == Appearance.HOST_GLASS) return accent
+        if (selected) return Color.WHITE
+        return if (darkSurface) Color.rgb(218, 221, 229) else Color.rgb(93, 101, 116)
+    }
 
     private fun Context.dp(value: Int): Int =
         (value * resources.displayMetrics.density).roundToInt()

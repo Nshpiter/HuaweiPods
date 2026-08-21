@@ -16,10 +16,15 @@
     <string name="notification_click_module_popup">模块弹窗</string>
     <string name="click_action_system_settings">系统设置</string>
     <string name="click_action_module">模块</string>
+    <string name="click_action_smart_audio">智慧音频</string>
     <string name="enabled">开启</string>
     <string name="off">关闭</string>
     <string name="low_latency_mode">低时延模式</string>
     <string name="low_latency_auto_apply_summary">开启后会在每次连接时自动重新应用</string>
+    <string name="milink_low_latency_card">融合中心低时延卡片</string>
+    <string name="milink_low_latency_card_summary">用融合中心的查找耳机卡片快速切换低时延，仅在支持的机型上生效</string>
+    <string name="low_latency_enabled">已开启</string>
+    <string name="low_latency_disabled">已关闭</string>
     <string name="noise_cancellation_title">降噪</string>
     <string name="gesture_left_double_tap">左耳双击</string>
     <string name="gesture_right_double_tap">右耳双击</string>

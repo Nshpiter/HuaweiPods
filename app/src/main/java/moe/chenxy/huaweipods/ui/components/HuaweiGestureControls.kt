@@ -87,10 +87,7 @@ fun HuaweiGestureControls(
         mutableStateOf(prefs.getBoolean(wearDetectionKey, true))
     }
     HuaweiGestureReadbackEffect(
-        enabled = route == HuaweiDeviceRoute.HUAWEI_FREEBUDS4E ||
-            route == HuaweiDeviceRoute.HUAWEI_FREEBUDS6I ||
-            route == HuaweiDeviceRoute.HUAWEI_FREECLIP2 ||
-            route == HuaweiDeviceRoute.HUAWEI_FREEBUDS7I,
+        enabled = route.supportsGestureStateReadback(),
         route = route,
         address = address,
     ) { update ->
@@ -183,11 +180,7 @@ fun HuaweiGestureControls(
 
             Text(
                 text = stringResource(
-                    if (route == HuaweiDeviceRoute.HUAWEI_FREEBUDS4E ||
-                        route == HuaweiDeviceRoute.HUAWEI_FREEBUDS6I ||
-                        route == HuaweiDeviceRoute.HUAWEI_FREECLIP2 ||
-                        route == HuaweiDeviceRoute.HUAWEI_FREEBUDS7I
-                    ) {
+                    if (route.supportsGestureStateReadback()) {
                         R.string.huawei_gesture_readback_hint
                     } else {
                         R.string.huawei_gesture_local_state_hint
@@ -294,11 +287,7 @@ private fun TapActionPreference(
                 if (success) {
                     localSelected = action
                     prefs.edit().putString(key, action.extraValue).apply()
-                    if (route == HuaweiDeviceRoute.HUAWEI_FREEBUDS4E ||
-                        route == HuaweiDeviceRoute.HUAWEI_FREEBUDS6I ||
-                        route == HuaweiDeviceRoute.HUAWEI_FREECLIP2 ||
-                        route == HuaweiDeviceRoute.HUAWEI_FREEBUDS7I
-                    ) {
+                    if (route.supportsGestureStateReadback()) {
                         context.requestHuaweiGestureState(
                             route = route,
                             address = address,
@@ -340,9 +329,7 @@ private fun SwipeActionPreference(
                 if (success) {
                     localSelected = action
                     prefs.edit().putString(key, action.extraValue).apply()
-                    if (route == HuaweiDeviceRoute.HUAWEI_FREECLIP2 ||
-                        route == HuaweiDeviceRoute.HUAWEI_FREEBUDS7I
-                    ) {
+                    if (route.supportsGestureStateReadback()) {
                         context.requestHuaweiGestureState(
                             route = route,
                             address = address,
@@ -367,7 +354,7 @@ private fun ModernEarbudsGestureControls(
 ) {
     val context = LocalContext.current
     GestureSectionTitle(
-        if (route == HuaweiDeviceRoute.HUAWEI_FREEBUDS4E) {
+        if (route.isHoldGestureRoute()) {
             R.string.huawei_gesture_hold_section
         } else {
             R.string.huawei_gesture_pro3_long_press_section
@@ -447,7 +434,7 @@ private fun ModernEarbudsLongPressPreference(
                 if (success) {
                     localSelected = action
                     prefs.edit().putString(key, action.extraValue).apply()
-                    if (route == HuaweiDeviceRoute.HUAWEI_FREEBUDS4E) {
+                    if (route.isHoldGestureRoute()) {
                         context.requestHuaweiGestureState(
                             route = route,
                             address = address,
@@ -911,7 +898,8 @@ internal fun huaweiGestureControlLayout(route: HuaweiDeviceRoute): HuaweiGesture
         hasModernLongPressControls = route == HuaweiDeviceRoute.HUAWEI_FREEBUDS4E ||
             route == HuaweiDeviceRoute.HUAWEI_FREEBUDS6I ||
             route == HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3 ||
-            route == HuaweiDeviceRoute.HUAWEI_FREEBUDS7I,
+            route == HuaweiDeviceRoute.HUAWEI_FREEBUDS7I ||
+            route == HuaweiDeviceRoute.HUAWEI_FREEARC,
         hasModernSwipeVolumeToggle = route == HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3 ||
             route == HuaweiDeviceRoute.HUAWEI_FREEBUDS7I,
         hasWearDetection = route == HuaweiDeviceRoute.HUAWEI_FREEBUDS6I ||
@@ -919,6 +907,9 @@ internal fun huaweiGestureControlLayout(route: HuaweiDeviceRoute): HuaweiGesture
             route == HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3,
     )
 }
+
+private fun HuaweiDeviceRoute.supportsGestureStateReadback(): Boolean =
+    HuaweiGestureController.buildGestureStateQuery(this) != null
 
 internal fun gesturePreferencePrefix(route: HuaweiDeviceRoute, address: String): String =
     "huawei_gesture_v2_${address.ifBlank { "unknown" }.uppercase(Locale.ROOT)}_${route.name.lowercase(Locale.ROOT)}"
@@ -981,13 +972,16 @@ private fun swipeTitleRes(side: HuaweiGestureSide): Int = when (side) {
 
 @StringRes
 private fun longPressTitleRes(route: HuaweiDeviceRoute, side: HuaweiGestureSide): Int = when {
-    route == HuaweiDeviceRoute.HUAWEI_FREEBUDS4E && side == HuaweiGestureSide.LEFT ->
+    route.isHoldGestureRoute() && side == HuaweiGestureSide.LEFT ->
         R.string.huawei_gesture_left_hold
-    route == HuaweiDeviceRoute.HUAWEI_FREEBUDS4E && side == HuaweiGestureSide.RIGHT ->
+    route.isHoldGestureRoute() && side == HuaweiGestureSide.RIGHT ->
         R.string.huawei_gesture_right_hold
     side == HuaweiGestureSide.LEFT -> R.string.huawei_gesture_left_long_press
     else -> R.string.huawei_gesture_right_long_press
 }
+
+private fun HuaweiDeviceRoute.isHoldGestureRoute(): Boolean =
+    this == HuaweiDeviceRoute.HUAWEI_FREEBUDS4E || this == HuaweiDeviceRoute.HUAWEI_FREEARC
 
 @StringRes
 private fun HuaweiTapAction.labelRes(): Int = when (this) {

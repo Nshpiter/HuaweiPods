@@ -23,10 +23,11 @@ class BluetoothUpstreamAncPolicyTest {
     }
 
     @Test
-    fun `clip and eyewear routes reject every ANC command`() {
+    fun `open-ear and eyewear routes reject every ANC command`() {
         listOf(
             HuaweiDeviceRoute.HUAWEI_FREECLIP,
             HuaweiDeviceRoute.HUAWEI_FREECLIP2,
+            HuaweiDeviceRoute.HUAWEI_FREEARC,
             HuaweiDeviceRoute.HUAWEI_EYEWEAR,
             HuaweiDeviceRoute.HUAWEI_EYEWEAR2,
         ).forEach { route ->
@@ -40,6 +41,10 @@ class BluetoothUpstreamAncPolicyTest {
 
     @Test
     fun `three-state routes preserve transparency and captured defaults`() {
+        assertEquals(
+            HuaweiAncState(NoiseControlMode.TRANSPARENCY),
+            upstreamHuaweiAncStateForMode(HuaweiDeviceRoute.HUAWEI_FREEBUDS5I, 2, off),
+        )
         assertEquals(
             HuaweiAncState(NoiseControlMode.TRANSPARENCY, 0x02),
             upstreamHuaweiAncStateForMode(HuaweiDeviceRoute.HUAWEI_FREEBUDS6I, 2, off),
@@ -103,8 +108,7 @@ class BluetoothUpstreamAncPolicyTest {
     }
 
     @Test
-    fun `FreeBuds 6i MIUI levels preserve the captured protocol values`() {
-        val route = HuaweiDeviceRoute.HUAWEI_FREEBUDS6I
+    fun `FreeBuds 5i and 6i MIUI levels preserve the captured protocol values`() {
         val cases = mapOf(
             "0103" to 0x03,
             "0101" to 0x01,
@@ -112,16 +116,21 @@ class BluetoothUpstreamAncPolicyTest {
             "0102" to 0x02,
         )
 
-        cases.forEach { (miuiPayload, huaweiSubMode) ->
-            val state = upstreamHuaweiAncStateForLevel(route, miuiPayload, off)
+        listOf(
+            HuaweiDeviceRoute.HUAWEI_FREEBUDS5I,
+            HuaweiDeviceRoute.HUAWEI_FREEBUDS6I,
+        ).forEach { route ->
+            cases.forEach { (miuiPayload, huaweiSubMode) ->
+                val state = upstreamHuaweiAncStateForLevel(route, miuiPayload, off)
 
-            assertEquals(
-                HuaweiAncState(NoiseControlMode.NOISE_CANCELLATION, huaweiSubMode),
-                state,
-            )
-            assertEquals(miuiPayload, upstreamMiuiAncLevel(route, state!!))
+                assertEquals(
+                    HuaweiAncState(NoiseControlMode.NOISE_CANCELLATION, huaweiSubMode),
+                    state,
+                )
+                assertEquals(miuiPayload, upstreamMiuiAncLevel(route, state!!))
+            }
+            assertNull(upstreamHuaweiAncStateForLevel(route, "0109", off))
         }
-        assertNull(upstreamHuaweiAncStateForLevel(route, "0109", off))
     }
 
     @Test

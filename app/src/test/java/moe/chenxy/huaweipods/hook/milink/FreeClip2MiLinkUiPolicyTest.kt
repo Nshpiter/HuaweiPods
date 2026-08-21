@@ -9,17 +9,6 @@ import org.junit.Test
 class FreeClip2MiLinkUiPolicyTest {
 
     @Test
-    fun `section title translation aligns its visible start without accumulating`() {
-        assertEquals(
-            -19f,
-            FreeClip2MiLinkUiPolicy.alignedTitleTranslation(
-                originalTranslation = 3f,
-                referenceStart = 100,
-                targetStart = 122,
-            ),
-        )
-    }
-    @Test
     fun `native labels map to official FreeClip2 semantics`() {
         assertEquals(FreeClip2MiLinkLabel.AUDIO_SETTINGS, FreeClip2MiLinkUiPolicy.classify("噪声控制"))
         assertEquals(FreeClip2MiLinkLabel.FIXED, FreeClip2MiLinkUiPolicy.classify("沉浸声"))
@@ -42,11 +31,23 @@ class FreeClip2MiLinkUiPolicyTest {
     fun `section typography reference only accepts exact volume heading`() {
         assertTrue(FreeClip2MiLinkUiPolicy.isVolumeHeading("音量 | 42%"))
         assertTrue(FreeClip2MiLinkUiPolicy.isVolumeHeading("Volume: 42%"))
+        assertTrue(FreeClip2MiLinkUiPolicy.isVolumeHeading("音量  47%"))
+        assertTrue(FreeClip2MiLinkUiPolicy.isVolumeHeading("Volume 100%"))
         assertTrue(FreeClip2MiLinkUiPolicy.isSpatialAudioHeading("空间音频"))
         assertTrue(FreeClip2MiLinkUiPolicy.isSpatialAudioHeading("Spatial audio"))
         assertFalse(FreeClip2MiLinkUiPolicy.isVolumeHeading("调节音量"))
         assertFalse(FreeClip2MiLinkUiPolicy.isVolumeHeading("Volume control"))
         assertFalse(FreeClip2MiLinkUiPolicy.isSpatialAudioHeading("空间音频说明"))
+    }
+
+    @Test
+    fun `volume progress is converted without waiting for the system callback`() {
+        assertEquals(35, miLinkVolumePercentForProgress(53, 0, 150))
+        assertEquals(42, miLinkVolumePercentForProgress(63, 0, 150))
+        assertEquals(50, miLinkVolumePercentForProgress(55, 10, 100))
+        assertEquals(0, miLinkVolumePercentForProgress(-1, 0, 100))
+        assertEquals(100, miLinkVolumePercentForProgress(101, 0, 100))
+        assertNull(miLinkVolumePercentForProgress(50, 100, 100))
     }
 
     @Test

@@ -14,7 +14,7 @@ internal object FreeClip2MiLinkUiPolicy {
     private val headTrackingTitles = setOf("头部追踪", "头部跟踪", "Head tracking")
     private val spatialAudioTitles = setOf("空间音频", "Spatial audio")
     private val volumeHeadingPattern = Regex(
-        pattern = "^(?:音量|volume)(?:\\s*[|｜·:]\\s*.*)?$",
+        pattern = "^(?:音量|volume)(?:\\s*(?:[|｜·:]\\s*.*|\\d{1,3}%))?$",
         option = RegexOption.IGNORE_CASE,
     )
 
@@ -43,12 +43,6 @@ internal object FreeClip2MiLinkUiPolicy {
         val normalized = text?.toString()?.trim()?.takeIf(String::isNotEmpty) ?: return false
         return spatialAudioTitles.any { it.equals(normalized, ignoreCase = true) }
     }
-
-    fun alignedTitleTranslation(
-        originalTranslation: Float,
-        referenceStart: Int,
-        targetStart: Int,
-    ): Float = originalTranslation + referenceStart - targetStart
 
     /** 三个选项必须正好占据同一容器的连续位置，才允许移动宿主 View。 */
     fun isSafeConsecutiveOrder(indices: Collection<Int>): Boolean {

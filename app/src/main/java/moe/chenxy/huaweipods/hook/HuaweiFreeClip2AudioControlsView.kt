@@ -19,6 +19,7 @@ internal class HuaweiFreeClip2AudioControlsView(
     private val onSpatialModeSelected: (FreeClip2SpatialAudioMode) -> Unit,
     private val onSpatialSceneSelected: (FreeClip2SpatialScene) -> Unit,
     private val onSoundEffectSelected: (FreeClip2SoundEffect) -> Unit,
+    private val onBuiltInSoundEffectSelected: (Int) -> Unit = {},
 ) : LinearLayout(context) {
     /** 仅复制文字外观，不复制宿主 View 的尺寸和间距。 */
     internal data class SectionTitleStyle(
@@ -76,11 +77,17 @@ internal class HuaweiFreeClip2AudioControlsView(
         val soundEffectCustom: String,
     )
 
+    data class BuiltInSoundEffectOption(
+        val id: Int,
+        val label: String,
+    )
+
     init {
         orientation = VERTICAL
     }
 
     private var sectionTitleStyle: SectionTitleStyle? = null
+    private var hostAccentColor: Int? = null
 
     /**
      * 融合设备中心各版本的字号和字体可能变化，优先继承当前宿主卡片的标题样式。
@@ -88,6 +95,10 @@ internal class HuaweiFreeClip2AudioControlsView(
      */
     internal fun setSectionTitleStyle(style: SectionTitleStyle?) {
         sectionTitleStyle = style
+    }
+
+    internal fun setHostAccentColor(color: Int?) {
+        hostAccentColor = color
     }
 
     fun render(
@@ -99,6 +110,7 @@ internal class HuaweiFreeClip2AudioControlsView(
         showSpatialMode: Boolean = true,
         showSpatialScene: Boolean,
         showSoundEffect: Boolean = true,
+        showSoundEffectTitle: Boolean = true,
         compact: Boolean,
     ) {
         removeAllViews()
@@ -119,6 +131,7 @@ internal class HuaweiFreeClip2AudioControlsView(
                 ),
                 selectedIndex = FreeClip2SpatialAudioMode.entries.indexOf(spatialMode),
                 darkSurface = darkSurface,
+                hostGlassStyle = compact,
             ) { index ->
                 FreeClip2SpatialAudioMode.entries.getOrNull(index)?.let(onSpatialModeSelected)
             }
@@ -135,6 +148,7 @@ internal class HuaweiFreeClip2AudioControlsView(
                 ),
                 selectedIndex = FreeClip2SpatialScene.entries.indexOf(spatialScene),
                 darkSurface = darkSurface,
+                hostGlassStyle = compact,
             ) { index ->
                 FreeClip2SpatialScene.entries.getOrNull(index)?.let(onSpatialSceneSelected)
             }
@@ -156,9 +170,37 @@ internal class HuaweiFreeClip2AudioControlsView(
                 ),
                 selectedIndex = selectableSoundEffects.indexOf(soundEffect),
                 darkSurface = darkSurface,
+                showTitle = showSoundEffectTitle,
+                hostGlassStyle = compact,
             ) { index ->
                 selectableSoundEffects.getOrNull(index)?.let(onSoundEffectSelected)
             }
+        }
+    }
+
+    fun renderBuiltInSoundEffects(
+        selectedId: Int?,
+        options: List<BuiltInSoundEffectOption>,
+        title: String,
+        customTitle: String,
+        darkSurface: Boolean,
+        compact: Boolean,
+    ) {
+        removeAllViews()
+        setPadding(
+            context.dp(if (compact) 6 else 12),
+            context.dp(6),
+            context.dp(if (compact) 6 else 12),
+            context.dp(10),
+        )
+        addSelector(
+            title = if (selectedId in 0x64..0x66) "$title · $customTitle" else title,
+            labels = options.map(BuiltInSoundEffectOption::label),
+            selectedIndex = options.indexOfFirst { it.id == selectedId },
+            darkSurface = darkSurface,
+            hostGlassStyle = compact,
+        ) { index ->
+            options.getOrNull(index)?.id?.let(onBuiltInSoundEffectSelected)
         }
     }
 
@@ -167,23 +209,27 @@ internal class HuaweiFreeClip2AudioControlsView(
         labels: List<String>,
         selectedIndex: Int,
         darkSurface: Boolean,
+        showTitle: Boolean = true,
+        hostGlassStyle: Boolean = false,
         onSelected: (Int) -> Unit,
     ) {
-        addView(
-            TextView(context).apply {
-                text = title
-                val inheritedStyle = sectionTitleStyle
-                if (inheritedStyle != null) {
-                    inheritedStyle.applyTo(this)
-                } else {
-                    typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-                    setTextColor(titleColor(darkSurface))
-                }
-                setPadding(context.dp(6), context.dp(7), context.dp(6), context.dp(6))
-            },
-            LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT),
-        )
+        if (showTitle) {
+            addView(
+                TextView(context).apply {
+                    text = title
+                    val inheritedStyle = sectionTitleStyle
+                    if (inheritedStyle != null) {
+                        inheritedStyle.applyTo(this)
+                    } else {
+                        typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                        setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+                        setTextColor(titleColor(darkSurface))
+                    }
+                    setPadding(context.dp(6), context.dp(7), context.dp(6), context.dp(6))
+                },
+                LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT),
+            )
+        }
         addView(
             HuaweiAncSubModeSelectorView(context, onSelected).apply {
                 render(
@@ -192,6 +238,12 @@ internal class HuaweiFreeClip2AudioControlsView(
                     },
                     selectedValue = selectedIndex,
                     darkSurface = darkSurface,
+                    appearance = if (hostGlassStyle) {
+                        HuaweiAncSubModeSelectorView.Appearance.HOST_GLASS
+                    } else {
+                        HuaweiAncSubModeSelectorView.Appearance.MODULE
+                    },
+                    accentColor = hostAccentColor,
                 )
             },
             LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT),

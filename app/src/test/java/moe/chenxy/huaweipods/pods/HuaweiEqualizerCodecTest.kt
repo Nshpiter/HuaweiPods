@@ -40,6 +40,32 @@ class HuaweiEqualizerCodecTest {
     }
 
     @Test
+    fun `builds official FreeBuds 6i sound effect packets reported by state`() {
+        val expected = mapOf(
+            0x01 to "5A0006002B490101012F1A",
+            0x02 to "5A0006002B490101021F79",
+            0x03 to "5A0006002B490101030F58",
+            0x09 to "5A0006002B49010109AE12",
+        )
+
+        expected.forEach { (presetId, packet) ->
+            assertArrayEquals(
+                hex(packet),
+                HuaweiEqualizerCodec.buildBuiltInPresetPacket(
+                    HuaweiDeviceRoute.HUAWEI_FREEBUDS6I,
+                    presetId,
+                ),
+            )
+        }
+        assertNull(
+            HuaweiEqualizerCodec.buildBuiltInPresetPacket(
+                HuaweiDeviceRoute.HUAWEI_FREEBUDS6I,
+                0x0A,
+            ),
+        )
+    }
+
+    @Test
     fun `rejects malformed or unverified values`() {
         val badCrc = hex(FREEBUDS6I_EQ_STATE).also { it[it.lastIndex] = 0 }
         assertNull(HuaweiEqualizerCodec.parseState(badCrc))

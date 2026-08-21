@@ -33,6 +33,15 @@ class SmartAudioDeviceInfoIdentityTest {
     }
 
     @Test
+    fun `extracts FreeBuds 5i submodel 07 from DeviceInfo TLV`() {
+        val identity = SmartAudioDeviceInfoIdentity.parse(
+            "5A008D00010702020145030B484C314F54454D325F564107204861726D6F6E794F5320322E312E302E323138284630303148303033433030290910355055545132333130353030303239390A0F42544654303031342D3030303134350F08425446543030313418254C2D5451393038343232434C3032333535312C522D545139303838323334553030363135301901077DE0",
+        )
+        assertEquals("000145", identity?.modelId)
+        assertEquals("07", identity?.subModelId)
+    }
+
+    @Test
     fun `does not infer identity without both strict TLVs`() {
         assertNull(SmartAudioDeviceInfoIdentity.parse("0A0F42544654303031332D303030313431"))
         assertNull(SmartAudioDeviceInfoIdentity.parse("190101"))

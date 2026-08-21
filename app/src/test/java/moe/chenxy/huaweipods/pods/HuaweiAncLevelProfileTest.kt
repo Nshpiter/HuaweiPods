@@ -8,21 +8,23 @@ import org.junit.Test
 
 class HuaweiAncLevelProfileTest {
     @Test
-    fun `FreeBuds 4E exposes only the three captured ANC values`() {
+    fun `FreeBuds 4E exposes only light and balanced ANC levels`() {
         val route = HuaweiDeviceRoute.HUAWEI_FREEBUDS4E
         val expected = listOf(
-            HuaweiAncLevelOption(HuaweiAncLevel.DEEP, protocolValue = 0xFF, miuiValue = 0x02),
-            HuaweiAncLevelOption(HuaweiAncLevel.BALANCED, protocolValue = 0x00, miuiValue = 0x00),
             HuaweiAncLevelOption(HuaweiAncLevel.LIGHT, protocolValue = 0x01, miuiValue = 0x01),
+            HuaweiAncLevelOption(HuaweiAncLevel.BALANCED, protocolValue = 0x00, miuiValue = 0x00),
         )
 
         assertEquals(expected, route.ancLevelOptions)
-        assertEquals(0xFF, route.defaultAncSubMode)
+        assertEquals(0x01, route.defaultAncSubMode)
         expected.forEach { option ->
             assertEquals(option.protocolValue, route.ancSubModeForMiuiLevel(option.miuiValue))
             assertEquals(option.miuiValue, route.miuiLevelForAncSubMode(option.protocolValue))
         }
+        assertFalse(route.supportsAncSubMode(0xFF))
         assertFalse(route.supportsAncSubMode(0x03))
+        assertNull(route.ancSubModeForMiuiLevel(0x02))
+        assertNull(route.miuiLevelForAncSubMode(0xFF))
     }
 
     @Test
@@ -74,6 +76,28 @@ class HuaweiAncLevelProfileTest {
             assertEquals(option.protocolValue, route.ancSubModeForMiuiLevel(option.miuiValue))
             assertEquals(option.miuiValue, route.miuiLevelForAncSubMode(option.protocolValue))
         }
+    }
+
+    @Test
+    fun `FreeBuds 5i maps all four captured ANC levels`() {
+        val route = HuaweiDeviceRoute.HUAWEI_FREEBUDS5I
+        val expected = listOf(
+            HuaweiAncLevelOption(HuaweiAncLevel.ADAPTIVE, protocolValue = 0x03, miuiValue = 0x03),
+            HuaweiAncLevelOption(HuaweiAncLevel.LIGHT, protocolValue = 0x01, miuiValue = 0x01),
+            HuaweiAncLevelOption(HuaweiAncLevel.BALANCED, protocolValue = 0x00, miuiValue = 0x00),
+            HuaweiAncLevelOption(HuaweiAncLevel.DEEP, protocolValue = 0x02, miuiValue = 0x02),
+        )
+
+        assertEquals(expected, route.ancLevelOptions)
+        assertEquals(0x03, route.defaultAncSubMode)
+        expected.forEach { option ->
+            assertEquals(option.protocolValue, route.ancSubModeForMiuiLevel(option.miuiValue))
+            assertEquals(option.miuiValue, route.miuiLevelForAncSubMode(option.protocolValue))
+        }
+        assertEquals(
+            HuaweiAncState(NoiseControlMode.TRANSPARENCY, 0x02),
+            route.validateAncState(HuaweiAncState(NoiseControlMode.TRANSPARENCY, 0x02)),
+        )
     }
 
     @Test

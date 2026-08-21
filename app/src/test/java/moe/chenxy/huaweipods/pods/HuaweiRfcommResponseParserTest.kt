@@ -166,6 +166,20 @@ class HuaweiRfcommResponseParserTest {
     }
 
     @Test
+    fun `parses FreeBuds 5i battery response captured from official app`() {
+        val battery = HuaweiRfcommResponseParser.parseBattery(
+            hex("5A0014000108010164020364641903030000000402140AD792"),
+        )
+
+        assertEquals(100, battery?.left?.battery)
+        assertEquals(100, battery?.right?.battery)
+        assertEquals(25, battery?.case?.battery)
+        assertEquals(false, battery?.left?.isCharging)
+        assertEquals(false, battery?.right?.isCharging)
+        assertEquals(false, battery?.case?.isCharging)
+    }
+
+    @Test
     fun `parses FreeBuds Pro 3 battery response captured from official app`() {
         val response = hex("5A00180001080101600203606413030301010004020A140502010126EC")
 
@@ -247,6 +261,32 @@ class HuaweiRfcommResponseParserTest {
         states.forEach { (frame, expected) ->
             assertEquals(frame, expected, HuaweiRfcommResponseParser.parseAncState(hex(frame)))
         }
+    }
+
+    @Test
+    fun `parses FreeBuds 5i ANC and double tap readback`() {
+        val route = HuaweiDeviceRoute.HUAWEI_FREEBUDS5I
+        val deep = HuaweiRfcommResponseParser.parseAncState(
+            hex("5A0007002B2A010202016372"),
+        )
+        val transparency = HuaweiRfcommResponseParser.parseAncState(
+            hex("5A0007002B2A010202025311"),
+        )
+        val doubleTap = HuaweiRfcommResponseParser.parseDoubleTapState(
+            hex("5A0017000120010102020101030501070200FF040100060200FF7698"),
+            route,
+        )
+
+        assertEquals(
+            HuaweiAncState(NoiseControlMode.NOISE_CANCELLATION, 0x02),
+            deep?.let { route.validateAncState(it) },
+        )
+        assertEquals(
+            HuaweiAncState(NoiseControlMode.TRANSPARENCY, 0x02),
+            transparency?.let { route.validateAncState(it) },
+        )
+        assertEquals(HuaweiTapAction.PLAY_NEXT, doubleTap?.left)
+        assertEquals(HuaweiTapAction.PLAY_PAUSE, doubleTap?.right)
     }
 
     @Test
@@ -488,6 +528,36 @@ class HuaweiRfcommResponseParserTest {
             ),
         )
         assertNull(HuaweiRfcommResponseParser.parseSwipeState(unverifiedSwipe))
+    }
+
+    @Test
+    fun `parses FreeArc battery and all gesture states from capture`() {
+        val battery = HuaweiRfcommResponseParser.parseBattery(
+            hex("5A001B000108010164020364645203030000000402140A0502010106010A1648"),
+        )
+        assertEquals(100, battery?.left?.battery)
+        assertEquals(100, battery?.right?.battery)
+        assertEquals(82, battery?.case?.battery)
+
+        val response = hex(
+            "5A0017000120010101020101030501070200FF040100060200FF76EA" +
+                "5A000E00012601010702010203030702FF232E" +
+                "5A0020002B170101FF0201FF030E000102030405060708090A0E0F140401FF060200FF3C8C" +
+                "5A000E002B1F010100020100030300FF011AC0",
+        )
+        val state = HuaweiRfcommResponseParser.parseGestureState(
+            response,
+            HuaweiDeviceRoute.HUAWEI_FREEARC,
+        )
+
+        assertEquals(HuaweiTapAction.PLAY_PAUSE, state.doubleTap?.left)
+        assertEquals(HuaweiTapAction.PLAY_PAUSE, state.doubleTap?.right)
+        assertEquals(HuaweiTapAction.PLAY_PREVIOUS, state.tripleTap?.left)
+        assertEquals(HuaweiTapAction.PLAY_NEXT, state.tripleTap?.right)
+        assertEquals(HuaweiSwipeAction.VOLUME_CONTROL, state.swipe?.left)
+        assertEquals(HuaweiSwipeAction.VOLUME_CONTROL, state.swipe?.right)
+        assertEquals(FreeBudsPro3LongPressAction.NONE, state.longPress?.left)
+        assertEquals(FreeBudsPro3LongPressAction.NONE, state.longPress?.right)
     }
 
     private fun hex(value: String): ByteArray = value.chunked(2)

@@ -19,7 +19,6 @@ import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 import java.util.UUID
-import java.util.concurrent.TimeUnit
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
@@ -38,7 +37,6 @@ object CaptureStore {
     private const val METADATA_FILE = "metadata.json"
     private const val EVENTS_FILE = "events.jsonl"
     private const val README_FILE = "README.txt"
-    private const val HCI_SNOOP_FILE = "btsnoop_hci.log"
     private const val SMART_AUDIO_ASSETS_FILE = "smart-audio-device-assets.zip"
     private const val SMART_AUDIO_CONFIG_FILE = "smart-audio-product-config.json"
     private const val SMART_AUDIO_ASSETS_EXPORT_PATH =
@@ -51,7 +49,6 @@ object CaptureStore {
     private const val MAX_SHORT_TEXT_LENGTH = 1_024
     private const val MAX_SUMMARY_LENGTH = 8_192
     private const val MAX_PAYLOAD_LENGTH = 65_536
-    private const val MAX_HCI_SNOOP_BYTES = 64L * 1024L * 1024L
     private const val MAX_RESOURCE_CANDIDATES = 16
 
     private val lock = Any()
@@ -581,10 +578,7 @@ object CaptureStore {
         smartAudioAssetsAreReadyLocked(directory, metadata)
     }
 
-    fun exportLatest(
-        context: Context,
-        includeHciSnoop: Boolean = false,
-    ): CaptureExport = synchronized(lock) {
+    fun exportLatest(context: Context): CaptureExport = synchronized(lock) {
         val appContext = context.applicationContext
         val state = getState(appContext)
         val session = state.latestSession ?: error("还没有可导出的抓包会话")
@@ -599,21 +593,6 @@ object CaptureStore {
             ?.also { SmartAudioAssetArchive.inspect(it) }
         val smartAudioConfig = File(directory, SMART_AUDIO_CONFIG_FILE)
             .takeIf { smartAudioAssets != null && it.isFile }
-        val hciSnoop = if (includeHciSnoop) {
-            collectOptionalHciSnoop(directory)
-        } else {
-            HciSnoopResult(
-                status = "not_requested",
-                source = null,
-                file = null,
-                bytes = 0L,
-                truncated = false,
-                message = "本次导出未请求 HCI snoop；需要用户明确同意后再采集",
-            )
-        }
-        metadata.put("hci_snoop", hciSnoop.toJson())
-        writeMetadataLocked(directory, metadata)
-
         val exportDirectory = File(appContext.cacheDir, EXPORT_DIRECTORY)
         check(exportDirectory.mkdirs() || exportDirectory.isDirectory) {
             "无法创建导出目录"
@@ -627,13 +606,11 @@ object CaptureStore {
                 README_FILE,
                 buildReadme(
                     session = session,
-                    hciSnoop = hciSnoop,
                     smartAudioAssetsIncluded = smartAudioAssets != null,
                 ),
             )
             zip.putFileEntry(METADATA_FILE, metadataFile)
             zip.putFileEntry(EVENTS_FILE, eventsFile)
-            hciSnoop.file?.takeIf(File::isFile)?.let { zip.putFileEntry(HCI_SNOOP_FILE, it) }
             smartAudioAssets?.let { zip.putFileEntry(SMART_AUDIO_ASSETS_EXPORT_PATH, it) }
             smartAudioConfig?.let { zip.putFileEntry(SMART_AUDIO_CONFIG_EXPORT_PATH, it) }
         }
@@ -1182,140 +1159,6 @@ object CaptureStore {
         return formatter.format(Date(timestamp))
     }
 
-    private fun collectOptionalHciSnoop(directory: File): HciSnoopResult {
-        val destination = File(directory, HCI_SNOOP_FILE)
-        if (destination.isFile && destination.length() > 0L) {
-            return HciSnoopResult(
-                status = "included",
-                source = "previous_export",
-                file = destination,
-                bytes = destination.length(),
-                truncated = destination.length() >= MAX_HCI_SNOOP_BYTES,
-            )
-        }
-
-        val publicSource = File("/sdcard/btsnoop_hci.log")
-        runCatching {
-            if (publicSource.isFile && publicSource.canRead()) {
-                val copy = copyStreamLimited(
-                    input = publicSource.inputStream(),
-                    destination = destination,
-                    maxBytes = MAX_HCI_SNOOP_BYTES,
-                )
-                if (copy.bytes > 0L) {
-                    return HciSnoopResult(
-                        status = "included",
-                        source = publicSource.absolutePath,
-                        file = destination,
-                        bytes = copy.bytes,
-                        truncated = copy.truncated,
-                    )
-                }
-            }
-        }
-
-        val rootSources = listOf(
-            "/data/misc/bluetooth/logs/btsnoop_hci.log",
-            "/data/misc/bluedroid/btsnoop_hci.log",
-        )
-        val failures = mutableListOf<String>()
-        rootSources.forEach { source ->
-            val result = runCatching { copyRootFileLimited(source, destination) }
-                .getOrElse { throwable ->
-                    failures += "$source: ${throwable.javaClass.simpleName}"
-                    null
-                }
-            if (result != null && result.bytes > 0L) {
-                return HciSnoopResult(
-                    status = "included",
-                    source = source,
-                    file = destination,
-                    bytes = result.bytes,
-                    truncated = result.truncated,
-                )
-            }
-        }
-
-        return HciSnoopResult(
-            status = "unavailable",
-            source = null,
-            file = null,
-            bytes = 0L,
-            truncated = false,
-            message = if (failures.isEmpty()) {
-                "未找到可读的 HCI snoop；应用不会自动修改开发者选项"
-            } else {
-                "未找到可读的 HCI snoop；Root 读取失败：${failures.joinToString("; ")}"
-            },
-        )
-    }
-
-    private fun copyRootFileLimited(source: String, destination: File): StreamCopyResult? {
-        val temporaryFile = File(destination.parentFile, "${destination.name}.tmp")
-        val process = ProcessBuilder("su", "-c", "cat '$source' 2>/dev/null").start()
-        val copy = copyProcessStreamLimited(process, temporaryFile)
-        val completed = if (process.isAlive) {
-            process.destroyForcibly()
-            process.waitFor(1L, TimeUnit.SECONDS)
-        } else {
-            true
-        }
-        val successful = copy.bytes > 0L &&
-            (copy.truncated || (completed && process.exitValue() == 0))
-        if (!successful) {
-            temporaryFile.delete()
-            return null
-        }
-        moveReplacing(temporaryFile, destination)
-        return copy
-    }
-
-    private fun copyProcessStreamLimited(
-        process: Process,
-        destination: File,
-    ): StreamCopyResult {
-        val deadlineNanos = System.nanoTime() + TimeUnit.SECONDS.toNanos(8L)
-        var bytesWritten = 0L
-        var truncated = false
-        process.inputStream.buffered().use { source ->
-            FileOutputStream(destination, false).buffered().use { output ->
-                val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-                while (true) {
-                    val remaining = MAX_HCI_SNOOP_BYTES - bytesWritten
-                    if (remaining <= 0L) {
-                        truncated = process.isAlive || source.available() > 0
-                        break
-                    }
-                    val available = source.available()
-                    if (available > 0) {
-                        val read = source.read(
-                            buffer,
-                            0,
-                            minOf(buffer.size.toLong(), remaining, available.toLong()).toInt(),
-                        )
-                        if (read < 0) break
-                        output.write(buffer, 0, read)
-                        bytesWritten += read
-                        continue
-                    }
-                    if (!process.isAlive) {
-                        val read = source.read(buffer, 0, minOf(buffer.size.toLong(), remaining).toInt())
-                        if (read < 0) break
-                        output.write(buffer, 0, read)
-                        bytesWritten += read
-                        continue
-                    }
-                    if (System.nanoTime() >= deadlineNanos) {
-                        truncated = bytesWritten > 0L
-                        break
-                    }
-                    Thread.sleep(20L)
-                }
-            }
-        }
-        return StreamCopyResult(bytesWritten, truncated)
-    }
-
     private fun copyStreamLimited(
         input: java.io.InputStream,
         destination: File,
@@ -1352,7 +1195,6 @@ object CaptureStore {
 
     private fun buildReadme(
         session: CaptureSession,
-        hciSnoop: HciSnoopResult,
         smartAudioAssetsIncluded: Boolean,
     ): String = """
         HuaweiPods Debug 抓包
@@ -1368,7 +1210,6 @@ object CaptureStore {
         文件说明：
         - metadata.json：可选 Issue、耳机名称、手机和应用版本等环境信息。
         - events.jsonl：按时间排列的操作标记和协议事件，每行一个 JSON 对象。
-        - btsnoop_hci.log：${hciSnoop.readmeDescription()}
         - $SMART_AUDIO_ASSETS_EXPORT_PATH：${if (smartAudioAssetsIncluded) "已附带经校验的智慧音频图片资源包（可能来自华为官方 CDN 或用户手动兜底导入）。" else "未附带；自动定位失败时可按采集向导手动选择当前子型号 ZIP。"}
         - $SMART_AUDIO_CONFIG_EXPORT_PATH：自动下载成功时附带对应的官方产品配置 JSON；手动导入时不生成。
 
@@ -1467,28 +1308,6 @@ object CaptureStore {
         val bytesWritten: Long,
     )
 
-    private data class HciSnoopResult(
-        val status: String,
-        val source: String?,
-        val file: File?,
-        val bytes: Long,
-        val truncated: Boolean,
-        val message: String? = null,
-    ) {
-        fun toJson(): JSONObject = JSONObject()
-            .put("status", status)
-            .put("source", source ?: JSONObject.NULL)
-            .put("file", file?.name ?: JSONObject.NULL)
-            .put("bytes", bytes)
-            .put("truncated", truncated)
-            .put("message", message ?: JSONObject.NULL)
-
-        fun readmeDescription(): String = if (file != null) {
-            "已附带（来源 $source，$bytes 字节${if (truncated) "，已按 64 MiB 上限截断" else ""}）。"
-        } else {
-            "未附带。${message.orEmpty()}"
-        }
-    }
 }
 
 internal data class SmartAudioAssetAttachment(

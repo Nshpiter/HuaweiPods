@@ -1541,9 +1541,9 @@ object SettingsHeadsetHook : HookContext() {
         val preferred = when {
             route == HuaweiDeviceRoute.HUAWEI_FREEBUDS3 && side == HuaweiGestureSide.LEFT ->
                 HuaweiTapAction.NOISE_CANCELLATION
-            route == HuaweiDeviceRoute.HUAWEI_FREECLIP2 && kind == HuaweiGestureKind.TRIPLE_TAP &&
+            route.isFreeArcStyleTapRoute() && kind == HuaweiGestureKind.TRIPLE_TAP &&
                 side == HuaweiGestureSide.LEFT -> HuaweiTapAction.PLAY_PREVIOUS
-            route == HuaweiDeviceRoute.HUAWEI_FREECLIP2 && kind == HuaweiGestureKind.TRIPLE_TAP ->
+            route.isFreeArcStyleTapRoute() && kind == HuaweiGestureKind.TRIPLE_TAP ->
                 HuaweiTapAction.PLAY_NEXT
             else -> HuaweiTapAction.PLAY_PAUSE
         }
@@ -1644,12 +1644,13 @@ object SettingsHeadsetHook : HookContext() {
     }
 
     private fun requestHuaweiGestureState(fragment: Any?, reason: String) {
-        if (gestureDeviceRoute(fragment) != HuaweiDeviceRoute.HUAWEI_FREECLIP2) return
+        val route = gestureDeviceRoute(fragment)
+        if (HuaweiGestureController.buildGestureStateQuery(route) == null) return
         val targetContext = context ?: return
         val address = gestureDeviceAddress(fragment).orEmpty()
         targetContext.sendBroadcast(Intent(HuaweiPodsAction.ACTION_HUAWEI_GESTURE_REFRESH).apply {
             putExtra(HuaweiGestureController.EXTRA_ADDRESS, address)
-            encodeHuaweiDeviceRouteForBroadcast(gestureDeviceRoute(fragment))?.let {
+            encodeHuaweiDeviceRouteForBroadcast(route)?.let {
                 putExtra(HuaweiPodsAction.EXTRA_DEVICE_ROUTE, it)
             }
             setPackage("com.android.bluetooth")
@@ -1699,6 +1700,9 @@ object SettingsHeadsetHook : HookContext() {
             }, delay)
         }
     }
+
+    private fun HuaweiDeviceRoute.isFreeArcStyleTapRoute(): Boolean =
+        this == HuaweiDeviceRoute.HUAWEI_FREECLIP2 || this == HuaweiDeviceRoute.HUAWEI_FREEARC
 
     private fun observeSettingsScroll(root: View) {
         if (observedSettingsRoots.put(root, true) == true) return

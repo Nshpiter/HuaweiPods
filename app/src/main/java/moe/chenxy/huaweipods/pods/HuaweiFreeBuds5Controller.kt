@@ -8,12 +8,16 @@ import moe.chenxy.huaweipods.config.ConfigManager
 import moe.chenxy.huaweipods.config.DeviceRoutePrefs
 
 /**
- * FreeBuds 5 settings verified against the guided Huawei Audio capture from 2026-07-20.
+ * Shared FreeBuds 5 / 5i settings backed by guided Huawei Audio captures.
  *
- * Gesture, transparency, spatial-audio and dual-device commands are intentionally absent: the
- * capture does not contain enough evidence to write those settings safely.
+ * Noise control and verified gestures remain in their shared controllers. Spatial audio and
+ * dual-device commands stay absent until a capture proves their writes and readback.
  */
 object HuaweiFreeBuds5Controller {
+    private val supportedRoutes = setOf(
+        HuaweiDeviceRoute.HUAWEI_FREEBUDS5,
+        HuaweiDeviceRoute.HUAWEI_FREEBUDS5I,
+    )
     private val WEAR_DETECTION_STATE_QUERY = hex("5A0005002B110100772A")
     private val SOUND_EFFECT_STATE_QUERY = hex("5A0005002B4A02008C46")
     private val HIGH_QUALITY_AUDIO_STATE_QUERY = hex("5A0005002BA30101F794")
@@ -21,51 +25,58 @@ object HuaweiFreeBuds5Controller {
     fun setWearDetection(
         context: Context,
         device: BluetoothDevice,
+        route: HuaweiDeviceRoute,
         enabled: Boolean,
         onComplete: ((Boolean) -> Unit)? = null,
     ) = send(
         context = context,
         device = device,
+        route = route,
         packet = FreeBuds5BooleanFeature.WEAR_DETECTION.packet(enabled),
-        description = "freebuds5 wear-detection enabled=$enabled",
+        description = "${route.name.lowercase()} wear-detection enabled=$enabled",
         onComplete = onComplete,
     )
 
     fun setSoundEffect(
         context: Context,
         device: BluetoothDevice,
+        route: HuaweiDeviceRoute,
         effect: FreeBuds5SoundEffect,
         onComplete: ((Boolean) -> Unit)? = null,
     ) = send(
         context = context,
         device = device,
+        route = route,
         packet = effect.packet(),
-        description = "freebuds5 sound-effect=${effect.extraValue}",
+        description = "${route.name.lowercase()} sound-effect=${effect.extraValue}",
         onComplete = onComplete,
     )
 
     fun setHighQualityAudio(
         context: Context,
         device: BluetoothDevice,
+        route: HuaweiDeviceRoute,
         enabled: Boolean,
         onComplete: ((Boolean) -> Unit)? = null,
     ) = send(
         context = context,
         device = device,
+        route = route,
         packet = FreeBuds5BooleanFeature.HIGH_QUALITY_AUDIO.packet(enabled),
-        description = "freebuds5 high-quality-audio enabled=$enabled",
+        description = "${route.name.lowercase()} high-quality-audio enabled=$enabled",
         onComplete = onComplete,
     )
 
     fun setLowLatency(
         context: Context,
         device: BluetoothDevice,
+        route: HuaweiDeviceRoute,
         enabled: Boolean,
         onComplete: ((Boolean) -> Unit)? = null,
     ) = HuaweiLowLatencyController.setEnabled(
         context,
         device,
-        HuaweiDeviceRoute.HUAWEI_FREEBUDS5,
+        route,
         enabled,
         onComplete,
     )
@@ -73,12 +84,14 @@ object HuaweiFreeBuds5Controller {
     fun requestWearDetectionState(
         context: Context,
         device: BluetoothDevice,
+        route: HuaweiDeviceRoute,
         onState: (Boolean?) -> Unit,
     ) = request(
         context = context,
         device = device,
+        route = route,
         packet = wearDetectionStateQueryPacket(),
-        description = "freebuds5 wear-detection-state-query",
+        description = "${route.name.lowercase()} wear-detection-state-query",
         parse = ::parseWearDetectionState,
         onState = onState,
     )
@@ -86,12 +99,14 @@ object HuaweiFreeBuds5Controller {
     fun requestSoundEffectState(
         context: Context,
         device: BluetoothDevice,
+        route: HuaweiDeviceRoute,
         onState: (FreeBuds5SoundEffect?) -> Unit,
     ) = request(
         context = context,
         device = device,
+        route = route,
         packet = soundEffectStateQueryPacket(),
-        description = "freebuds5 sound-effect-state-query",
+        description = "${route.name.lowercase()} sound-effect-state-query",
         parse = ::parseSoundEffectState,
         onState = onState,
     )
@@ -99,12 +114,14 @@ object HuaweiFreeBuds5Controller {
     fun requestHighQualityAudioState(
         context: Context,
         device: BluetoothDevice,
+        route: HuaweiDeviceRoute,
         onState: (Boolean?) -> Unit,
     ) = request(
         context = context,
         device = device,
+        route = route,
         packet = highQualityAudioStateQueryPacket(),
-        description = "freebuds5 high-quality-audio-state-query",
+        description = "${route.name.lowercase()} high-quality-audio-state-query",
         parse = ::parseHighQualityAudioState,
         onState = onState,
     )
@@ -140,19 +157,20 @@ object HuaweiFreeBuds5Controller {
     private fun <T> request(
         context: Context,
         device: BluetoothDevice,
+        route: HuaweiDeviceRoute,
         packet: ByteArray,
         description: String,
         parse: (ByteArray) -> T?,
         onState: (T?) -> Unit,
     ) {
-        if (!isFreeBuds5Target(context, device)) {
+        if (!isExpectedTarget(context, device, route)) {
             onState(null)
             return
         }
         HuaweiL2capAncController.requestRawPacketOnce(
             context = context,
             device = device,
-            route = HuaweiDeviceRoute.HUAWEI_FREEBUDS5,
+            route = route,
             packet = packet.copyOf(),
             description = description,
             onResponse = { response -> onState(parse(response)) },
@@ -162,18 +180,19 @@ object HuaweiFreeBuds5Controller {
     private fun send(
         context: Context,
         device: BluetoothDevice,
+        route: HuaweiDeviceRoute,
         packet: ByteArray,
         description: String,
         onComplete: ((Boolean) -> Unit)?,
     ) {
-        if (!isFreeBuds5Target(context, device)) {
+        if (!isExpectedTarget(context, device, route)) {
             onComplete?.invoke(false)
             return
         }
         HuaweiL2capAncController.sendRawPacketOnce(
             context = context,
             device = device,
-            route = HuaweiDeviceRoute.HUAWEI_FREEBUDS5,
+            route = route,
             packet = packet.copyOf(),
             description = description,
             onComplete = onComplete,
@@ -181,7 +200,12 @@ object HuaweiFreeBuds5Controller {
     }
 
     @SuppressLint("MissingPermission")
-    private fun isFreeBuds5Target(context: Context, device: BluetoothDevice): Boolean {
+    private fun isExpectedTarget(
+        context: Context,
+        device: BluetoothDevice,
+        route: HuaweiDeviceRoute,
+    ): Boolean {
+        if (route !in supportedRoutes) return false
         val address = runCatching { device.address }.getOrNull()
         if (address == null || !BluetoothAdapter.checkBluetoothAddress(address)) return false
         val deviceName = runCatching {
@@ -189,8 +213,7 @@ object HuaweiFreeBuds5Controller {
                 ?: device.alias?.takeIf(String::isNotBlank)
         }.getOrNull()
         val prefs = context.getSharedPreferences(ConfigManager.PREFS_NAME, Context.MODE_PRIVATE)
-        return DeviceRoutePrefs.resolve(prefs, address, deviceName) ==
-            HuaweiDeviceRoute.HUAWEI_FREEBUDS5
+        return DeviceRoutePrefs.resolve(prefs, address, deviceName) == route
     }
 }
 

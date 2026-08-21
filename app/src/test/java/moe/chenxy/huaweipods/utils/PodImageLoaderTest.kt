@@ -11,6 +11,28 @@ import org.junit.Test
 
 class PodImageLoaderTest {
     @Test
+    fun `verified route wins before image preference binding is available`() {
+        assertEquals(
+            HuaweiDeviceRoute.HUAWEI_FREECLIP2,
+            PodImageLoader.imageFallbackRoute(
+                verifiedRoute = HuaweiDeviceRoute.HUAWEI_FREECLIP2,
+                configuredRoute = HuaweiDeviceRoute.UNSUPPORTED,
+            ),
+        )
+    }
+
+    @Test
+    fun `unsupported verified route keeps configured image fallback`() {
+        assertEquals(
+            HuaweiDeviceRoute.HUAWEI_FREEBUDS6I,
+            PodImageLoader.imageFallbackRoute(
+                verifiedRoute = HuaweiDeviceRoute.UNSUPPORTED,
+                configuredRoute = HuaweiDeviceRoute.HUAWEI_FREEBUDS6I,
+            ),
+        )
+    }
+
+    @Test
     fun `image preference is read only from the requested address`() {
         val prefs = sharedPreferencesWithEarphones(
             """

@@ -11,6 +11,7 @@ class MiBluetoothToastAncPolicyTest {
         listOf(
             HuaweiDeviceRoute.HUAWEI_FREEBUDS3,
             HuaweiDeviceRoute.HUAWEI_FREEBUDS5,
+            HuaweiDeviceRoute.HUAWEI_FREEBUDS5I,
             HuaweiDeviceRoute.HUAWEI_FREEBUDS6I,
             HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3,
             HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO4,
@@ -26,6 +27,7 @@ class MiBluetoothToastAncPolicyTest {
         listOf(
             HuaweiDeviceRoute.HUAWEI_FREECLIP,
             HuaweiDeviceRoute.HUAWEI_FREECLIP2,
+            HuaweiDeviceRoute.HUAWEI_FREEARC,
             HuaweiDeviceRoute.HUAWEI_EYEWEAR,
             HuaweiDeviceRoute.HUAWEI_EYEWEAR2,
             HuaweiDeviceRoute.UNSUPPORTED,

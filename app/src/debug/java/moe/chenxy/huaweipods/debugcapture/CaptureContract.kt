@@ -86,7 +86,7 @@ data class CaptureSession(
 
 internal const val DEFAULT_HEADSET_NAME_SOURCE = "manual"
 internal const val CONNECTED_HEADSET_NAME_SOURCE = "connected_profile"
-internal const val DEFAULT_FEATURE_CATALOG_VERSION = "huawei-headset-v1"
+internal const val DEFAULT_FEATURE_CATALOG_VERSION = "huawei-headset-v7"
 internal const val LEGACY_HEADSET_NAME_SOURCE = "legacy_model"
 internal const val LEGACY_FEATURE_CATALOG_VERSION = "legacy-v1"
 

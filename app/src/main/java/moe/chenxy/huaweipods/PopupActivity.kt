@@ -48,9 +48,11 @@ import moe.chenxy.huaweipods.pods.supportsAncDirectionDial
 import moe.chenxy.huaweipods.pods.supportsAncStateReadback
 import moe.chenxy.huaweipods.pods.supportsAncSubMode
 import moe.chenxy.huaweipods.pods.supportsDiscreteAncLevels
+import moe.chenxy.huaweipods.pods.supportsLowLatencyControl
 import moe.chenxy.huaweipods.pods.supportsTransparency
 import moe.chenxy.huaweipods.config.ConfigManager
 import moe.chenxy.huaweipods.config.DeviceRoutePrefs
+import moe.chenxy.huaweipods.config.LowLatencyPrefs
 import moe.chenxy.huaweipods.ui.AppLocale
 import moe.chenxy.huaweipods.ui.AppTheme
 import moe.chenxy.huaweipods.ui.components.AncSwitch
@@ -62,6 +64,7 @@ import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
+import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 
 class PopupActivity : ComponentActivity() {
@@ -78,6 +81,7 @@ class PopupActivity : ComponentActivity() {
         val appConfig = ConfigManager.refreshFromPrefs(prefs)
         val bluetoothDevice = intent.parcelableDevice("android.bluetooth.device.extra.DEVICE")
         DeviceRoutePrefs.syncWithRemote(prefs, HuaweiPodsApp.xposedService)
+        LowLatencyPrefs.syncWithRemote(prefs, HuaweiPodsApp.xposedService)
         val popupTarget = bluetoothDevice?.let { resolvePopupDeviceTarget(it, prefs) }
         if (popupTarget == null) {
             openModule()
@@ -113,6 +117,7 @@ class PopupActivity : ComponentActivity() {
     private fun openNotificationTarget(action: Int, bluetoothDevice: BluetoothDevice?) {
         when (action) {
             ConfigManager.NOTIFICATION_CLICK_SYSTEM_SETTINGS -> openSystemSettings(bluetoothDevice)
+            ConfigManager.NOTIFICATION_CLICK_SMART_AUDIO -> openSmartAudioOrModule()
             else -> openModule()
         }
     }
@@ -120,12 +125,19 @@ class PopupActivity : ComponentActivity() {
     private fun openMoreTarget(action: Int, bluetoothDevice: BluetoothDevice?) {
         when (action) {
             ConfigManager.MORE_CLICK_SYSTEM_SETTINGS -> openSystemSettings(bluetoothDevice)
+            ConfigManager.MORE_CLICK_SMART_AUDIO -> openSmartAudioOrModule()
             else -> openModule()
         }
     }
 
     private fun openModule() {
         startActivity(Intent(this, MainActivity::class.java))
+    }
+
+    private fun openSmartAudioOrModule() {
+        packageManager.getLaunchIntentForPackage("com.huawei.smartaudio")
+            ?.let(::startActivity)
+            ?: openModule()
     }
 
     @SuppressLint("MissingPermission")
@@ -195,6 +207,15 @@ private fun PopupContent(
     }
     val hasAncLevel = remember { mutableStateOf(false) }
     val transparencySubMode = remember { mutableStateOf(-1) }
+    val lowLatencyEnabled = remember(target.address, target.route) {
+        mutableStateOf(
+            LowLatencyPrefs.desiredOrNull(
+                prefs,
+                target.address,
+                target.route,
+            ) ?: false,
+        )
+    }
 
     val broadcastReceiver = remember {
         object : BroadcastReceiver() {
@@ -247,6 +268,14 @@ private fun PopupContent(
                             batteryParams.value = it
                         }
                     }
+                    HuaweiPodsAction.ACTION_HUAWEI_LOW_LATENCY_CHANGED -> {
+                        if (intent.hasExtra(HuaweiPodsAction.EXTRA_HUAWEI_LOW_LATENCY_ENABLED)) {
+                            lowLatencyEnabled.value = intent.getBooleanExtra(
+                                HuaweiPodsAction.EXTRA_HUAWEI_LOW_LATENCY_ENABLED,
+                                lowLatencyEnabled.value,
+                            )
+                        }
+                    }
                     HuaweiPodsAction.ACTION_PODS_CONNECTED -> {
                         if (!terminalClosed.value && !showDialog.value) showDialog.value = true
                     }
@@ -267,6 +296,7 @@ private fun PopupContent(
             addHuaweiPodsAction(HuaweiPodsAction.ACTION_PODS_BATTERY_CHANGED)
             addHuaweiPodsAction(HuaweiPodsAction.ACTION_PODS_CONNECTED)
             addHuaweiPodsAction(HuaweiPodsAction.ACTION_PODS_DISCONNECTED)
+            addHuaweiPodsAction(HuaweiPodsAction.ACTION_HUAWEI_LOW_LATENCY_CHANGED)
         }, Context.RECEIVER_EXPORTED)
 
         context.sendBroadcast(Intent(HuaweiPodsAction.ACTION_PODS_UI_INIT).apply {
@@ -362,6 +392,17 @@ private fun PopupContent(
         }
     }
 
+    fun setLowLatency(enabled: Boolean) {
+        if (!target.route.supportsLowLatencyControl) return
+        lowLatencyEnabled.value = enabled
+        context.sendBroadcast(Intent(HuaweiPodsAction.ACTION_HUAWEI_LOW_LATENCY_SET).apply {
+            putPopupTarget(target)
+            putExtra(HuaweiPodsAction.EXTRA_HUAWEI_LOW_LATENCY_ENABLED, enabled)
+            setPackage("com.android.bluetooth")
+            addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
+        })
+    }
+
     val deviceRoute = target.route
     LaunchedEffect(deviceRoute) {
         if (ancMode.value == NoiseControlMode.UNKNOWN && !deviceRoute.supportsAncStateReadback) {
@@ -378,6 +419,7 @@ private fun PopupContent(
         null
     }
     val showAnc = deviceRoute.supportsAnc
+    val showLowLatency = deviceRoute.supportsLowLatencyControl
 
 
     val dialogBgColor = if (isDarkMode) Color(0xFF1A1A1A) else Color(0xFFF7F7F7)
@@ -410,6 +452,9 @@ private fun PopupContent(
                     onAncLevelChange = ancLevelChange,
                     deviceRoute = deviceRoute,
                     showAnc = showAnc,
+                    showLowLatency = showLowLatency,
+                    lowLatencyEnabled = lowLatencyEnabled.value,
+                    onLowLatencyChange = ::setLowLatency,
                     onMore = onMore,
                     onDone = { showDialog.value = false },
                 )
@@ -428,6 +473,9 @@ private fun PopupContent(
                     onAncLevelChange = ancLevelChange,
                     deviceRoute = deviceRoute,
                     showAnc = showAnc,
+                    showLowLatency = showLowLatency,
+                    lowLatencyEnabled = lowLatencyEnabled.value,
+                    onLowLatencyChange = ::setLowLatency,
                     onMore = onMore,
                     onDone = { showDialog.value = false },
                 )
@@ -445,6 +493,9 @@ private fun PortraitPopupBody(
     onAncLevelChange: ((Int) -> Unit)?,
     deviceRoute: HuaweiDeviceRoute,
     showAnc: Boolean,
+    showLowLatency: Boolean,
+    lowLatencyEnabled: Boolean,
+    onLowLatencyChange: (Boolean) -> Unit,
     onMore: () -> Unit,
     onDone: () -> Unit,
 ) {
@@ -469,6 +520,17 @@ private fun PortraitPopupBody(
                     deviceRoute = deviceRoute,
                     huaweiAncLevel = ancLevel,
                     onHuaweiAncLevelChange = onAncLevelChange,
+                )
+            }
+        }
+        if (showLowLatency) {
+            Spacer(modifier = Modifier.height(12.dp))
+            Card(modifier = Modifier.fillMaxWidth()) {
+                SwitchPreference(
+                    title = stringResource(R.string.low_latency_mode),
+                    summary = stringResource(R.string.low_latency_auto_apply_summary),
+                    checked = lowLatencyEnabled,
+                    onCheckedChange = onLowLatencyChange,
                 )
             }
         }
@@ -500,6 +562,9 @@ private fun LandscapePopupBody(
     onAncLevelChange: ((Int) -> Unit)?,
     deviceRoute: HuaweiDeviceRoute,
     showAnc: Boolean,
+    showLowLatency: Boolean,
+    lowLatencyEnabled: Boolean,
+    onLowLatencyChange: (Boolean) -> Unit,
     onMore: () -> Unit,
     onDone: () -> Unit,
 ) {
@@ -545,6 +610,17 @@ private fun LandscapePopupBody(
                 .fillMaxHeight(),
             verticalArrangement = Arrangement.Center
         ) {
+            if (showLowLatency) {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    SwitchPreference(
+                        title = stringResource(R.string.low_latency_mode),
+                        summary = stringResource(R.string.low_latency_auto_apply_summary),
+                        checked = lowLatencyEnabled,
+                        onCheckedChange = onLowLatencyChange,
+                    )
+                }
+                Spacer(modifier = Modifier.height(6.dp))
+            }
             TextButton(
                 text = stringResource(R.string.more),
                 onClick = onMore,

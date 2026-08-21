@@ -18,22 +18,24 @@
 
 HuaweiPods is an Xposed module for Xiaomi HyperOS. It integrates supported Huawei audio devices with the system headset popup, Super Island, Fusion Device Center, and Bluetooth detail page.
 
-The unified build supports the 12 models below in one APK. Model-specific test APKs are no longer distributed.
+The unified build supports the 14 models below in one APK. Model-specific test APKs are no longer distributed.
 
 ## Supported models
 
 | Model | Status | Integrated capabilities |
 | --- | --- | --- |
 | HUAWEI FreeBuds 3 | Stable | Battery, ANC on/off, nine-position spatial ANC dial, double-tap gestures, and system UI integration |
-| HUAWEI FreeBuds 4E | Extended support | Battery, ANC/off with Deep/Balanced/Light levels and readback, left/right double-tap and press-and-hold, wear detection, fixed swipe-volume guidance, three official sound presets, and official color images |
+| HUAWEI FreeBuds 4E | Extended support | Battery, ANC/off with Light/Balanced levels and readback, left/right double-tap and press-and-hold, wear detection, fixed swipe-volume guidance, three official sound presets, and official color images |
 | HUAWEI FreeBuds 5 | Extended support | Battery, ANC/off readback, Smart/Light/Balanced ANC levels, wear detection, four official sound presets, high-quality audio and low-latency auto-apply; gesture settings remain pending |
-| HUAWEI FreeBuds 6i | Extended support | Battery, transparency/ANC/off, four ANC levels, voice transparency, double/triple-tap gestures, low-latency auto-apply, and dedicated images |
+| HUAWEI FreeBuds 5i | Extended support | Battery, transparency/ANC/off readback, Smart/Light/Balanced/Deep ANC levels, left/right double-tap, wear detection, four official sound presets, high-quality audio, low-latency auto-apply, and official color images; long-press and swipe settings remain pending |
+| HUAWEI FreeBuds 6i | Extended support | Battery, transparency/ANC/off, four ANC levels, voice transparency, double/triple-tap gestures, four official sound presets, a 10-band custom EQ, low-latency auto-apply, and dedicated images |
 | HUAWEI FreeBuds Pro 3 | Extended support | Battery, three-mode control and readback, four ANC levels, voice transparency, long-press/pinch/swipe gestures, and low-latency auto-apply |
 | HUAWEI FreeBuds Pro 4 | Basic support | Battery and ANC/off; no verified ANC state readback or gesture settings |
 | HUAWEI FreeBuds Pro 5 | Basic support | Battery, transparency/ANC/off, state readback, and low-latency auto-apply; ANC levels and gestures remain pending |
 | HUAWEI FreeBuds 7i | Extended support | Battery, transparency/ANC/off readback, four ANC levels, double/triple-tap, long-press and swipe-volume gestures, wear detection, head-motion control, spatial audio, four sound presets, a 10-band custom EQ, high-quality audio, low-latency auto-apply, dual-device list management, and official color images |
 | HUAWEI FreeClip | Basic support | Left/right/case battery; no traditional ANC |
 | HUAWEI FreeClip 2 | Extended support | Battery, double/triple-tap and swipe gestures, spatial audio, low-latency auto-apply, and selected wearing/audio settings; no traditional ANC |
+| HUAWEI FreeArc | Extended support | Left/right/case battery, double/triple-tap, press-and-hold and swipe gestures, five official sound presets, a 10-band custom EQ, and official color images; no traditional ANC |
 | HUAWEI Eyewear (1st generation) | Basic support | Left/right temple battery and system UI integration; no ANC |
 | HUAWEI Eyewear 2 | Basic support | Left/right temple battery, double-tap/swipe gestures, and low-latency auto-apply; no ANC |
 
@@ -47,7 +49,8 @@ The unified build supports the 12 models below in one APK. Model-specific test A
 - **System Bluetooth detail page** integration for battery and controls supported by the selected model.
 - **Super Island / popup** status display and quick ANC controls.
 - Independent switches for lock-screen headset notifications and all Super Island notifications.
-- **Fusion Device Center** headset display and transfer between paired devices.
+- Notification taps can open the module popup, system settings, or Huawei Smart Audio; verified models can toggle low latency in the popup.
+- **Fusion Device Center** headset display and transfer between paired devices, with an optional low-latency quick card on supported models.
 - **Manual model binding** by Bluetooth address when a device has been renamed or cannot be identified automatically.
 - **First-run setup guide** and in-app GitHub release checks.
 - **Post-update scope restart prompt** after installing a newer APK.
@@ -73,6 +76,8 @@ The unified build supports the 12 models below in one APK. Model-specific test A
 5. Connect a supported device and view its integrated capabilities in HuaweiPods, Super Island, Fusion Device Center, or the system Bluetooth detail page. Modern models are identified from their protocol identity; if a renamed or legacy device is not identified, select its actual model once in HuaweiPods.
 
 The release build no longer needs to install, run, or hook HUAWEI AI Life Audio for official images. Modern models provide the model and color identity over Bluetooth; legacy models can browse the verified Huawei color catalog in the image settings and ask the user to confirm once. Failures always fall back to cached or bundled images and never guess the default color.
+
+The Fusion Device Center low-latency card can be disabled in HuaweiPods settings. Because the verified protocol has no reliable readback for this setting, the UI shows the last successful write that will be reapplied after reconnection rather than a live device-reported state.
 
 For model-specific retesting and protocol capture, join QQ group `1022359908`.
 

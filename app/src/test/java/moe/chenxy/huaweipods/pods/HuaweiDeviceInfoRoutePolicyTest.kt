@@ -11,12 +11,14 @@ class HuaweiDeviceInfoRoutePolicyTest {
     fun `verified model ids resolve to their authoritative routes`() {
         val expected = mapOf(
             "000141" to HuaweiDeviceRoute.HUAWEI_FREEBUDS5,
+            "000145" to HuaweiDeviceRoute.HUAWEI_FREEBUDS5I,
             "000135" to HuaweiDeviceRoute.HUAWEI_FREEBUDS4E,
             "000153" to HuaweiDeviceRoute.HUAWEI_FREEBUDS6I,
             "000149" to HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3,
             "00016D" to HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5,
             "000163" to HuaweiDeviceRoute.HUAWEI_FREEBUDS7I,
             "000167" to HuaweiDeviceRoute.HUAWEI_FREECLIP2,
+            "00015D" to HuaweiDeviceRoute.HUAWEI_FREEARC,
             "00014F" to HuaweiDeviceRoute.HUAWEI_EYEWEAR2,
         )
 
