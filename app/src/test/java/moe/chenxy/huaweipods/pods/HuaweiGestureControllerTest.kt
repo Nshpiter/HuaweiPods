@@ -251,6 +251,61 @@ class HuaweiGestureControllerTest {
     }
 
     @Test
+    fun `FreeBuds Pro 5 captured gesture packets stay exact`() {
+        val route = HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5
+        val tripleTapPackets = mapOf(
+            HuaweiGestureSide.LEFT to mapOf(
+                HuaweiTapAction.PLAY_PREVIOUS to "5A00060001250101071726",
+                HuaweiTapAction.NONE to "5A00060001250101FF7931",
+                HuaweiTapAction.PLAY_NEXT to "5A00060001250101024783",
+            ),
+            HuaweiGestureSide.RIGHT to mapOf(
+                HuaweiTapAction.PLAY_PREVIOUS to "5A00060001250201074E76",
+                HuaweiTapAction.NONE to "5A00060001250201FF2061",
+                HuaweiTapAction.PLAY_NEXT to "5A00060001250201021ED3",
+            ),
+        )
+        tripleTapPackets.forEach { (side, actions) ->
+            actions.forEach { (action, packet) ->
+                assertArrayEquals(
+                    "$side $action",
+                    hex(packet),
+                    HuaweiGestureController.buildTripleTapPacket(route, side, action),
+                )
+            }
+        }
+        assertArrayEquals(
+            hex("5A000F002B92010102020102030103040103679D"),
+            HuaweiGestureController.buildFreeBudsPro3GestureTogglePacket(
+                FreeBudsPro3GestureToggle.MEDIA_PREVIOUS,
+                true,
+            ),
+        )
+        assertArrayEquals(
+            hex("5A0009002B1E0101000202009D9B"),
+            HuaweiGestureController.buildFreeBudsPro3SwipeVolumePacket(true),
+        )
+        assertArrayEquals(
+            hex("5A0009002B1E0101FF0202FFC8C8"),
+            HuaweiGestureController.buildFreeBudsPro3SwipeVolumePacket(false),
+        )
+        assertArrayEquals(
+            hex(
+                "5A0007000126010002002512" +
+                    "5A0007002B1F01000200328A",
+            ),
+            HuaweiGestureController.buildGestureStateQuery(route),
+        )
+        assertNull(
+            HuaweiGestureController.buildDoubleTapPacket(
+                route,
+                HuaweiGestureSide.LEFT,
+                HuaweiTapAction.PLAY_PAUSE,
+            ),
+        )
+    }
+
+    @Test
     fun `FreeBuds 7i gestures match captured packets`() {
         val route = HuaweiDeviceRoute.HUAWEI_FREEBUDS7I
         assertArrayEquals(

@@ -31,7 +31,12 @@ object HuaweiGestureController {
     )
     private val modernSwipeVolumeRoutes = setOf(
         HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3,
+        HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5,
         HuaweiDeviceRoute.HUAWEI_FREEBUDS7I,
+    )
+    private val modernPinchRoutes = setOf(
+        HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3,
+        HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5,
     )
 
     fun supportsTapAction(
@@ -299,6 +304,8 @@ object HuaweiGestureController {
         } else if (route == HuaweiDeviceRoute.HUAWEI_FREEARC) {
             freeClip2DoubleTapQuery + freeClip2TripleTapQuery +
                 freeBuds4eLongPressQuery + freeClip2SwipeQuery
+        } else if (route == HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5) {
+            freeClip2TripleTapQuery + freeClip2SwipeQuery
         } else if (route == HuaweiDeviceRoute.HUAWEI_FREEBUDS6I ||
             route == HuaweiDeviceRoute.HUAWEI_FREECLIP2 ||
             route == HuaweiDeviceRoute.HUAWEI_FREEBUDS7I
@@ -397,13 +404,33 @@ object HuaweiGestureController {
         gesture: FreeBudsPro3GestureToggle,
         enabled: Boolean,
         onComplete: ((Boolean) -> Unit)? = null,
+    ) = setModernEarbudsGestureToggle(
+        context = context,
+        device = device,
+        route = HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3,
+        gesture = gesture,
+        enabled = enabled,
+        onComplete = onComplete,
+    )
+
+    fun setModernEarbudsGestureToggle(
+        context: Context,
+        device: BluetoothDevice,
+        route: HuaweiDeviceRoute,
+        gesture: FreeBudsPro3GestureToggle,
+        enabled: Boolean,
+        onComplete: ((Boolean) -> Unit)? = null,
     ) {
+        if (route !in modernPinchRoutes) {
+            onComplete?.invoke(false)
+            return
+        }
         HuaweiL2capAncController.sendRawPacketOnce(
             context = context,
             device = device,
-            route = HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3,
+            route = route,
             packet = buildFreeBudsPro3GestureTogglePacket(gesture, enabled),
-            description = "FreeBuds Pro 3 gesture=${gesture.extraValue} enabled=$enabled",
+            description = "modern-earbuds pinch=${gesture.extraValue} enabled=$enabled",
             onComplete = onComplete,
         )
     }
@@ -602,6 +629,7 @@ enum class HuaweiTapAction(val extraValue: String) {
             HuaweiDeviceRoute.HUAWEI_FREECLIP2 to HuaweiGestureKind.TRIPLE_TAP -> freeClip2TripleTapActions
             HuaweiDeviceRoute.HUAWEI_FREEBUDS7I to HuaweiGestureKind.DOUBLE_TAP -> freeBuds7iDoubleTapActions
             HuaweiDeviceRoute.HUAWEI_FREEBUDS7I to HuaweiGestureKind.TRIPLE_TAP -> freeBuds7iTripleTapActions
+            HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5 to HuaweiGestureKind.TRIPLE_TAP -> freeBuds7iTripleTapActions
             HuaweiDeviceRoute.HUAWEI_FREEARC to HuaweiGestureKind.DOUBLE_TAP -> freeBuds7iDoubleTapActions
             HuaweiDeviceRoute.HUAWEI_FREEARC to HuaweiGestureKind.TRIPLE_TAP -> freeBuds7iTripleTapActions
             HuaweiDeviceRoute.HUAWEI_EYEWEAR2 to HuaweiGestureKind.DOUBLE_TAP -> eyewear2DoubleTapActions
@@ -651,6 +679,7 @@ enum class HuaweiTapAction(val extraValue: String) {
 
             HuaweiDeviceRoute.HUAWEI_FREEBUDS4E,
             HuaweiDeviceRoute.HUAWEI_FREEBUDS5I,
+            HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5,
             HuaweiDeviceRoute.HUAWEI_FREEBUDS7I,
             HuaweiDeviceRoute.HUAWEI_FREEARC,
             -> when (this) {

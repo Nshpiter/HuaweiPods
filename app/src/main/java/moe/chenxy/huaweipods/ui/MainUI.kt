@@ -58,6 +58,7 @@ import moe.chenxy.huaweipods.pods.NoiseControlMode
 import moe.chenxy.huaweipods.pods.UNKNOWN_HUAWEI_ANC_SUBMODE
 import moe.chenxy.huaweipods.pods.decodeHuaweiDeviceRouteFromBroadcast
 import moe.chenxy.huaweipods.pods.defaultAncSubMode
+import moe.chenxy.huaweipods.pods.defaultTransparencySubMode
 import moe.chenxy.huaweipods.pods.encodeHuaweiDeviceRouteForBroadcast
 import moe.chenxy.huaweipods.pods.isKnown
 import moe.chenxy.huaweipods.pods.supportsAnc
@@ -66,6 +67,7 @@ import moe.chenxy.huaweipods.pods.supportsAncStateReadback
 import moe.chenxy.huaweipods.pods.supportsAncSubMode
 import moe.chenxy.huaweipods.pods.supportsDiscreteAncLevels
 import moe.chenxy.huaweipods.pods.supportsTransparency
+import moe.chenxy.huaweipods.pods.transparencySubModes
 import moe.chenxy.huaweipods.ui.dialogs.AvailableUpdateDialog
 import moe.chenxy.huaweipods.ui.dialogs.UpdatedAppDialog
 import moe.chenxy.huaweipods.ui.pages.AboutPage
@@ -1316,10 +1318,10 @@ private fun broadcastConfigChanged(context: Context, packageName: String) {
 }
 
 private fun supportedTransparencySubModes(route: HuaweiDeviceRoute): Set<Int> =
-    if (route == HuaweiDeviceRoute.HUAWEI_FREEBUDS6I) setOf(0x01, 0x02) else setOf(0x01, 0xFF)
+    route.transparencySubModes
 
 private fun defaultTransparencySubMode(route: HuaweiDeviceRoute): Int =
-    if (route == HuaweiDeviceRoute.HUAWEI_FREEBUDS6I) 0x02 else 0xFF
+    route.defaultTransparencySubMode ?: 0xFF
 
 @Suppress("DEPRECATION")
 private fun Intent.parcelableBatteryStatus(): BatteryParams? =

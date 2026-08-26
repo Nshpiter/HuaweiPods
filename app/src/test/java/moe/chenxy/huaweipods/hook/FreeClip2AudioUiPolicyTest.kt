@@ -44,6 +44,16 @@ class FreeClip2AudioUiPolicyTest {
     }
 
     @Test
+    fun `valid selection updates local UI state immediately`() {
+        val current = FreeClip2AudioUiState(spatialMode = FreeClip2SpatialAudioMode.OFF)
+
+        val selected = current.withSelection("spatial_mode", "head_tracking")
+
+        assertEquals(FreeClip2SpatialAudioMode.HEAD_TRACKING, selected?.spatialMode)
+        assertNull(current.withSelection("spatial_mode", "unknown"))
+    }
+
+    @Test
     fun `official custom EQ is preserved as a read only UI state`() {
         val updated = FreeClip2AudioUiState().mergeExtraValues(
             spatialModeValue = null,
@@ -95,6 +105,17 @@ class FreeClip2AudioUiPolicyTest {
 
         assertEquals("sound_effect", gate.current()?.kind)
         gate.observeConfirmed(null, null, "clear_voice")
+        assertNull(gate.current())
+    }
+
+    @Test
+    fun `stale confirmation cannot replace pending spatial selection`() {
+        val gate = FreeClip2AudioPendingGate()
+        gate.tryBegin("spatial_mode", "head_tracking", nowMs = 100L)
+
+        assertFalse(gate.shouldApplyConfirmed("spatial_mode", "fixed"))
+        assertEquals("head_tracking", gate.current()?.value)
+        assertTrue(gate.shouldApplyConfirmed("spatial_mode", "head_tracking"))
         assertNull(gate.current())
     }
 

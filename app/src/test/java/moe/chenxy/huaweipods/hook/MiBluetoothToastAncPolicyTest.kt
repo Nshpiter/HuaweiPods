@@ -7,6 +7,14 @@ import org.junit.Test
 
 class MiBluetoothToastAncPolicyTest {
     @Test
+    fun `notification click target is isolated by bluetooth address`() {
+        val first = headsetNotificationIntentIdentity("AA:BB:CC:DD:EE:01")
+        val second = headsetNotificationIntentIdentity("AA:BB:CC:DD:EE:02")
+
+        assertTrue(first != second)
+    }
+
+    @Test
     fun `notification exposes ANC only for verified ANC earbuds`() {
         listOf(
             HuaweiDeviceRoute.HUAWEI_FREEBUDS3,

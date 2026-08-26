@@ -66,6 +66,37 @@ class HuaweiEqualizerCodecTest {
     }
 
     @Test
+    fun `builds only the Pro 5 presets confirmed by capture`() {
+        val expected = mapOf(
+            0x02 to "5A0006002B490101021F79",
+            0x05 to "5A0006002B490101056F9E",
+            0x09 to "5A0006002B49010109AE12",
+            0x0D to "5A0006002B4901010DEE96",
+            0x0E to "5A0006002B4901010EDEF5",
+            0x0F to "5A0006002B4901010FCED4",
+            0x10 to "5A0006002B490101102D0A",
+            0x11 to "5A0006002B490101113D2B",
+        )
+        expected.forEach { (presetId, packet) ->
+            assertArrayEquals(
+                hex(packet),
+                HuaweiEqualizerCodec.buildBuiltInPresetPacket(
+                    HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5,
+                    presetId,
+                ),
+            )
+        }
+        assertNull(
+            HuaweiEqualizerCodec.buildBuiltInPresetPacket(
+                HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5,
+                0xC9,
+            ),
+        )
+        assertEquals(1, HuaweiEqualizerCodec.customWriteOperation(HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5))
+        assertTrue(HuaweiEqualizerCodec.supportsStateRead(HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5))
+    }
+
+    @Test
     fun `rejects malformed or unverified values`() {
         val badCrc = hex(FREEBUDS6I_EQ_STATE).also { it[it.lastIndex] = 0 }
         assertNull(HuaweiEqualizerCodec.parseState(badCrc))

@@ -65,6 +65,10 @@ internal fun shouldUpdateSettingsAncUi(route: HuaweiDeviceRoute): Boolean =
 internal fun usesCustomSettingsAncSelector(route: HuaweiDeviceRoute): Boolean =
     route.supportsDiscreteAncLevels && route.ancLevelOptions.size != 4
 
+/** 6i 原生二态通透映射已经过真机校正；其他子模式机型使用模块的协议选择器。 */
+internal fun usesNativeSettingsTransparencySelector(route: HuaweiDeviceRoute): Boolean =
+    route == HuaweiDeviceRoute.HUAWEI_FREEBUDS6I
+
 /**
  * RecyclerView 的一个 item 可能只是单行设置，也可能承载整组相邻设置。
  * 仅在 item 自身/内部只形成一个交互分支时整项折叠，避免误删同卡片中的其他行。

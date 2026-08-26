@@ -233,4 +233,33 @@ class FreeClip2AudioStateTrackerTest {
         assertEquals(FreeClip2SoundEffect.CUSTOM, confirmed?.effect)
         assertNull(tracker.pendingUpdate())
     }
+
+    @Test
+    fun `successful write falls back only after latest confirmation query has no state`() {
+        val tracker = FreeClip2AudioStateTracker()
+        val update = FreeClip2AudioState(mode = FreeClip2SpatialAudioMode.HEAD_TRACKING)
+        val token = requireNotNull(tracker.beginWrite(update, nowMs = 100L))
+        val staleQuery = tracker.beginQuery()
+
+        assertNull(tracker.acceptUnavailableQueryFallback(staleQuery, update))
+        assertTrue(tracker.completeWrite(token, success = true))
+
+        val latestQuery = tracker.beginQuery()
+        val accepted = tracker.acceptUnavailableQueryFallback(latestQuery, update)
+
+        assertEquals(FreeClip2SpatialAudioMode.HEAD_TRACKING, accepted?.mode)
+        assertNull(tracker.pendingUpdate())
+        assertEquals(FreeClip2SpatialAudioMode.HEAD_TRACKING, tracker.stableRefreshSnapshot()?.mode)
+    }
+
+    @Test
+    fun `failed write cannot use unavailable query fallback`() {
+        val tracker = FreeClip2AudioStateTracker()
+        val update = FreeClip2AudioState(mode = FreeClip2SpatialAudioMode.HEAD_TRACKING)
+        val token = requireNotNull(tracker.beginWrite(update, nowMs = 100L))
+
+        assertTrue(tracker.completeWrite(token, success = false))
+        assertNull(tracker.acceptUnavailableQueryFallback(tracker.beginQuery(), update))
+        assertNull(tracker.confirmedState)
+    }
 }

@@ -3,9 +3,10 @@ package moe.chenxy.huaweipods.pods
 /**
  * Keeps FreeClip 2 audio UI state tied to verified device readback.
  *
- * A successful RFCOMM write only means that the packet left the phone. It must not update the
- * confirmed state until a later query reports what the headset actually applied. Query tokens also
- * prevent a response queued before a newer write/query from restoring an obsolete selection.
+ * A successful RFCOMM write normally stays pending until a later query reports what the headset
+ * actually applied. A narrow fallback exists for firmware that accepts a setting but returns no
+ * readable frame to the following confirmation query. Query tokens prevent an obsolete response
+ * from restoring an older selection.
  */
 internal class FreeClip2AudioStateTracker {
     private companion object {
@@ -27,6 +28,7 @@ internal class FreeClip2AudioStateTracker {
     private var queryVersion = 0L
     private var mutationVersion = 0L
     private var pendingWrite: WriteToken? = null
+    private var pendingWriteTransportSucceeded = false
 
     var confirmedState: FreeClip2AudioState? = null
         private set
@@ -36,6 +38,7 @@ internal class FreeClip2AudioStateTracker {
         queryVersion++
         mutationVersion++
         pendingWrite = null
+        pendingWriteTransportSucceeded = false
         confirmedState = null
     }
 
@@ -47,13 +50,19 @@ internal class FreeClip2AudioStateTracker {
         }?.let { return null }
         mutationVersion++
         queryVersion++
+        pendingWriteTransportSucceeded = false
         return WriteToken(++writeVersion, update, nowMs).also { pendingWrite = it }
     }
 
     /** Returns false for a completion belonging to an older/replaced write. */
     fun completeWrite(token: WriteToken, success: Boolean): Boolean {
         if (pendingWrite?.version != token.version) return false
-        if (!success) pendingWrite = null
+        if (success) {
+            pendingWriteTransportSucceeded = true
+        } else {
+            pendingWrite = null
+            pendingWriteTransportSucceeded = false
+        }
         return true
     }
 
@@ -66,6 +75,7 @@ internal class FreeClip2AudioStateTracker {
         if (pending.version != token.version || !update.observes(pending.update)) return null
         confirmedState = mergeFreeClip2AudioState(confirmedState, update)
         pendingWrite = null
+        pendingWriteTransportSucceeded = false
         return confirmedState
     }
 
@@ -88,7 +98,30 @@ internal class FreeClip2AudioStateTracker {
     fun acceptQuery(token: QueryToken, update: FreeClip2AudioState): FreeClip2AudioState? {
         if (token.version != queryVersion || token.mutationVersion != mutationVersion) return null
         confirmedState = mergeFreeClip2AudioState(confirmedState, update)
-        pendingWrite?.takeIf { update.observes(it.update) }?.let { pendingWrite = null }
+        pendingWrite?.takeIf { update.observes(it.update) }?.let {
+            pendingWrite = null
+            pendingWriteTransportSucceeded = false
+        }
+        return confirmedState
+    }
+
+    /**
+     * 部分 FreeClip 2 固件接受空间音频写包，却不给同字段的状态查询返回可解析帧。
+     * 仅当本次写传输已成功、随后最新的确认查询明确无状态时，才把该次设置作为会话回显；
+     * 之后若官方回调或可解析查询到达，仍会覆盖这个回显值。
+     */
+    fun acceptUnavailableQueryFallback(
+        token: QueryToken,
+        pendingUpdate: FreeClip2AudioState,
+    ): FreeClip2AudioState? {
+        if (token.version != queryVersion || token.mutationVersion != mutationVersion) return null
+        val pending = pendingWrite ?: return null
+        if (!pendingWriteTransportSucceeded || pending.update != pendingUpdate) return null
+        confirmedState = mergeFreeClip2AudioState(confirmedState, pending.update)
+        pendingWrite = null
+        pendingWriteTransportSucceeded = false
+        mutationVersion++
+        queryVersion++
         return confirmedState
     }
 
@@ -103,7 +136,10 @@ internal class FreeClip2AudioStateTracker {
         mutationVersion++
         queryVersion++
         confirmedState = mergeFreeClip2AudioState(confirmedState, update)
-        pendingWrite?.takeIf { update.observes(it.update) }?.let { pendingWrite = null }
+        pendingWrite?.takeIf { update.observes(it.update) }?.let {
+            pendingWrite = null
+            pendingWriteTransportSucceeded = false
+        }
         return confirmedState
     }
 

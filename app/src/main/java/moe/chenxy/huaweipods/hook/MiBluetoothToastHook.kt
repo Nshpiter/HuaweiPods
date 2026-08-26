@@ -36,6 +36,9 @@ import java.util.concurrent.ConcurrentHashMap
 
 internal fun shouldOfferNotificationAncAction(route: HuaweiDeviceRoute): Boolean = route.supportsAnc
 
+/** PendingIntent 的 extras 不参与身份比较，必须把设备地址写入 Intent identifier。 */
+internal fun headsetNotificationIntentIdentity(address: String): String = "BTHeadset$address"
+
 @SuppressLint("MissingPermission")
 object MiBluetoothToastHook : HookContext() {
 
@@ -77,6 +80,7 @@ object MiBluetoothToastHook : HookContext() {
         fun deleteIntent(context: Context, bluetoothDevice: BluetoothDevice): PendingIntent? {
             val intent = Intent("com.android.bluetooth.headset.notification.cancle")
             intent.putExtra("android.bluetooth.device.extra.DEVICE", bluetoothDevice)
+            intent.setIdentifier(headsetNotificationIntentIdentity(bluetoothDevice.address))
             return PendingIntent.getBroadcast(
                 context,
                 0,
@@ -98,6 +102,7 @@ object MiBluetoothToastHook : HookContext() {
             }
             try {
                 val address: String = bluetoothDevice.address
+                val notificationIdentity = headsetNotificationIntentIdentity(address)
                 if (!NotificationPresentationPolicy.shouldPostPersistentNotification(
                         ConfigManager.persistentNotificationEnabled(),
                     )
@@ -164,7 +169,7 @@ object MiBluetoothToastHook : HookContext() {
                 val intent = Intent("com.android.bluetooth.headset.notification")
                 intent.putExtra("btData", bundle)
                 intent.putExtra("disconnect", "1")
-                intent.setIdentifier("BTHeadset$address")
+                intent.setIdentifier(notificationIdentity)
                 val disconnectAction = Notification.Action(
                     285737079,
                     context.resources.getString(miheadset_notification_Disconnect),
@@ -179,7 +184,7 @@ object MiBluetoothToastHook : HookContext() {
                 val ancAction = if (offerAncAction) {
                     val ancCycleIntent = Intent(HuaweiPodsAction.ACTION_CYCLE_ANC).apply {
                         setPackage("com.android.bluetooth")
-                        setIdentifier("BTHeadset$address")
+                        setIdentifier(notificationIdentity)
                         putExtra("address", address)
                         putExtra("device_name", deviceName)
                         encodeHuaweiDeviceRouteForBroadcast(deviceRoute)?.let {
@@ -213,6 +218,7 @@ object MiBluetoothToastHook : HookContext() {
                     0,
                     Intent(HuaweiPodsAction.ACTION_SHOW_PODS_UI).apply {
                         setClassName(BuildConfig.APPLICATION_ID, "moe.chenxy.huaweipods.PopupActivity")
+                        setIdentifier(notificationIdentity)
                         putExtra("android.bluetooth.device.extra.DEVICE", bluetoothDevice)
                         putExtra("bluetoothaddress", bluetoothDevice.address)
                         putExtra("device_name", alias)

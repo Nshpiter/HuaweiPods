@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="transparency_adaptive">智慧动态透传</string>
+    <string name="freebuds_pro5_anc_level_adaptive">智慧双擎降噪</string>
+    <string name="freebuds_pro5_smart_features">智慧功能</string>
+    <string name="freebuds_pro5_adaptive_volume">自适应音量</string>
+    <string name="freebuds_pro5_voice_control">语音控制</string>
+    <string name="freebuds_pro5_sound_effect">华为悦彰音效</string>
+    <string name="freebuds_pro5_dual_device">双设备连接</string>
+    <string name="freebuds_pro5_case_and_fit">充电盒与佩戴</string>
+    <string name="freebuds_pro5_case_prompt_sound">开盒提示音</string>
+    <string name="freebuds_pro5_ear_tip_material">耳塞材质</string>
+    <string name="freebuds_pro5_ear_tip_silicone">硅胶耳塞</string>
+    <string name="freebuds_pro5_ear_tip_memory_foam">记忆耳塞</string>
+    <string name="freebuds_pro5_effect_yuezhang_balanced">悦彰均衡</string>
+    <string name="freebuds_pro5_effect_yuezhang_vocal">悦彰人声</string>
+    <string name="freebuds_pro5_effect_yuezhang_classical">悦彰古典</string>
+    <string name="freebuds_pro5_effect_yuezhang_bass">悦彰低音</string>
+    <string name="freebuds_pro5_effect_movie">电影模式</string>
+    <string name="freebuds_pro5_effect_podcast_voice">播客人声</string>
+    <string name="freebuds_pro5_effect_game">游戏音效</string>
+    <string name="freebuds_pro5_effect_sport">运动模式</string>
+    <string name="freebuds_pro5_effect_ai">AI 音效</string>
+</resources>

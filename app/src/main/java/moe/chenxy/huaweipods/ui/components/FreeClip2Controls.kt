@@ -42,6 +42,7 @@ import moe.chenxy.huaweipods.pods.FreeClip2SpatialScene
 import moe.chenxy.huaweipods.pods.HuaweiFreeClip2Controller
 import moe.chenxy.huaweipods.pods.HuaweiDeviceRoute
 import moe.chenxy.huaweipods.pods.HuaweiEqualizerState
+import moe.chenxy.huaweipods.pods.readHuaweiEqualizerCustomPresets
 import moe.chenxy.huaweipods.pods.encodeHuaweiDeviceRouteForBroadcast
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.HuaweiPodsAction
 import top.yukonga.miuix.kmp.basic.Checkbox
@@ -449,7 +450,7 @@ private fun FreeClip2AudioReadbackEffect(
                                     HuaweiPodsAction.EXTRA_FREECLIP2_BRIDGE_EQ_NAME,
                                 ),
                                 selectedGains = gains,
-                                customPresets = emptyList(),
+                                customPresets = it.readHuaweiEqualizerCustomPresets().orEmpty(),
                             )
                         }
                     },

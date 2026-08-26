@@ -315,20 +315,30 @@ private fun PopupContent(
         }
     }
 
-    // Timeout fallback: show dialog even if no response within 500ms
-    // Periodic refresh: poll earbuds every 15s while popup is open
+    // 界面可见时只高频读取 ANC；完整状态仍每 15 秒刷新，避免电量和图片查询挤占耳机通道。
     LaunchedEffect(Unit) {
         delay(500)
         if (!terminalClosed.value && !showDialog.value) showDialog.value = true
 
+        var ancRefreshCount = 0
         while (!terminalClosed.value) {
-            delay(15_000)
+            delay(2_500)
             if (terminalClosed.value) break
-            context.sendBroadcast(Intent(HuaweiPodsAction.ACTION_REFRESH_STATUS).apply {
-                putPopupTarget(target)
-                setPackage("com.android.bluetooth")
-                addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
-            })
+            if (target.route.supportsAncStateReadback) {
+                context.sendBroadcast(Intent(HuaweiPodsAction.ACTION_HUAWEI_ANC_REFRESH).apply {
+                    putPopupTarget(target)
+                    setPackage("com.android.bluetooth")
+                    addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
+                })
+            }
+            ancRefreshCount += 1
+            if (ancRefreshCount % 6 == 0) {
+                context.sendBroadcast(Intent(HuaweiPodsAction.ACTION_REFRESH_STATUS).apply {
+                    putPopupTarget(target)
+                    setPackage("com.android.bluetooth")
+                    addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
+                })
+            }
         }
     }
 

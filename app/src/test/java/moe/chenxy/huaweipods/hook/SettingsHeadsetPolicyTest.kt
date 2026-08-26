@@ -53,7 +53,7 @@ class SettingsHeadsetPolicyTest {
             HuaweiDeviceRoute.HUAWEI_FREEBUDS6I to expectedPolicy(true, true, true),
             HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3 to expectedPolicy(true, true, true),
             HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO4 to expectedPolicy(true, false, false),
-            HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5 to expectedPolicy(true, true, false),
+            HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5 to expectedPolicy(true, true, true),
             HuaweiDeviceRoute.HUAWEI_FREEBUDS7I to expectedPolicy(true, true, true),
             HuaweiDeviceRoute.HUAWEI_FREECLIP to expectedPolicy(false, false, false),
             HuaweiDeviceRoute.HUAWEI_FREECLIP2 to expectedPolicy(false, false, true),
@@ -132,6 +132,13 @@ class SettingsHeadsetPolicyTest {
         assertFalse(usesCustomSettingsAncSelector(HuaweiDeviceRoute.HUAWEI_FREEBUDS6I))
         assertFalse(usesCustomSettingsAncSelector(HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3))
         assertFalse(usesCustomSettingsAncSelector(HuaweiDeviceRoute.HUAWEI_FREEBUDS3))
+    }
+
+    @Test
+    fun `only FreeBuds 6i reuses the corrected native transparency selector`() {
+        assertTrue(usesNativeSettingsTransparencySelector(HuaweiDeviceRoute.HUAWEI_FREEBUDS6I))
+        assertFalse(usesNativeSettingsTransparencySelector(HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5))
+        assertFalse(usesNativeSettingsTransparencySelector(HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3))
     }
 
     @Test

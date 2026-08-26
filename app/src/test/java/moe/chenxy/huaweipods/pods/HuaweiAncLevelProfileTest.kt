@@ -101,7 +101,7 @@ class HuaweiAncLevelProfileTest {
     }
 
     @Test
-    fun `Pro 3 and 7i retain their existing four-level mapping`() {
+    fun `Pro 3 and 7i use their captured four-level mapping`() {
         val expected = listOf(
             HuaweiAncLevelOption(HuaweiAncLevel.ADAPTIVE, protocolValue = 0x01, miuiValue = 0x03),
             HuaweiAncLevelOption(HuaweiAncLevel.LIGHT, protocolValue = 0x00, miuiValue = 0x01),
@@ -120,5 +120,35 @@ class HuaweiAncLevelProfileTest {
                 assertEquals(option.miuiValue, route.miuiLevelForAncSubMode(option.protocolValue))
             }
         }
+    }
+
+    @Test
+    fun `Pro 5 maps Smart Audio dynamic light balanced and deep values from device feedback`() {
+        val route = HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5
+        val expected = listOf(
+            HuaweiAncLevelOption(HuaweiAncLevel.ADAPTIVE, protocolValue = 0x03, miuiValue = 0x03),
+            HuaweiAncLevelOption(HuaweiAncLevel.LIGHT, protocolValue = 0x01, miuiValue = 0x01),
+            HuaweiAncLevelOption(HuaweiAncLevel.BALANCED, protocolValue = 0x00, miuiValue = 0x00),
+            HuaweiAncLevelOption(HuaweiAncLevel.DEEP, protocolValue = 0x02, miuiValue = 0x02),
+        )
+
+        assertEquals(expected, route.ancLevelOptions)
+        assertEquals(0x03, route.defaultAncSubMode)
+        expected.forEach { option ->
+            assertEquals(option.protocolValue, route.ancSubModeForMiuiLevel(option.miuiValue))
+            assertEquals(option.miuiValue, route.miuiLevelForAncSubMode(option.protocolValue))
+        }
+    }
+
+    @Test
+    fun `Pro 5 exposes only its three selectable transparency values`() {
+        val route = HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5
+
+        assertEquals(setOf(0x01, 0x02, 0x04), route.transparencySubModes)
+        assertEquals(0x02, route.defaultTransparencySubMode)
+        assertTrue(0x02 in route.transparencySubModes)
+        assertTrue(0x01 in route.transparencySubModes)
+        assertTrue(0x04 in route.transparencySubModes)
+        assertFalse(0xFF in route.transparencySubModes)
     }
 }

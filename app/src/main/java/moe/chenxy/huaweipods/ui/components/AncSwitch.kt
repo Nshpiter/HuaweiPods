@@ -41,6 +41,7 @@ import moe.chenxy.huaweipods.pods.isNoiseCancellation
 import moe.chenxy.huaweipods.pods.supportsAncDirectionDial
 import moe.chenxy.huaweipods.pods.supportsDiscreteAncLevels
 import moe.chenxy.huaweipods.pods.supportsTransparency
+import moe.chenxy.huaweipods.pods.defaultTransparencySubMode
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.utils.SinkFeedback
@@ -99,7 +100,13 @@ fun AncSwitch(
                 title = stringResource(R.string.anc_level_title),
                 values = deviceRoute.ancLevelOptions.map { option ->
                     val label = when (option.level) {
-                        HuaweiAncLevel.ADAPTIVE -> stringResource(R.string.anc_level_adaptive)
+                        HuaweiAncLevel.ADAPTIVE -> stringResource(
+                            if (deviceRoute == HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5) {
+                                R.string.freebuds_pro5_anc_level_adaptive
+                            } else {
+                                R.string.anc_level_adaptive
+                            },
+                        )
                         HuaweiAncLevel.LIGHT -> stringResource(R.string.anc_level_light)
                         HuaweiAncLevel.BALANCED -> stringResource(R.string.anc_level_balanced)
                         HuaweiAncLevel.DEEP -> stringResource(R.string.anc_level_deep)
@@ -116,13 +123,21 @@ fun AncSwitch(
             onHuaweiAncLevelChange != null &&
             deviceRoute.supportsTransparency
         ) {
-            val standardValue = if (deviceRoute == HuaweiDeviceRoute.HUAWEI_FREEBUDS6I) 0x02 else 0xFF
+            val standardValue = deviceRoute.defaultTransparencySubMode ?: 0xFF
+            val standard = standardValue to stringResource(R.string.transparency_standard)
+            val voice = 0x01 to stringResource(R.string.transparency_voice)
+            val values = if (deviceRoute == HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5) {
+                listOf(
+                    standard,
+                    voice,
+                    0x04 to stringResource(R.string.transparency_adaptive),
+                )
+            } else {
+                listOf(standard, voice)
+            }
             HuaweiAncSubModeSelector(
                 title = stringResource(R.string.transparency_level_title),
-                values = listOf(
-                    standardValue to stringResource(R.string.transparency_standard),
-                    0x01 to stringResource(R.string.transparency_voice),
-                ),
+                values = values,
                 selectedValue = huaweiAncLevel,
                 onValueChange = onHuaweiAncLevelChange,
                 compact = compact,

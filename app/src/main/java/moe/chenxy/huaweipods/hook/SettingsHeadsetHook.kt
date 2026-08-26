@@ -37,6 +37,7 @@ import moe.chenxy.huaweipods.pods.HuaweiSwipeAction
 import moe.chenxy.huaweipods.pods.HuaweiTapAction
 import moe.chenxy.huaweipods.pods.ancLevelOptions
 import moe.chenxy.huaweipods.pods.defaultAncSubMode
+import moe.chenxy.huaweipods.pods.defaultTransparencySubMode
 import moe.chenxy.huaweipods.pods.huaweiDeviceRoute
 import moe.chenxy.huaweipods.pods.decodeHuaweiDeviceRouteFromBroadcast
 import moe.chenxy.huaweipods.pods.encodeHuaweiDeviceRouteForBroadcast
@@ -49,6 +50,7 @@ import moe.chenxy.huaweipods.pods.supportsAncSubMode
 import moe.chenxy.huaweipods.pods.supportsDiscreteAncLevels
 import moe.chenxy.huaweipods.pods.supportsGestureConfiguration
 import moe.chenxy.huaweipods.pods.supportsTransparency
+import moe.chenxy.huaweipods.pods.transparencySubModes
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.BatteryParams
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.HuaweiPodsAction
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.addHuaweiPodsAction
@@ -761,14 +763,24 @@ object SettingsHeadsetHook : HookContext() {
                             HuaweiPodsAction.EXTRA_FREECLIP2_SOUND_EFFECT,
                         )
                         currentFreeClip2AudioState = currentFreeClip2AudioState.mergeExtraValues(
-                            spatialModeValue = spatialModeValue,
-                            spatialSceneValue = spatialSceneValue,
-                            soundEffectValue = soundEffectValue,
-                        )
-                        freeClip2AudioPendingGate.observeConfirmed(
-                            spatialModeValue,
-                            spatialSceneValue,
-                            soundEffectValue,
+                            spatialModeValue = spatialModeValue?.takeIf {
+                                freeClip2AudioPendingGate.shouldApplyConfirmed(
+                                    HuaweiPodsAction.FREECLIP2_AUDIO_KIND_SPATIAL_MODE,
+                                    it,
+                                )
+                            },
+                            spatialSceneValue = spatialSceneValue?.takeIf {
+                                freeClip2AudioPendingGate.shouldApplyConfirmed(
+                                    HuaweiPodsAction.FREECLIP2_AUDIO_KIND_SPATIAL_SCENE,
+                                    it,
+                                )
+                            },
+                            soundEffectValue = soundEffectValue?.takeIf {
+                                freeClip2AudioPendingGate.shouldApplyConfirmed(
+                                    HuaweiPodsAction.FREECLIP2_AUDIO_KIND_SOUND_EFFECT,
+                                    it,
+                                )
+                            },
                         )
                         saveCurrentFreeClip2AudioState(context)
                         updateFragments()
@@ -1206,10 +1218,10 @@ object SettingsHeadsetHook : HookContext() {
             ?: 0
 
     private fun defaultTransparencySubMode(route: HuaweiDeviceRoute): Int =
-        if (route == HuaweiDeviceRoute.HUAWEI_FREEBUDS6I) 0x02 else 0xFF
+        route.defaultTransparencySubMode ?: 0xFF
 
     private fun supportedTransparencySubModes(route: HuaweiDeviceRoute): Set<Int> =
-        if (route == HuaweiDeviceRoute.HUAWEI_FREEBUDS6I) setOf(0x01, 0x02) else setOf(0x01, 0xFF)
+        route.transparencySubModes
 
     private fun transparencySubMode(route: HuaweiDeviceRoute): Int =
         currentTransparencySubMode.takeIf { it in supportedTransparencySubModes(route) }
@@ -1883,6 +1895,11 @@ object SettingsHeadsetHook : HookContext() {
             Log.w(TAG, "Settings FreeClip 2 audio request send failed kind=$kind value=$value")
             return
         }
+        currentFreeClip2AudioState.withSelection(kind, value)?.let { selected ->
+            currentFreeClip2AudioState = selected
+            saveCurrentFreeClip2AudioState(ctx)
+            updateFragments()
+        }
         schedulePruneFreeBudsUnsupportedViews(root)
         Log.i(TAG, "Settings FreeClip 2 audio requested address=$address kind=$kind value=$value")
     }
@@ -2022,16 +2039,20 @@ object SettingsHeadsetHook : HookContext() {
         ) {
             existingDial?.visibility = View.GONE
             existingAncSelector?.visibility = View.GONE
-            if (route == HuaweiDeviceRoute.HUAWEI_FREEBUDS6I) {
+            val nativeTransparencyAnchor = findNativeTransparencyAnchor(root)
+            if (usesNativeSettingsTransparencySelector(route)) {
                 existingTransparencySelector?.visibility = View.GONE
-                val nativeAnchor = findFreeBuds6iNativeTransparencyAnchor(root)
-                if (nativeAnchor != null) {
-                    setSettingsCapabilityViewVisible(nativeAnchor, true)
-                    relabelFreeBuds6iNativeTransparencyOptions(nativeAnchor)
+                if (nativeTransparencyAnchor != null) {
+                    setSettingsCapabilityViewVisible(nativeTransparencyAnchor, true)
+                    relabelFreeBuds6iNativeTransparencyOptions(nativeTransparencyAnchor)
                 } else {
                     Log.w(TAG, "FreeBuds 6i native transparency selector not found")
                 }
                 return
+            }
+            // Pro 5 等机型使用模块按协议值生成的选择器，原生二态控件会重复且映射不完整。
+            nativeTransparencyAnchor?.let {
+                setSettingsCapabilityViewVisible(it, false, collapseLayout = false)
             }
             levelAnchor?.let { setSettingsCapabilityViewVisible(it, false) }
             val anchor = levelAnchor ?: modeButtonContainer(root)
@@ -2201,7 +2222,11 @@ object SettingsHeadsetHook : HookContext() {
         route: HuaweiDeviceRoute,
     ): List<HuaweiAncSubModeSelectorView.Option> = route.ancLevelOptions.map { option ->
         val label = when (option.level) {
-            HuaweiAncLevel.ADAPTIVE -> moduleString(context, R.string.anc_level_adaptive, "智慧动态")
+            HuaweiAncLevel.ADAPTIVE -> if (route == HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5) {
+                moduleString(context, R.string.freebuds_pro5_anc_level_adaptive, "智慧双擎降噪")
+            } else {
+                moduleString(context, R.string.anc_level_adaptive, "智慧动态")
+            }
             HuaweiAncLevel.LIGHT -> moduleString(context, R.string.anc_level_light, "轻度")
             HuaweiAncLevel.BALANCED -> moduleString(context, R.string.anc_level_balanced, "均衡")
             HuaweiAncLevel.DEEP -> moduleString(context, R.string.anc_level_deep, "深度")
@@ -2212,16 +2237,35 @@ object SettingsHeadsetHook : HookContext() {
     private fun transparencySelectorOptions(
         context: Context,
         route: HuaweiDeviceRoute,
-    ): List<HuaweiAncSubModeSelectorView.Option> = listOf(
-        HuaweiAncSubModeSelectorView.Option(
-            defaultTransparencySubMode(route),
-            moduleString(context, R.string.transparency_standard, "普通"),
-        ),
-        HuaweiAncSubModeSelectorView.Option(
-            0x01,
-            moduleString(context, R.string.transparency_voice, "人声增强"),
-        ),
-    )
+    ): List<HuaweiAncSubModeSelectorView.Option> {
+        val standard = defaultTransparencySubMode(route)
+        return buildList {
+            if (standard in route.transparencySubModes) {
+                add(
+                    HuaweiAncSubModeSelectorView.Option(
+                        standard,
+                        moduleString(context, R.string.transparency_standard, "普通"),
+                    ),
+                )
+            }
+            if (0x01 in route.transparencySubModes && 0x01 != standard) {
+                add(
+                    HuaweiAncSubModeSelectorView.Option(
+                        0x01,
+                        moduleString(context, R.string.transparency_voice, "人声增强"),
+                    ),
+                )
+            }
+            if (0x04 in route.transparencySubModes) {
+                add(
+                    HuaweiAncSubModeSelectorView.Option(
+                        0x04,
+                        moduleString(context, R.string.transparency_adaptive, "智慧动态透传"),
+                    ),
+                )
+            }
+        }
+    }
 
     private fun isSettingsDarkMode(context: Context): Boolean =
         context.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK ==
@@ -2462,7 +2506,7 @@ object SettingsHeadsetHook : HookContext() {
         return target
     }
 
-    private fun findFreeBuds6iNativeTransparencyAnchor(root: View): View? {
+    private fun findNativeTransparencyAnchor(root: View): View? {
         val matches = mutableListOf<TextView>()
         collectNativeTransparencyTextMatches(
             root,

@@ -48,20 +48,31 @@ class HuaweiHfpAncStateTest {
     }
 
     @Test
-    fun `pro 3 and pro 5 accept standard and voice transparency`() {
-        listOf(
-            HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3,
-            HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5,
-        ).forEach { route ->
+    fun `pro 3 accepts captured transition and voice transparency`() {
+        val route = HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3
+        assertEquals(
+            0xFF,
+            normalizeHuaweiAncSubMode(route, NoiseControlMode.TRANSPARENCY, 0xFF, offState),
+        )
+        assertEquals(
+            0x01,
+            normalizeHuaweiAncSubMode(route, NoiseControlMode.TRANSPARENCY, 0x01, offState),
+        )
+    }
+
+    @Test
+    fun `pro 5 accepts its three selectable transparency values`() {
+        val route = HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5
+        listOf(0x02, 0x01, 0x04).forEach { value ->
             assertEquals(
-                0xFF,
-                normalizeHuaweiAncSubMode(route, NoiseControlMode.TRANSPARENCY, 0xFF, offState),
-            )
-            assertEquals(
-                0x01,
-                normalizeHuaweiAncSubMode(route, NoiseControlMode.TRANSPARENCY, 0x01, offState),
+                value,
+                normalizeHuaweiAncSubMode(route, NoiseControlMode.TRANSPARENCY, value, offState),
             )
         }
+        assertEquals(
+            0x02,
+            normalizeHuaweiAncSubMode(route, NoiseControlMode.TRANSPARENCY, 0xFF, offState),
+        )
     }
 
     @Test
@@ -153,7 +164,7 @@ class HuaweiHfpAncStateTest {
     @Test
     fun `invalid Pro 5 transparency submode falls back to standard mode`() {
         assertEquals(
-            0xFF,
+            0x02,
             normalizeHuaweiAncSubMode(
                 HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5,
                 NoiseControlMode.TRANSPARENCY,

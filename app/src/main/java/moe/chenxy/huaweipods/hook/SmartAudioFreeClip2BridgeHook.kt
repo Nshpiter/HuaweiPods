@@ -15,6 +15,7 @@ import moe.chenxy.huaweipods.pods.HuaweiEqualizerCodec
 import moe.chenxy.huaweipods.pods.HuaweiEqualizerPreset
 import moe.chenxy.huaweipods.pods.HuaweiEqualizerState
 import moe.chenxy.huaweipods.pods.SmartAudioFreeClip2BridgePolicy
+import moe.chenxy.huaweipods.pods.putHuaweiEqualizerCustomPresets
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.HuaweiPodsAction
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.sendIdentitySharingBroadcast
 
@@ -121,6 +122,7 @@ internal object SmartAudioFreeClip2BridgeHook : HookContext() {
                                 gains.toIntArray(),
                             )
                         }
+                        putHuaweiEqualizerCustomPresets(it.customPresets)
                     }
                     setPackage(SmartAudioFreeClip2BridgePolicy.BLUETOOTH_PACKAGE)
                     addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
@@ -169,12 +171,13 @@ internal object SmartAudioFreeClip2BridgeHook : HookContext() {
         override fun onReceive(context: Context?, intent: Intent?) {
             val appContext = context?.applicationContext ?: return
             val request = intent ?: return
+            val requesterPackage = sentFromPackage ?: return
             val trustedSender = if (
                 request.action == HuaweiPodsAction.ACTION_SMART_AUDIO_FREECLIP2_EQ_SET
             ) {
-                SmartAudioFreeClip2BridgePolicy.isTrustedEqualizerRequestSender(sentFromPackage)
+                SmartAudioFreeClip2BridgePolicy.isTrustedEqualizerRequestSender(requesterPackage)
             } else {
-                SmartAudioFreeClip2BridgePolicy.isTrustedRequestSender(sentFromPackage)
+                SmartAudioFreeClip2BridgePolicy.isTrustedRequestSender(requesterPackage)
             }
             if (!trustedSender) {
                 Log.w(TAG, "Rejected untrusted FreeClip 2 spatial request")
@@ -206,7 +209,15 @@ internal object SmartAudioFreeClip2BridgeHook : HookContext() {
                         it.size == HuaweiEqualizerCodec.BAND_COUNT &&
                             it.all { gain -> gain in HuaweiEqualizerCodec.GAIN_RANGE }
                     } ?: return
-                handleEqualizerSetRequest(appContext, nonce, address, presetId, name, gains)
+                handleEqualizerSetRequest(
+                    appContext,
+                    nonce,
+                    address,
+                    presetId,
+                    name,
+                    gains,
+                    requesterPackage,
+                )
                 return
             }
             val mode = FreeClip2SpatialAudioMode.fromProtocolValue(
@@ -241,6 +252,7 @@ internal object SmartAudioFreeClip2BridgeHook : HookContext() {
         presetId: Int,
         name: String,
         gains: List<Int>,
+        requesterPackage: String,
     ) {
         val pendingResult = requestReceiver.goAsync()
         executor.execute {
@@ -254,7 +266,7 @@ internal object SmartAudioFreeClip2BridgeHook : HookContext() {
                         putExtra(HuaweiPodsAction.EXTRA_FREECLIP2_BRIDGE_NONCE, nonce)
                         putExtra(HuaweiPodsAction.EXTRA_FREECLIP2_BRIDGE_ADDRESS, address)
                         putExtra(HuaweiPodsAction.EXTRA_FREECLIP2_BRIDGE_ACCEPTED, accepted)
-                        setPackage(SmartAudioFreeClip2BridgePolicy.MODULE_PACKAGE)
+                        setPackage(requesterPackage)
                         addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
                     },
                 )

@@ -9,7 +9,9 @@ import android.graphics.drawable.RippleDrawable
 import android.text.TextUtils
 import android.util.TypedValue
 import android.view.Gravity
+import android.view.View
 import android.view.ViewGroup
+import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.TextView
 import kotlin.math.roundToInt
@@ -19,6 +21,8 @@ internal class HuaweiAncSubModeSelectorView(
     context: Context,
     private val onSelected: (Int) -> Unit,
 ) : LinearLayout(context) {
+    internal var onSelectedWithAnchor: ((Int, View) -> Unit)? = null
+
     enum class Appearance {
         MODULE,
         HOST_GLASS,
@@ -27,6 +31,7 @@ internal class HuaweiAncSubModeSelectorView(
     data class Option(
         val value: Int,
         val label: String,
+        val reselectable: Boolean = false,
     )
 
     init {
@@ -39,13 +44,13 @@ internal class HuaweiAncSubModeSelectorView(
         darkSurface: Boolean,
         appearance: Appearance = Appearance.MODULE,
         accentColor: Int? = null,
+        horizontallyScrollable: Boolean = false,
     ) {
         removeAllViews()
         if (options.isEmpty()) return
         setPadding(context.dp(5), context.dp(3), context.dp(5), context.dp(3))
         val resolvedAccent = accentColor ?: resolveAccentColor()
-        addView(
-            LinearLayout(context).apply {
+        val optionRow = LinearLayout(context).apply {
                 orientation = HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
                 setPadding(context.dp(3), context.dp(3), context.dp(3), context.dp(3))
@@ -62,15 +67,43 @@ internal class HuaweiAncSubModeSelectorView(
                             darkSurface = darkSurface,
                             appearance = appearance,
                             accent = resolvedAccent,
+                            horizontallyScrollable = horizontallyScrollable,
                         ),
-                        LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f).apply {
+                        if (horizontallyScrollable) {
+                            LayoutParams(
+                                ViewGroup.LayoutParams.WRAP_CONTENT,
+                                ViewGroup.LayoutParams.MATCH_PARENT,
+                            )
+                        } else {
+                            LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f)
+                        }.apply {
                             if (index > 0) marginStart = context.dp(3)
                         },
                     )
                 }
-            },
-            LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, context.dp(42)),
-        )
+            }
+        if (horizontallyScrollable) {
+            addView(
+                HorizontalScrollView(context).apply {
+                    isFillViewport = true
+                    isHorizontalScrollBarEnabled = false
+                    overScrollMode = OVER_SCROLL_NEVER
+                    addView(
+                        optionRow,
+                        ViewGroup.LayoutParams(
+                            ViewGroup.LayoutParams.WRAP_CONTENT,
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                        ),
+                    )
+                },
+                LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, context.dp(42)),
+            )
+        } else {
+            addView(
+                optionRow,
+                LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, context.dp(42)),
+            )
+        }
     }
 
     private fun optionView(
@@ -79,6 +112,7 @@ internal class HuaweiAncSubModeSelectorView(
         darkSurface: Boolean,
         appearance: Appearance,
         accent: Int,
+        horizontallyScrollable: Boolean,
     ): TextView = TextView(context).apply {
         text = option.label
         gravity = Gravity.CENTER
@@ -88,6 +122,10 @@ internal class HuaweiAncSubModeSelectorView(
         maxLines = 1
         ellipsize = TextUtils.TruncateAt.END
         contentDescription = option.label
+        if (horizontallyScrollable) {
+            minWidth = context.dp(76)
+            setPadding(context.dp(14), 0, context.dp(14), 0)
+        }
         if (selected) {
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
         }
@@ -102,7 +140,14 @@ internal class HuaweiAncSubModeSelectorView(
         )
         background = segmentBackground(selected, darkSurface, appearance, accent)
         setOnClickListener {
-            if (!selected) onSelected(option.value)
+            if (!selected || option.reselectable) {
+                val anchoredCallback = onSelectedWithAnchor
+                if (anchoredCallback != null) {
+                    anchoredCallback(option.value, this)
+                } else {
+                    onSelected(option.value)
+                }
+            }
         }
     }
 

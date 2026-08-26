@@ -68,4 +68,10 @@ class MiLinkLowLatencyQuickCardPolicyTest {
             ),
         )
     }
+
+    @Test
+    fun `quick card click toggles the module state instead of treating host code as a boolean`() {
+        assertTrue(MiLinkLowLatencyQuickCardPolicy.toggledEnabled(currentEnabled = false))
+        assertFalse(MiLinkLowLatencyQuickCardPolicy.toggledEnabled(currentEnabled = true))
+    }
 }

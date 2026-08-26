@@ -1,5 +1,6 @@
 package moe.chenxy.huaweipods.hook.milink
 
+import android.view.ViewGroup
 import moe.chenxy.huaweipods.pods.HuaweiDeviceRoute
 import moe.chenxy.huaweipods.pods.FreeClip2SpatialAudioMode
 import org.junit.Assert.assertEquals
@@ -9,6 +10,28 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class MiLinkAncRoutingTest {
+    @Test
+    fun `visible MiLink detail polls ANC only for routes with verified readback`() {
+        assertTrue(
+            shouldPollVisibleMiLinkAnc(
+                route = HuaweiDeviceRoute.HUAWEI_FREEBUDS6I,
+                visibleDetailCount = 1,
+            ),
+        )
+        assertFalse(
+            shouldPollVisibleMiLinkAnc(
+                route = HuaweiDeviceRoute.HUAWEI_FREEBUDS6I,
+                visibleDetailCount = 0,
+            ),
+        )
+        assertFalse(
+            shouldPollVisibleMiLinkAnc(
+                route = HuaweiDeviceRoute.HUAWEI_FREECLIP2,
+                visibleDetailCount = 1,
+            ),
+        )
+    }
+
     @Test
     fun `only Eyewear routes use the MiLink audio glasses presentation`() {
         val glassesRoutes = setOf(
@@ -21,14 +44,20 @@ class MiLinkAncRoutingTest {
     }
 
     @Test
-    fun `MiLink ANC host selects legacy first and HyperOS 4 by compatible constructor`() {
+    fun `MiLink ANC host hooks every compatible implementation`() {
         assertEquals(
-            "legacy",
-            selectMiLinkAncHostSpec { className -> className.endsWith(".j") }?.adapterName,
+            listOf("legacy"),
+            compatibleMiLinkAncHostSpecs { className -> className.endsWith(".j") }
+                .map(MiLinkAncHostSpec::adapterName),
         )
         assertEquals(
-            "hyperos4-v18",
-            selectMiLinkAncHostSpec { className -> className.endsWith(".r") }?.adapterName,
+            listOf("hyperos4-v18"),
+            compatibleMiLinkAncHostSpecs { className -> className.endsWith(".r") }
+                .map(MiLinkAncHostSpec::adapterName),
+        )
+        assertEquals(
+            listOf("legacy", "hyperos4-v18"),
+            compatibleMiLinkAncHostSpecs { true }.map(MiLinkAncHostSpec::adapterName),
         )
         assertEquals(
             "anc_card_text",
@@ -55,7 +84,7 @@ class MiLinkAncRoutingTest {
             miLinkAncHostSpecs.first { it.adapterName == "legacy" }
                 .recomputeHeightWhenHidden,
         )
-        assertNull(selectMiLinkAncHostSpec { false })
+        assertTrue(compatibleMiLinkAncHostSpecs { false }.isEmpty())
     }
 
     @Test
@@ -73,6 +102,11 @@ class MiLinkAncRoutingTest {
         val hyperOs4 = miLinkAudioEffectHostSpecs.first { it.adapterName == "hyperos4-v18" }
         assertEquals("mi_audio_effect_card_text", hyperOs4.titleIdName)
         assertEquals("mi_audio_effect_select_card", hyperOs4.selectCardIdName)
+        assertEquals(MiLinkSpatialAudioValueOrder.FIXED_FIRST, hyperOs4.valueOrder)
+        assertEquals(
+            MiLinkSpatialAudioValueOrder.HEAD_TRACKING_FIRST,
+            miLinkAudioEffectHostSpecs.first { it.adapterName == "legacy" }.valueOrder,
+        )
         assertNull(selectMiLinkAudioEffectHostSpec { false })
     }
 
@@ -83,6 +117,15 @@ class MiLinkAncRoutingTest {
         assertNull(
             miLinkAudioEffectHostSpecs.first { it.adapterName == "legacy" }
                 .soundEffectSlotIdName,
+        )
+    }
+
+    @Test
+    fun `replacing the HyperOS 4 ANC slot preserves its measured height`() {
+        assertEquals(216, miLinkSoundEffectCardHeight(216, replacesHostSlot = true))
+        assertEquals(
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            miLinkSoundEffectCardHeight(216, replacesHostSlot = false),
         )
     }
 
@@ -111,6 +154,61 @@ class MiLinkAncRoutingTest {
         }
         assertEquals(1, miLinkAudioEffectForFreeClip2SpatialMode(FreeClip2SpatialAudioMode.FIXED))
         assertEquals(2, miLinkAudioEffectForFreeClip2SpatialMode(FreeClip2SpatialAudioMode.HEAD_TRACKING))
+    }
+
+    @Test
+    fun `legacy FreeClip2 spatial effect keeps native head tracking first order`() {
+        val hostSpec = miLinkAudioEffectHostSpecs.first { it.adapterName == "legacy" }
+        assertEquals(
+            FreeClip2SpatialAudioMode.HEAD_TRACKING,
+            freeClip2SpatialModeForMiLinkAudioEffect(1, hostSpec),
+        )
+        assertEquals(
+            FreeClip2SpatialAudioMode.FIXED,
+            freeClip2SpatialModeForMiLinkAudioEffect(2, hostSpec),
+        )
+        FreeClip2SpatialAudioMode.entries.forEach { mode ->
+            val hostValue = miLinkAudioEffectForFreeClip2SpatialMode(mode, hostSpec)
+            assertEquals(mode, freeClip2SpatialModeForMiLinkAudioEffect(hostValue, hostSpec))
+        }
+    }
+
+    @Test
+    fun `controller API follows the selected host value order`() {
+        val legacy = miLinkAudioEffectHostSpecs.first { it.adapterName == "legacy" }
+        val hyperOs4 = miLinkAudioEffectHostSpecs.first { it.adapterName == "hyperos4-v18" }
+
+        assertEquals(
+            FreeClip2SpatialAudioMode.HEAD_TRACKING,
+            freeClip2SpatialModeForMiLinkAudioEffect(1, legacy),
+        )
+        assertEquals(
+            FreeClip2SpatialAudioMode.FIXED,
+            freeClip2SpatialModeForMiLinkAudioEffect(1, hyperOs4),
+        )
+        assertEquals(
+            1,
+            miLinkAudioEffectForFreeClip2SpatialMode(
+                FreeClip2SpatialAudioMode.HEAD_TRACKING,
+                legacy,
+            ),
+        )
+        assertEquals(
+            2,
+            miLinkAudioEffectForFreeClip2SpatialMode(
+                FreeClip2SpatialAudioMode.HEAD_TRACKING,
+                hyperOs4,
+            ),
+        )
+    }
+
+    @Test
+    fun `only legacy FreeClip2 reserves hidden ANC height for sound effects`() {
+        val legacy = miLinkAncHostSpecs.first { it.adapterName == "legacy" }
+        val hyperOs4 = miLinkAncHostSpecs.first { it.adapterName == "hyperos4-v18" }
+        assertTrue(shouldReserveLegacyMiLinkAncHeight(HuaweiDeviceRoute.HUAWEI_FREECLIP2, legacy))
+        assertFalse(shouldReserveLegacyMiLinkAncHeight(HuaweiDeviceRoute.HUAWEI_FREECLIP2, hyperOs4))
+        assertFalse(shouldReserveLegacyMiLinkAncHeight(HuaweiDeviceRoute.HUAWEI_FREEARC, legacy))
     }
 
     @Test
@@ -219,6 +317,15 @@ class MiLinkAncRoutingTest {
                 liveAncCardCount = 1,
             ),
         )
+    }
+
+    @Test
+    fun `legacy MiLink ANC labels map every host state`() {
+        assertEquals(setOf("关闭", "off"), miLinkAncModeLabels(0))
+        assertEquals(setOf("降噪", "noise cancellation"), miLinkAncModeLabels(1))
+        assertTrue("通透" in miLinkAncModeLabels(2))
+        assertTrue("环境声" in miLinkAncModeLabels(2))
+        assertTrue(miLinkAncModeLabels(3).isEmpty())
     }
 
     @Test
@@ -392,6 +499,51 @@ class MiLinkAncRoutingTest {
                 storedSubMode = null,
             ),
         )
+        assertEquals(
+            0x02,
+            normalizeMiLinkAncSubMode(
+                HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5,
+                huaweiStatus = 3,
+                requestedSubMode = null,
+                storedSubMode = null,
+            ),
+        )
+        assertEquals(
+            0x02,
+            normalizeMiLinkAncSubMode(
+                HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5,
+                huaweiStatus = 3,
+                requestedSubMode = 0xFF,
+                storedSubMode = null,
+            ),
+        )
+    }
+
+    @Test
+    fun `MiLink keeps an optimistic ANC mode until the matching device state arrives`() {
+        val gate = MiLinkAncPendingGate(timeoutMs = 5_000L)
+        val off = MiLinkAncSelection(status = 1)
+        val transparency = MiLinkAncSelection(status = 3, subMode = 0x02)
+
+        assertTrue(gate.tryBegin(transparency, nowMs = 100L))
+        assertFalse(gate.shouldAcceptConfirmation(off, nowMs = 300L))
+        assertEquals(transparency, gate.current())
+        assertTrue(gate.shouldAcceptConfirmation(transparency, nowMs = 500L))
+        assertNull(gate.current())
+    }
+
+    @Test
+    fun `MiLink ANC pending state expires and yields to the verified readback`() {
+        val gate = MiLinkAncPendingGate(timeoutMs = 5_000L)
+        gate.tryBegin(MiLinkAncSelection(status = 2, subMode = 0x03), nowMs = 100L)
+
+        assertTrue(
+            gate.shouldAcceptConfirmation(
+                MiLinkAncSelection(status = 1),
+                nowMs = 5_100L,
+            ),
+        )
+        assertNull(gate.current())
     }
 
     @Test

@@ -20,6 +20,16 @@ internal data class FreeClip2AudioUiState(
         spatialScene = FreeClip2SpatialScene.fromExtraValue(spatialSceneValue) ?: spatialScene,
         soundEffect = FreeClip2SoundEffect.fromExtraValue(soundEffectValue) ?: soundEffect,
     )
+
+    fun withSelection(kind: String, value: String): FreeClip2AudioUiState? = when (kind) {
+        HuaweiPodsAction.FREECLIP2_AUDIO_KIND_SPATIAL_MODE ->
+            FreeClip2SpatialAudioMode.fromExtraValue(value)?.let { copy(spatialMode = it) }
+        HuaweiPodsAction.FREECLIP2_AUDIO_KIND_SPATIAL_SCENE ->
+            FreeClip2SpatialScene.fromExtraValue(value)?.let { copy(spatialScene = it) }
+        HuaweiPodsAction.FREECLIP2_AUDIO_KIND_SOUND_EFFECT ->
+            FreeClip2SoundEffect.fromExtraValue(value)?.let { copy(soundEffect = it) }
+        else -> null
+    }
 }
 
 internal fun freeClip2AudioPreferencePrefix(address: String?, name: String?): String? {
@@ -62,13 +72,22 @@ internal class FreeClip2AudioPendingGate(
         soundEffectValue: String?,
     ) {
         val current = pending ?: return
-        val observed = when (current.kind) {
-            HuaweiPodsAction.FREECLIP2_AUDIO_KIND_SPATIAL_MODE -> spatialModeValue != null
-            HuaweiPodsAction.FREECLIP2_AUDIO_KIND_SPATIAL_SCENE -> spatialSceneValue != null
-            HuaweiPodsAction.FREECLIP2_AUDIO_KIND_SOUND_EFFECT -> soundEffectValue != null
-            else -> true
+        val observedValue = when (current.kind) {
+            HuaweiPodsAction.FREECLIP2_AUDIO_KIND_SPATIAL_MODE -> spatialModeValue
+            HuaweiPodsAction.FREECLIP2_AUDIO_KIND_SPATIAL_SCENE -> spatialSceneValue
+            HuaweiPodsAction.FREECLIP2_AUDIO_KIND_SOUND_EFFECT -> soundEffectValue
+            else -> return clear()
         }
-        if (observed) clear()
+        if (observedValue == current.value) clear()
+    }
+
+    /** 写入前已经在途的旧回读不能覆盖刚刚选中的本地状态。 */
+    fun shouldApplyConfirmed(kind: String, value: String): Boolean {
+        val current = pending ?: return true
+        if (current.kind != kind) return true
+        if (current.value != value) return false
+        clear()
+        return true
     }
 
     fun clear() {

@@ -4,13 +4,17 @@ import android.content.Context
 import android.graphics.Color
 import android.graphics.Typeface
 import android.util.TypedValue
+import android.view.Gravity
+import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
+import android.widget.PopupMenu
 import android.widget.TextView
 import moe.chenxy.huaweipods.R
 import moe.chenxy.huaweipods.pods.FreeClip2SoundEffect
 import moe.chenxy.huaweipods.pods.FreeClip2SpatialAudioMode
 import moe.chenxy.huaweipods.pods.FreeClip2SpatialScene
+import moe.chenxy.huaweipods.pods.HuaweiEqualizerPreset
 import kotlin.math.roundToInt
 
 /** FreeClip 2 在系统宿主页面中使用的紧凑音频控制区。 */
@@ -20,6 +24,7 @@ internal class HuaweiFreeClip2AudioControlsView(
     private val onSpatialSceneSelected: (FreeClip2SpatialScene) -> Unit,
     private val onSoundEffectSelected: (FreeClip2SoundEffect) -> Unit,
     private val onBuiltInSoundEffectSelected: (Int) -> Unit = {},
+    private val onCustomSoundEffectSelected: ((HuaweiEqualizerPreset) -> Unit)? = null,
 ) : LinearLayout(context) {
     /** 仅复制文字外观，不复制宿主 View 的尺寸和间距。 */
     internal data class SectionTitleStyle(
@@ -75,6 +80,7 @@ internal class HuaweiFreeClip2AudioControlsView(
         val soundEffectTreble: String,
         val soundEffectClearVoice: String,
         val soundEffectCustom: String,
+        val soundEffectCustomEmpty: String,
     )
 
     data class BuiltInSoundEffectOption(
@@ -112,6 +118,8 @@ internal class HuaweiFreeClip2AudioControlsView(
         showSoundEffect: Boolean = true,
         showSoundEffectTitle: Boolean = true,
         compact: Boolean,
+        customSoundEffects: List<HuaweiEqualizerPreset> = emptyList(),
+        selectedCustomSoundEffectId: Int? = null,
     ) {
         removeAllViews()
         setPadding(
@@ -155,25 +163,55 @@ internal class HuaweiFreeClip2AudioControlsView(
         }
 
         if (showSoundEffect) {
-            val selectableSoundEffects = FreeClip2SoundEffect.selectableEntries
+            val visibleSoundEffects = if (onCustomSoundEffectSelected != null) {
+                FreeClip2SoundEffect.entries
+            } else {
+                FreeClip2SoundEffect.selectableEntries
+            }
+            val soundEffectLabels = buildList {
+                add(labels.soundEffectDefault)
+                add(labels.soundEffectSport)
+                add(labels.soundEffectTreble)
+                add(labels.soundEffectClearVoice)
+                if (onCustomSoundEffectSelected != null) add(labels.soundEffectCustom)
+            }
             addSelector(
                 title = if (soundEffect == FreeClip2SoundEffect.CUSTOM) {
-                    "${labels.soundEffect} · ${labels.soundEffectCustom}"
+                    val selectedName = customSoundEffects
+                        .firstOrNull { it.id == selectedCustomSoundEffectId }
+                        ?.name
+                        ?: labels.soundEffectCustom
+                    "${labels.soundEffect} · $selectedName"
                 } else {
                     labels.soundEffect
                 },
-                labels = listOf(
-                    labels.soundEffectDefault,
-                    labels.soundEffectSport,
-                    labels.soundEffectTreble,
-                    labels.soundEffectClearVoice,
-                ),
-                selectedIndex = selectableSoundEffects.indexOf(soundEffect),
+                labels = soundEffectLabels,
+                selectedIndex = visibleSoundEffects.indexOf(soundEffect),
                 darkSurface = darkSurface,
                 showTitle = showSoundEffectTitle,
                 hostGlassStyle = compact,
+                horizontallyScrollable = visibleSoundEffects.size > 4,
+                reselectableIndices = setOf(
+                    FreeClip2SoundEffect.entries.indexOf(FreeClip2SoundEffect.CUSTOM),
+                ),
+                onSelectedWithAnchor = { index, anchor ->
+                    when (val effect = visibleSoundEffects.getOrNull(index)) {
+                        FreeClip2SoundEffect.CUSTOM -> showCustomSoundEffectMenu(
+                            anchor = anchor,
+                            presets = customSoundEffects,
+                            selectedId = selectedCustomSoundEffectId,
+                            emptyLabel = labels.soundEffectCustomEmpty,
+                        )
+                        null -> Unit
+                        else -> onSoundEffectSelected(effect)
+                    }
+                },
             ) { index ->
-                selectableSoundEffects.getOrNull(index)?.let(onSoundEffectSelected)
+                when (val effect = visibleSoundEffects.getOrNull(index)) {
+                    FreeClip2SoundEffect.CUSTOM -> Unit
+                    null -> Unit
+                    else -> onSoundEffectSelected(effect)
+                }
             }
         }
     }
@@ -211,6 +249,9 @@ internal class HuaweiFreeClip2AudioControlsView(
         darkSurface: Boolean,
         showTitle: Boolean = true,
         hostGlassStyle: Boolean = false,
+        horizontallyScrollable: Boolean = false,
+        reselectableIndices: Set<Int> = emptySet(),
+        onSelectedWithAnchor: ((Int, View) -> Unit)? = null,
         onSelected: (Int) -> Unit,
     ) {
         if (showTitle) {
@@ -232,9 +273,14 @@ internal class HuaweiFreeClip2AudioControlsView(
         }
         addView(
             HuaweiAncSubModeSelectorView(context, onSelected).apply {
+                this.onSelectedWithAnchor = onSelectedWithAnchor
                 render(
                     options = labels.mapIndexed { index, label ->
-                        HuaweiAncSubModeSelectorView.Option(index, label)
+                        HuaweiAncSubModeSelectorView.Option(
+                            value = index,
+                            label = label,
+                            reselectable = index in reselectableIndices,
+                        )
                     },
                     selectedValue = selectedIndex,
                     darkSurface = darkSurface,
@@ -244,10 +290,40 @@ internal class HuaweiFreeClip2AudioControlsView(
                         HuaweiAncSubModeSelectorView.Appearance.MODULE
                     },
                     accentColor = hostAccentColor,
+                    horizontallyScrollable = horizontallyScrollable,
                 )
             },
             LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT),
         )
+    }
+
+    private fun showCustomSoundEffectMenu(
+        anchor: View,
+        presets: List<HuaweiEqualizerPreset>,
+        selectedId: Int?,
+        emptyLabel: String,
+    ) {
+        val callback = onCustomSoundEffectSelected ?: return
+        val validPresets = presets.sortedBy(HuaweiEqualizerPreset::id)
+        PopupMenu(context, anchor, Gravity.END).apply {
+            if (validPresets.isEmpty()) {
+                menu.add(emptyLabel).isEnabled = false
+            } else {
+                validPresets.forEachIndexed { index, preset ->
+                    menu.add(1, preset.id, index, preset.name).apply {
+                        isCheckable = true
+                        isChecked = preset.id == selectedId
+                    }
+                }
+                menu.setGroupCheckable(1, true, true)
+                setOnMenuItemClickListener { item ->
+                    validPresets.firstOrNull { it.id == item.itemId }
+                        ?.let(callback)
+                    true
+                }
+            }
+            show()
+        }
     }
 
     private fun titleColor(darkSurface: Boolean): Int =
@@ -275,5 +351,9 @@ internal fun huaweiFreeClip2AudioLabels(
     soundEffectSport = resolve(R.string.freeclip2_sound_effect_sport, "运动增效"),
     soundEffectTreble = resolve(R.string.freeclip2_sound_effect_treble, "高音增强"),
     soundEffectClearVoice = resolve(R.string.freeclip2_sound_effect_clear_voice, "清晰人声"),
-    soundEffectCustom = resolve(R.string.freeclip2_sound_effect_custom, "官方/自定义音效"),
+    soundEffectCustom = resolve(R.string.freeclip2_sound_effect_custom, "自定义"),
+    soundEffectCustomEmpty = resolve(
+        R.string.freeclip2_sound_effect_custom_empty,
+        "暂无已保存的自定义音效",
+    ),
 )

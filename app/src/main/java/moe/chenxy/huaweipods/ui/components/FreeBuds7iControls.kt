@@ -192,7 +192,7 @@ fun FreeBuds7iControls(address: String) {
 }
 
 @Composable
-private fun FreeBuds7iSectionTitle(@StringRes titleRes: Int) {
+internal fun FreeBuds7iSectionTitle(@StringRes titleRes: Int) {
     Text(
         text = stringResource(titleRes),
         color = MiuixTheme.colorScheme.primary,
@@ -202,7 +202,7 @@ private fun FreeBuds7iSectionTitle(@StringRes titleRes: Int) {
 }
 
 @Composable
-private fun FreeBuds7iFeatureToggle(
+internal fun FreeBuds7iFeatureToggle(
     @StringRes titleRes: Int,
     value: Boolean?,
     onChange: (Boolean, (Boolean) -> Unit) -> Unit,

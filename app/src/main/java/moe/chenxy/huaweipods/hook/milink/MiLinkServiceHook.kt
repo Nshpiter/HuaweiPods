@@ -18,6 +18,7 @@ import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.provider.Settings
@@ -38,6 +39,7 @@ import moe.chenxy.huaweipods.config.PodImagePrefs
 import moe.chenxy.huaweipods.config.PodImageResource
 import moe.chenxy.huaweipods.hook.HuaweiAncSubModeSelectorView
 import moe.chenxy.huaweipods.hook.FreeClip2AudioPendingGate
+import moe.chenxy.huaweipods.hook.FreeClip2AudioUiState
 import moe.chenxy.huaweipods.hook.HookContext
 import moe.chenxy.huaweipods.hook.HuaweiFreeClip2AudioControlsView
 import moe.chenxy.huaweipods.hook.Log
@@ -49,29 +51,37 @@ import moe.chenxy.huaweipods.hook.shouldDispatchFreeClip2AudioSelection
 import moe.chenxy.huaweipods.pods.HuaweiAncLevel
 import moe.chenxy.huaweipods.pods.HuaweiAncState
 import moe.chenxy.huaweipods.pods.HuaweiDeviceRoute
+import moe.chenxy.huaweipods.pods.HuaweiEqualizerPreset
+import moe.chenxy.huaweipods.pods.HuaweiEqualizerPresetTransport
 import moe.chenxy.huaweipods.pods.NoiseControlMode
+import moe.chenxy.huaweipods.pods.SmartAudioFreeClip2BridgePolicy
 import moe.chenxy.huaweipods.pods.FreeClip2SoundEffect
 import moe.chenxy.huaweipods.pods.FreeClip2SpatialAudioMode
 import moe.chenxy.huaweipods.pods.FreeClip2SpatialScene
 import moe.chenxy.huaweipods.pods.ancLevelOptions
 import moe.chenxy.huaweipods.pods.decodeHuaweiDeviceRouteFromBroadcast
+import moe.chenxy.huaweipods.pods.defaultTransparencySubMode
 import moe.chenxy.huaweipods.pods.detectHuaweiDeviceRoute
 import moe.chenxy.huaweipods.pods.encodeHuaweiDeviceRouteForBroadcast
 import moe.chenxy.huaweipods.pods.huaweiDeviceRoute
 import moe.chenxy.huaweipods.pods.isSupported
 import moe.chenxy.huaweipods.pods.normalizeHuaweiAncSubMode
 import moe.chenxy.huaweipods.pods.resolveHuaweiDeviceRoute
+import moe.chenxy.huaweipods.pods.readHuaweiEqualizerCustomPresets
 import moe.chenxy.huaweipods.pods.supportsAnc
+import moe.chenxy.huaweipods.pods.supportsAncStateReadback
 import moe.chenxy.huaweipods.pods.supportsAncSubMode
 import moe.chenxy.huaweipods.pods.supportsDiscreteAncLevels
 import moe.chenxy.huaweipods.pods.supportsLowLatencyControl
 import moe.chenxy.huaweipods.pods.supportsTransparency
+import moe.chenxy.huaweipods.pods.transparencySubModes
 import moe.chenxy.huaweipods.pods.usesReportedEarbudAvailability
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.BatteryParams
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.HuaweiPodsAction
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.addHuaweiPodsAction
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.PodParams
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.normalizedEarbudAvailability
+import moe.chenxy.huaweipods.utils.miuiStrongToast.data.sendIdentitySharingBroadcast
 import moe.chenxy.huaweipods.utils.ModuleResourceResolver
 import moe.chenxy.huaweipods.utils.PodImageLoader
 import java.lang.ref.WeakReference
@@ -79,6 +89,7 @@ import java.lang.reflect.Method
 import java.lang.reflect.Modifier
 import java.util.Collections
 import java.util.IdentityHashMap
+import java.util.UUID
 import java.util.WeakHashMap
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
@@ -92,12 +103,67 @@ internal data class MiLinkAncSelection(
     val subMode: Int? = null,
 )
 
+/**
+ * 融合中心写入 ANC 后会先收到一次写入前已经在途的旧回读。
+ * 等待目标状态确认期间拒绝旧值，超时后重新以耳机回读为准。
+ */
+internal class MiLinkAncPendingGate(
+    private val timeoutMs: Long = 5_000L,
+) {
+    private var pending: MiLinkAncSelection? = null
+    private var pendingSinceMs = 0L
+
+    fun tryBegin(selection: MiLinkAncSelection, nowMs: Long): Boolean {
+        expire(nowMs)
+        if (pending?.matches(selection) == true) return false
+        pending = selection
+        pendingSinceMs = nowMs
+        return true
+    }
+
+    fun shouldAcceptConfirmation(selection: MiLinkAncSelection, nowMs: Long): Boolean {
+        val current = pending ?: return true
+        if (nowMs - pendingSinceMs !in 0 until timeoutMs) {
+            clear()
+            return true
+        }
+        if (!current.matches(selection)) return false
+        clear()
+        return true
+    }
+
+    fun hasPending(nowMs: Long): Boolean {
+        expire(nowMs)
+        return pending != null
+    }
+
+    fun clear() {
+        pending = null
+        pendingSinceMs = 0L
+    }
+
+    internal fun current(): MiLinkAncSelection? = pending
+
+    private fun expire(nowMs: Long) {
+        if (pending != null && nowMs - pendingSinceMs !in 0 until timeoutMs) clear()
+    }
+
+    private fun MiLinkAncSelection.matches(other: MiLinkAncSelection): Boolean =
+        status == other.status &&
+            (subMode == null || other.subMode == null || subMode == other.subMode)
+}
+
 internal fun shouldPresentAsMiLinkAudioGlasses(route: HuaweiDeviceRoute): Boolean = when (route) {
     HuaweiDeviceRoute.HUAWEI_EYEWEAR,
     HuaweiDeviceRoute.HUAWEI_EYEWEAR2,
     -> true
     else -> false
 }
+
+internal fun shouldPollVisibleMiLinkAnc(
+    route: HuaweiDeviceRoute,
+    visibleDetailCount: Int,
+): Boolean = route.supportsAncStateReadback && visibleDetailCount > 0
 
 private data class HiddenCapabilityView(
     val parent: ViewGroup,
@@ -142,9 +208,9 @@ internal val miLinkAncHostSpecs = listOf(
     ),
 )
 
-internal fun selectMiLinkAncHostSpec(
+internal fun compatibleMiLinkAncHostSpecs(
     hasCompatibleConstructor: (String) -> Boolean,
-): MiLinkAncHostSpec? = miLinkAncHostSpecs.firstOrNull { spec ->
+): List<MiLinkAncHostSpec> = miLinkAncHostSpecs.filter { spec ->
     hasCompatibleConstructor(spec.cardClassName)
 }
 
@@ -152,21 +218,29 @@ internal data class MiLinkAudioEffectHostSpec(
     val adapterName: String,
     val sectionClassName: String,
     val renderMethodName: String,
+    val valueOrder: MiLinkSpatialAudioValueOrder,
     val titleIdName: String? = null,
     val selectCardIdName: String? = null,
     val soundEffectSlotIdName: String? = null,
 )
+
+internal enum class MiLinkSpatialAudioValueOrder {
+    HEAD_TRACKING_FIRST,
+    FIXED_FIRST,
+}
 
 internal val miLinkAudioEffectHostSpecs = listOf(
     MiLinkAudioEffectHostSpec(
         adapterName = "legacy",
         sectionClassName = "com.miui.circulateplus.world.headset.w0",
         renderMethodName = "o",
+        valueOrder = MiLinkSpatialAudioValueOrder.HEAD_TRACKING_FIRST,
     ),
     MiLinkAudioEffectHostSpec(
         adapterName = "hyperos4-v18",
         sectionClassName = "com.miui.circulateplus.world.headset.h1",
         renderMethodName = "w",
+        valueOrder = MiLinkSpatialAudioValueOrder.FIXED_FIRST,
         titleIdName = "mi_audio_effect_card_text",
         selectCardIdName = "mi_audio_effect_select_card",
         // 复用无 ANC 机型空出的原生槽位，避免在空间音频区块后追加 View 撑破宿主高度。
@@ -192,6 +266,8 @@ private data class AncCardBinding(
     var clearView: WeakReference<View>? = null,
     var capabilityContainer: WeakReference<View>? = null,
     var missingViewLogged: Boolean = false,
+    var renderedHostAncState: Int? = null,
+    var pendingHostAncState: Int? = null,
 )
 
 private data class MiAudioEffectBinding(
@@ -267,11 +343,22 @@ internal fun miLinkHostAncStateFor(
     huaweiStatus: Int,
 ): Int = miLinkAncModeFor(route, huaweiStatus) ?: 0
 
+/** legacy 卡片没有公开刷新方法，只能按当前模式定位其原生按钮。 */
+internal fun miLinkAncModeLabels(hostState: Int): Set<String> = when (hostState) {
+    0 -> setOf("关闭", "off")
+    1 -> setOf("降噪", "noise cancellation")
+    2 -> setOf("通透", "环境声", "transparency", "ambient sound")
+    else -> emptySet()
+}
+
 /**
- * 融合设备中心的可视顺序使用 0=关闭、1=固定、2=头部跟踪；耳机 AAM
- * 则使用 0=关闭、1=头部跟踪、2=固定。不同宿主版本还可能附加 20/30 偏移。
+ * 旧版融合中心沿用耳机 AAM 的 0=关闭、1=头部跟踪、2=固定；HyperOS 4
+ * 卡片改为 0=关闭、1=固定、2=头部跟踪。不同宿主版本还可能附加 20/30 偏移。
  */
-internal fun freeClip2SpatialModeForMiLinkAudioEffect(value: Int): FreeClip2SpatialAudioMode? {
+internal fun freeClip2SpatialModeForMiLinkAudioEffect(
+    value: Int,
+    valueOrder: MiLinkSpatialAudioValueOrder = MiLinkSpatialAudioValueOrder.FIXED_FIRST,
+): FreeClip2SpatialAudioMode? {
     val normalized = when (value) {
         in 20..22 -> value - 20
         in 30..32 -> value - 30
@@ -279,19 +366,54 @@ internal fun freeClip2SpatialModeForMiLinkAudioEffect(value: Int): FreeClip2Spat
     }
     return when (normalized) {
         0 -> FreeClip2SpatialAudioMode.OFF
-        1 -> FreeClip2SpatialAudioMode.FIXED
-        2 -> FreeClip2SpatialAudioMode.HEAD_TRACKING
+        1 -> when (valueOrder) {
+            MiLinkSpatialAudioValueOrder.HEAD_TRACKING_FIRST ->
+                FreeClip2SpatialAudioMode.HEAD_TRACKING
+            MiLinkSpatialAudioValueOrder.FIXED_FIRST -> FreeClip2SpatialAudioMode.FIXED
+        }
+        2 -> when (valueOrder) {
+            MiLinkSpatialAudioValueOrder.HEAD_TRACKING_FIRST -> FreeClip2SpatialAudioMode.FIXED
+            MiLinkSpatialAudioValueOrder.FIXED_FIRST ->
+                FreeClip2SpatialAudioMode.HEAD_TRACKING
+        }
         else -> null
     }
 }
 
 /** 将模块状态转换为融合设备中心自己的显示/回调枚举。 */
-internal fun miLinkAudioEffectForFreeClip2SpatialMode(mode: FreeClip2SpatialAudioMode): Int =
+internal fun miLinkAudioEffectForFreeClip2SpatialMode(
+    mode: FreeClip2SpatialAudioMode,
+    valueOrder: MiLinkSpatialAudioValueOrder = MiLinkSpatialAudioValueOrder.FIXED_FIRST,
+): Int =
     when (mode) {
         FreeClip2SpatialAudioMode.OFF -> 0
-        FreeClip2SpatialAudioMode.FIXED -> 1
-        FreeClip2SpatialAudioMode.HEAD_TRACKING -> 2
+        FreeClip2SpatialAudioMode.FIXED -> when (valueOrder) {
+            MiLinkSpatialAudioValueOrder.HEAD_TRACKING_FIRST -> 2
+            MiLinkSpatialAudioValueOrder.FIXED_FIRST -> 1
+        }
+        FreeClip2SpatialAudioMode.HEAD_TRACKING -> when (valueOrder) {
+            MiLinkSpatialAudioValueOrder.HEAD_TRACKING_FIRST -> 1
+            MiLinkSpatialAudioValueOrder.FIXED_FIRST -> 2
+        }
     }
+
+internal fun freeClip2SpatialModeForMiLinkAudioEffect(
+    value: Int,
+    hostSpec: MiLinkAudioEffectHostSpec,
+): FreeClip2SpatialAudioMode? =
+    freeClip2SpatialModeForMiLinkAudioEffect(value, hostSpec.valueOrder)
+
+internal fun miLinkAudioEffectForFreeClip2SpatialMode(
+    mode: FreeClip2SpatialAudioMode,
+    hostSpec: MiLinkAudioEffectHostSpec,
+): Int = miLinkAudioEffectForFreeClip2SpatialMode(mode, hostSpec.valueOrder)
+
+/** 旧版详情是固定高度卡片；FreeClip 2 会复用被隐藏 ANC 区域的高度展示音效。 */
+internal fun shouldReserveLegacyMiLinkAncHeight(
+    route: HuaweiDeviceRoute,
+    hostSpec: MiLinkAncHostSpec,
+): Boolean = route == HuaweiDeviceRoute.HUAWEI_FREECLIP2 &&
+    hostSpec.adapterName == "legacy"
 
 /** 只接受当前机型确实支持的融合设备中心状态。 */
 internal fun huaweiAncStatusForMiLink(
@@ -310,6 +432,12 @@ internal fun huaweiAncStatusForMiLink(
 /** 两态 ANC 机型必须把宿主的通透按钮从层级中移走，避免异步绑定再次显示。 */
 internal fun shouldDetachMiLinkTransparency(route: HuaweiDeviceRoute): Boolean =
     route.supportsAnc && !route.supportsTransparency
+
+/** 原位替换宿主槽位时必须保留固定高度；追加独立卡片才允许按内容测量。 */
+internal fun miLinkSoundEffectCardHeight(
+    sourceHeight: Int,
+    replacesHostSlot: Boolean,
+): Int = if (replacesHostSlot) sourceHeight else ViewGroup.LayoutParams.WRAP_CONTENT
 
 /** 私有卡片拿不到 MAC 时，只允许唯一 ANC 卡片继承当前活动耳机身份。 */
 internal fun shouldUseActiveMiLinkAncCardFallback(
@@ -406,15 +534,6 @@ internal fun normalizeMiLinkAncSubMode(
     ) {
         return null
     }
-    if (
-        route == HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5 &&
-        mode == NoiseControlMode.TRANSPARENCY
-    ) {
-        val accepted = setOf(0x01, 0xFF)
-        return requestedSubMode?.takeIf(accepted::contains)
-            ?: storedSubMode?.takeIf(accepted::contains)
-            ?: 0xFF
-    }
     return normalizeHuaweiAncSubMode(
         route = route,
         mode = mode,
@@ -458,11 +577,16 @@ object MiLinkServiceHook : HookContext() {
     private const val PREF_FREECLIP2_SPATIAL_MODE = "freeclip2_spatial_mode"
     private const val PREF_FREECLIP2_SPATIAL_SCENE = "freeclip2_spatial_scene"
     private const val PREF_FREECLIP2_SOUND_EFFECT = "freeclip2_sound_effect"
+    private const val PREF_FREECLIP2_EQ_SELECTED_ID = "freeclip2_eq_selected_id"
+    private const val PREF_FREECLIP2_CUSTOM_EQ_NAME_PREFIX = "freeclip2_custom_eq_name_"
+    private const val PREF_FREECLIP2_CUSTOM_EQ_GAINS_PREFIX = "freeclip2_custom_eq_gains_"
     private const val PREF_HUAWEI_EQUALIZER_SELECTED_ID = "huawei_equalizer_selected_id"
     private const val PREF_TRANSPARENCY_SUBMODE = "transparency_submode"
     private const val PREF_DEVICE_ROUTE = "device_route"
     private const val FREECLIP2_AUDIO_REFRESH_MIN_INTERVAL_MS = 750L
+    private const val FREECLIP2_CUSTOM_EQ_CONFIRM_DELAY_MS = 750L
     private const val HUAWEI_EQUALIZER_REFRESH_MIN_INTERVAL_MS = 750L
+    private const val VISIBLE_ANC_REFRESH_INTERVAL_MS = 2_500L
     private const val MILINK_HEADSET_ICON_MAX_DIMENSION = 512
     private const val VOLUME_CHANGED_ACTION = "android.media.VOLUME_CHANGED_ACTION"
     private const val EXTRA_VOLUME_STREAM_TYPE = "android.media.EXTRA_VOLUME_STREAM_TYPE"
@@ -489,6 +613,26 @@ object MiLinkServiceHook : HookContext() {
     private val knownWindowsHostIds = linkedSetOf<String>()
     private val ancCards = Collections.synchronizedMap(WeakHashMap<Any, AncCardBinding>())
     private val headsetDetails = Collections.synchronizedMap(WeakHashMap<View, Boolean>())
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val visibleAncRefreshScheduled = AtomicBoolean(false)
+    private val visibleAncRefreshRunnable = object : Runnable {
+        override fun run() {
+            val visibleDetailCount = synchronized(headsetDetails) {
+                headsetDetails.keys.count { detail ->
+                    detail.isAttachedToWindow &&
+                        detail.isShown &&
+                        detail.windowVisibility == View.VISIBLE
+                }
+            }
+            val route = currentHuaweiRoute()
+            if (!shouldPollVisibleMiLinkAnc(route, visibleDetailCount)) {
+                visibleAncRefreshScheduled.set(false)
+                return
+            }
+            requestMiLinkAncState("visible-detail")
+            mainHandler.postDelayed(this, VISIBLE_ANC_REFRESH_INTERVAL_MS)
+        }
+    }
     private val miAudioEffectSections = Collections.synchronizedMap(
         WeakHashMap<Any, MiAudioEffectBinding>(),
     )
@@ -545,13 +689,18 @@ object MiLinkServiceHook : HookContext() {
     private var currentFreeClip2SpatialMode = FreeClip2SpatialAudioMode.OFF
     private var currentFreeClip2SpatialScene = FreeClip2SpatialScene.DEFAULT
     private var currentFreeClip2SoundEffect = FreeClip2SoundEffect.DEFAULT
+    private var currentFreeClip2EqualizerSelectedId: Int? = null
+    private var currentFreeClip2CustomPresets: List<HuaweiEqualizerPreset> = emptyList()
+    private var pendingFreeClip2CustomEqualizerId: Int? = null
     private var currentHuaweiEqualizerSelectedId: Int? = null
     private var currentLowLatencyEnabled = false
     private var lowLatencyCardIcon: Drawable? = null
+    private val ancPendingGate = MiLinkAncPendingGate()
     private val freeClip2AudioPendingGate = FreeClip2AudioPendingGate()
     private var lastFreeClip2AudioRefreshRequestAt = 0L
     private var lastHuaweiEqualizerRefreshRequestAt = 0L
     private val freeClip2AudioInternalRenderDepth = AtomicInteger(0)
+    private val ancInternalUiSyncDepth = AtomicInteger(0)
     private var currentSessionConfirmed = false
     internal var lastAncBatteryController: Any? = null
     internal var lastProfileContext: Any? = null
@@ -720,17 +869,18 @@ object MiLinkServiceHook : HookContext() {
                     this.result = 0
                     return@hookBefore
                 }
+                if (ancInternalUiSyncDepth.get() > 0) {
+                    // legacy 卡片回放原生点击只为更新选中样式，不能再次写入耳机。
+                    this.result = result
+                    return@hookBefore
+                }
                 cacheRuntimeOwner(className, instance)
                 captureRuntimeContext(instance)
                 val selection = selectionForStatus(route, huaweiAnc) ?: run {
                     this.result = 0
                     return@hookBefore
                 }
-                applyAncSelection(selection)
-                saveState(context)
-                sendHuaweiAnc(selection)
-                sendAncChanged(selection)
-                refreshAncCards("$methodName-command")
+                dispatchAncSelection(selection, context, "$methodName-command")
                 this.result = result
             }
         }.onFailure { Log.w(TAG, "hook $className.$methodName command skipped", it) }
@@ -747,6 +897,10 @@ object MiLinkServiceHook : HookContext() {
                     this.result = 0
                     return@hookBefore
                 }
+                if (ancInternalUiSyncDepth.get() > 0) {
+                    this.result = miLinkAncState()
+                    return@hookBefore
+                }
                 lastAncBatteryController = instance
                 captureRuntimeContext(instance)
                 val miLinkMode = args[1] as? Int ?: return@hookBefore
@@ -760,13 +914,7 @@ object MiLinkServiceHook : HookContext() {
                 if (instanceContext != null) {
                     context = instanceContext.applicationContext ?: instanceContext
                 }
-                applyAncSelection(selection)
-                saveState(instanceContext)
-                sendHuaweiAnc(selection, instanceContext)
-                sendAncChanged(selection, instanceContext)
-                refreshAncCards("setAncStateBlock")
-                notifyHeadsetPropertyChanged(instance, device, 8)
-                notifyHeadsetPropertyChanged(instance, device, 4)
+                dispatchAncSelection(selection, instanceContext, "setAncStateBlock")
                 this.result = miLinkAncState()
             }
         }.onFailure { Log.w(TAG, "hook AncBatteryController.setAncStateBlock skipped", it) }
@@ -791,7 +939,9 @@ object MiLinkServiceHook : HookContext() {
                 }
                 lastAncBatteryController = instance
                 captureRuntimeContext(instance)
-                val enabled = (args[1] as? Int ?: 0) != 0
+                val enabled = MiLinkLowLatencyQuickCardPolicy.toggledEnabled(
+                    currentLowLatencyEnabled,
+                )
                 currentLowLatencyEnabled = enabled
                 sendHuaweiLowLatency(enabled)
                 notifyHeadsetPropertyChanged(instance, device, 10)
@@ -1013,11 +1163,30 @@ object MiLinkServiceHook : HookContext() {
         runCatching {
             val detailClass = findClass("com.miui.circulateplus.world.headset.HeadSetsDetail")
             hookHeadsetDetailPresentation(detailClass)
-            val hostSpec = selectMiLinkAncHostSpec { className ->
+            val hostSpecs = compatibleMiLinkAncHostSpecs { className ->
                 runCatching {
                     findClass(className).getDeclaredConstructor(detailClass)
                 }.isSuccess
-            } ?: throw NoSuchMethodException("No compatible MiLink ANC card constructor")
+            }
+            if (hostSpecs.isEmpty()) {
+                throw NoSuchMethodException("No compatible MiLink ANC card constructor")
+            }
+            hostSpecs.forEach { hostSpec ->
+                hookMiLinkAncHostCard(detailClass, hostSpec)
+            }
+            Log.i(TAG, "MiLink headset UI adapters=${hostSpecs.joinToString { it.adapterName }}")
+        }.onFailure { Log.w(TAG, "hook CirculatePlus headset ANC card skipped", it) }
+    }
+
+    /**
+     * 新版融合中心可能同时保留旧版和新版卡片类。只 Hook 第一个可加载的类会错过实际创建的
+     * HyperOS 4 卡片，导致协议控制生效但三个按钮不重画，因此每个兼容实现都独立绑定。
+     */
+    private fun hookMiLinkAncHostCard(
+        detailClass: Class<*>,
+        hostSpec: MiLinkAncHostSpec,
+    ) {
+        runCatching {
             val cardClass = findClass(hostSpec.cardClassName)
             hookConstructorAfter(cardClass.getDeclaredConstructor(detailClass).apply { isAccessible = true }) {
                 val card = result ?: instance ?: return@hookConstructorAfter
@@ -1038,7 +1207,11 @@ object MiLinkServiceHook : HookContext() {
                     runCatching {
                         method.isAccessible = true
                         hookAfter(method) {
-                            safelyConfigureAncCard(instance, method.name)
+                            safelyConfigureAncCard(
+                                instance,
+                                method.name,
+                                schedulePostRefresh = hostSpec.refreshMethodNames == null,
+                            )
                         }
                     }.onFailure { Log.w(TAG, "hook ${cardClass.name}.${method.name} hide transparency skipped", it) }
                 }
@@ -1056,7 +1229,7 @@ object MiLinkServiceHook : HookContext() {
                         } ?: noAncMiLinkPresentationRoute(
                             collectTextViews(detail).map(TextView::getText),
                         )
-                        if (!forceHostAncSectionCollapsed(detail, presentationRoute)) {
+                        if (!forceHostAncSectionCollapsed(detail, presentationRoute, hostSpec)) {
                             restoreHostAncSectionVisibility(detail, presentationRoute)
                         }
                     }
@@ -1064,8 +1237,9 @@ object MiLinkServiceHook : HookContext() {
                     Log.w(TAG, "hook HeadSetsDetail height preflight skipped", it)
                 }
             }
-            Log.i(TAG, "MiLink headset UI adapter=${hostSpec.adapterName}")
-        }.onFailure { Log.w(TAG, "hook CirculatePlus headset ANC card skipped", it) }
+        }.onFailure {
+            Log.w(TAG, "hook MiLink ANC adapter=${hostSpec.adapterName} skipped", it)
+        }
     }
 
     /** 融合中心拖动音量条时直接使用刚提交的刻度，系统广播负责按键与外部调节。 */
@@ -1195,8 +1369,14 @@ object MiLinkServiceHook : HookContext() {
             )
             syncMiLinkHeadsetIcon(detail, presentationRoute)
             syncMiLinkVolumeLabel(detail, presentationRoute)
+            scheduleVisibleAncRefresh()
             Log.d(TAG, "MiLink headset detail refreshed route=$presentationRoute reason=$reason")
         }
+    }
+
+    private fun scheduleVisibleAncRefresh() {
+        if (!visibleAncRefreshScheduled.compareAndSet(false, true)) return
+        mainHandler.post(visibleAncRefreshRunnable)
     }
 
     /**
@@ -1240,6 +1420,12 @@ object MiLinkServiceHook : HookContext() {
             val controllerClass = findClass(
                 "com.miui.circulate.api.protocol.headset.HeadsetServiceController",
             )
+            val detailClass = findClass("com.miui.circulateplus.world.headset.HeadSetsDetail")
+            val hostSpec = selectMiLinkAudioEffectHostSpec { className ->
+                runCatching {
+                    findClass(className).getDeclaredConstructor(detailClass)
+                }.isSuccess
+            } ?: throw NoSuchMethodException("No compatible MiLink audio-effect value order")
             hookAfter(
                 controllerClass.getDeclaredMethod(
                     "getBluetoothDeviceAudioEffect",
@@ -1254,7 +1440,10 @@ object MiLinkServiceHook : HookContext() {
                     return@hookAfter
                 }
                 requestFreeClip2AudioState("controller-api-get")
-                result = miLinkAudioEffectForFreeClip2SpatialMode(currentFreeClip2SpatialMode)
+                result = miLinkAudioEffectForFreeClip2SpatialMode(
+                    currentFreeClip2SpatialMode,
+                    hostSpec,
+                )
             }
             hookBefore(
                 controllerClass.getDeclaredMethod(
@@ -1270,7 +1459,10 @@ object MiLinkServiceHook : HookContext() {
                 ) {
                     return@hookBefore
                 }
-                val mode = freeClip2SpatialModeForMiLinkAudioEffect(args[1] as? Int ?: -1)
+                val mode = freeClip2SpatialModeForMiLinkAudioEffect(
+                    args[1] as? Int ?: -1,
+                    hostSpec,
+                )
                     ?: run {
                         result = CompletableFuture.completedFuture(208)
                         return@hookBefore
@@ -1322,7 +1514,12 @@ object MiLinkServiceHook : HookContext() {
                 if (freeClip2AudioInternalRenderDepth.get() == 0) {
                     requestFreeClip2AudioState("native-card-get")
                 }
-                proceedWithArgs(miLinkAudioEffectForFreeClip2SpatialMode(currentFreeClip2SpatialMode))
+                proceedWithArgs(
+                    miLinkAudioEffectForFreeClip2SpatialMode(
+                        currentFreeClip2SpatialMode,
+                        hostSpec,
+                    ),
+                )
             }
 
             hookAfter(
@@ -1360,7 +1557,10 @@ object MiLinkServiceHook : HookContext() {
                     // second device command.
                     return@hookBefore
                 }
-                val mode = freeClip2SpatialModeForMiLinkAudioEffect(args[1] as? Int ?: -1)
+                val mode = freeClip2SpatialModeForMiLinkAudioEffect(
+                    args[1] as? Int ?: -1,
+                    hostSpec,
+                )
                     ?: run {
                         result = null
                         return@hookBefore
@@ -1458,7 +1658,7 @@ object MiLinkServiceHook : HookContext() {
             callMethod(
                 section,
                 hostSpec.renderMethodName,
-                miLinkAudioEffectForFreeClip2SpatialMode(mode),
+                miLinkAudioEffectForFreeClip2SpatialMode(mode, hostSpec),
             )
         } finally {
             freeClip2AudioInternalRenderDepth.decrementAndGet()
@@ -1509,6 +1709,7 @@ object MiLinkServiceHook : HookContext() {
         val stableSpatialCard = hostSpec.selectCardIdName?.let { root.findHostViewByIdName(it) }
         hostSpec.titleIdName?.let { root.findHostViewByIdName(it) }?.visibility = View.VISIBLE
         val soundEffectSlot = hostSpec.soundEffectSlotIdName?.let { root.findHostViewByIdName(it) }
+        val replacesHostSlot = hostSpec.soundEffectSlotIdName != null
         val placement = if (hostSpec.soundEffectSlotIdName != null) {
             soundEffectSlot ?: return
             val parent = soundEffectSlot.parent as? ViewGroup ?: return
@@ -1543,19 +1744,25 @@ object MiLinkServiceHook : HookContext() {
             onSoundEffectSelected = { effect ->
                 requestFreeClip2SoundEffectSelection(effect, "native-sound-effect-selected")
             },
+            onCustomSoundEffectSelected = { preset ->
+                requestFreeClip2CustomSoundEffectSelection(
+                    preset,
+                    "native-custom-sound-effect-selected",
+                )
+            },
         ).apply {
             tag = FREECLIP2_SOUND_EFFECT_CONTROLS_TAG
         }
 
         if (controls.parent !== placement.parent) {
             (controls.parent as? ViewGroup)?.removeView(controls)
-            addFreeClip2SoundEffectControls(placement, controls)
+            addFreeClip2SoundEffectControls(placement, controls, replacesHostSlot)
         } else {
             val desiredIndex = placement.parent.indexOfChild(placement.cardAnchor) + 1
             val currentIndex = placement.parent.indexOfChild(controls)
             if (desiredIndex > 0 && currentIndex != desiredIndex) {
                 placement.parent.removeView(controls)
-                addFreeClip2SoundEffectControls(placement, controls)
+                addFreeClip2SoundEffectControls(placement, controls, replacesHostSlot)
             }
         }
 
@@ -1586,24 +1793,33 @@ object MiLinkServiceHook : HookContext() {
             showSoundEffect = true,
             showSoundEffectTitle = !usesHostHeading,
             compact = true,
+            customSoundEffects = currentFreeClip2CustomPresets,
+            selectedCustomSoundEffectId = currentFreeClip2EqualizerSelectedId,
         )
         matchFreeClip2SoundEffectCardPresentation(
             placement = placement,
             controls = controls,
             presentationSource = stableSpatialCard ?: placement.cardAnchor,
+            replacesHostSlot = replacesHostSlot,
         )
         controls.visibility = View.VISIBLE
     }
 
-    /** 6i 保留原生 ANC 和空间音频卡，仅在空间音频卡后补充官方音效选择。 */
+    /** 6i 保留原生 ANC；有空间音频卡时跟随其后，否则插到完整 ANC 区域与音量之间。 */
     private fun syncFreeBuds6iSoundEffectControls(
         root: View,
         hostSpec: MiLinkAudioEffectHostSpec = audioEffectHostSpecForRoot(root),
     ) {
-        val spatialCard = hostSpec.selectCardIdName?.let { root.findHostViewByIdName(it) }
+        val spatialCard = hostSpec.selectCardIdName
+            ?.let { root.findHostViewByIdName(it) }
+            ?.takeIf { it.isVisibleInHierarchy(root) }
+        val placement = spatialCard?.let { card ->
+            val parent = card.parent as? ViewGroup ?: return@let null
+            FreeClip2SectionPlacement(parent, null, card)
+        } ?: root.findHostViewByIdName("anc_select_card")
+            ?.let { ancCard -> findMiLinkSectionPlacementBeforeVolume(root, ancCard) }
             ?: return
-        val parent = spatialCard.parent as? ViewGroup ?: return
-        val placement = FreeClip2SectionPlacement(parent, null, spatialCard)
+        val parent = placement.parent
         val existing = findTaggedView(root, HUAWEI_EQUALIZER_CONTROLS_TAG)
             as? HuaweiFreeClip2AudioControlsView
         val controls = existing ?: HuaweiFreeClip2AudioControlsView(
@@ -1622,7 +1838,7 @@ object MiLinkServiceHook : HookContext() {
             (controls.parent as? ViewGroup)?.removeView(controls)
             addFreeClip2SoundEffectControls(placement, controls)
         } else {
-            val desiredIndex = parent.indexOfChild(spatialCard) + 1
+            val desiredIndex = parent.indexOfChild(placement.cardAnchor) + 1
             val currentIndex = parent.indexOfChild(controls)
             if (desiredIndex > 0 && currentIndex != desiredIndex) {
                 parent.removeView(controls)
@@ -1633,7 +1849,10 @@ object MiLinkServiceHook : HookContext() {
         val labels = collectTextViews(root)
         controls.setSectionTitleStyle(freeClip2SectionTitleStyle(labels))
         controls.setHostAccentColor(
-            miLinkSpatialAccentColor(collectTextViews(spatialCard), preferred = null),
+            miLinkSpatialAccentColor(
+                collectTextViews(spatialCard ?: placement.cardAnchor),
+                preferred = null,
+            ),
         )
         controls.renderBuiltInSoundEffects(
             selectedId = currentHuaweiEqualizerSelectedId,
@@ -1657,7 +1876,7 @@ object MiLinkServiceHook : HookContext() {
             ),
             title = moduleString(R.string.freeclip2_sound_effect, "音效"),
             customTitle = moduleString(R.string.freebuds7i_custom_equalizer, "自定义均衡器"),
-            darkSurface = isDarkSurface(spatialCard),
+            darkSurface = isDarkSurface(spatialCard ?: placement.cardAnchor),
             compact = true,
         )
         matchFreeClip2SoundEffectCardPresentation(placement, controls)
@@ -1681,8 +1900,9 @@ object MiLinkServiceHook : HookContext() {
     private fun addFreeClip2SoundEffectControls(
         placement: FreeClip2SectionPlacement,
         controls: HuaweiFreeClip2AudioControlsView,
+        replacesHostSlot: Boolean = false,
     ) {
-        val params = matchingCardLayoutParams(placement.cardAnchor)
+        val params = matchingCardLayoutParams(placement.cardAnchor, replacesHostSlot)
         val index = (placement.parent.indexOfChild(placement.cardAnchor) + 1)
             .coerceIn(0, placement.parent.childCount)
         placement.parent.addView(controls, index, params)
@@ -1694,8 +1914,9 @@ object MiLinkServiceHook : HookContext() {
         placement: FreeClip2SectionPlacement,
         controls: HuaweiFreeClip2AudioControlsView,
         presentationSource: View = placement.cardAnchor,
+        replacesHostSlot: Boolean = false,
     ) {
-        controls.layoutParams = matchingCardLayoutParams(placement.cardAnchor)
+        controls.layoutParams = matchingCardLayoutParams(placement.cardAnchor, replacesHostSlot)
         controls.background = presentationSource.background
             ?.constantState
             ?.newDrawable()
@@ -1734,21 +1955,28 @@ object MiLinkServiceHook : HookContext() {
             ?.first
     }
 
-    private fun matchingCardLayoutParams(source: View): ViewGroup.LayoutParams {
+    private fun matchingCardLayoutParams(
+        source: View,
+        replacesHostSlot: Boolean = false,
+    ): ViewGroup.LayoutParams {
         val sourceParams = source.layoutParams
+        val targetHeight = miLinkSoundEffectCardHeight(
+            sourceHeight = sourceParams?.height ?: ViewGroup.LayoutParams.WRAP_CONTENT,
+            replacesHostSlot = replacesHostSlot,
+        )
         return when (sourceParams) {
             is LinearLayout.LayoutParams -> LinearLayout.LayoutParams(sourceParams).apply {
-                height = ViewGroup.LayoutParams.WRAP_CONTENT
+                height = targetHeight
             }
             is ViewGroup.MarginLayoutParams -> ViewGroup.MarginLayoutParams(sourceParams).apply {
-                height = ViewGroup.LayoutParams.WRAP_CONTENT
+                height = targetHeight
             }
             null -> ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
             )
             else -> ViewGroup.LayoutParams(sourceParams).apply {
-                height = ViewGroup.LayoutParams.WRAP_CONTENT
+                height = targetHeight
             }
         }
     }
@@ -1773,6 +2001,42 @@ object MiLinkServiceHook : HookContext() {
             parent = parent.parent as? ViewGroup
         }
         return null
+    }
+
+    private fun findMiLinkSectionPlacementBeforeVolume(
+        root: View,
+        anchor: View,
+    ): FreeClip2SectionPlacement? {
+        val volumeHeading = collectTextViews(root).firstOrNull { textView ->
+            FreeClip2MiLinkUiPolicy.isVolumeHeading(textView.text)
+        } ?: return null
+        var fallback: FreeClip2SectionPlacement? = null
+        var parent = anchor.parent as? ViewGroup
+        while (parent != null) {
+            val anchorRoot = directChildUnder(parent, anchor)
+            val volumeRoot = directChildUnder(parent, volumeHeading)
+            if (anchorRoot != null && volumeRoot != null && anchorRoot !== volumeRoot) {
+                val anchorIndex = parent.indexOfChild(anchorRoot)
+                val volumeIndex = parent.indexOfChild(volumeRoot)
+                if (anchorIndex >= 0 && volumeIndex > anchorIndex) {
+                    val placement = FreeClip2SectionPlacement(parent, null, anchorRoot)
+                    if (volumeIndex == anchorIndex + 1) return placement
+                    fallback = placement
+                }
+            }
+            parent = parent.parent as? ViewGroup
+        }
+        return fallback
+    }
+
+    private fun View.isVisibleInHierarchy(root: View): Boolean {
+        var current: View? = this
+        while (current != null) {
+            if (current.visibility != View.VISIBLE) return false
+            if (current === root) return true
+            current = current.parent as? View
+        }
+        return false
     }
 
     private fun audioEffectHostSpecForRoot(root: View): MiLinkAudioEffectHostSpec =
@@ -2109,6 +2373,18 @@ object MiLinkServiceHook : HookContext() {
         route: HuaweiDeviceRoute,
         hostSpec: MiLinkAncHostSpec,
     ) {
+        if (shouldReserveLegacyMiLinkAncHeight(route, hostSpec)) {
+            // legacy 的 B() 不会统计后来插入的音效 View。保留原 ANC 固定配额，ANC 按钮行仍由
+            // configureAncCardViews() 隐藏，这样新增音效与音量区不会被父卡片裁掉。
+            restoreHostAncSectionVisibility(detail, route)
+            detail.post {
+                runCatching { recomputeHostDetailHeight(detail) }
+                    .onFailure {
+                        Log.w(TAG, "MiLink legacy FreeClip2 height reserve failed", it)
+                    }
+            }
+            return
+        }
         if (!hostSpec.recomputeHeightWhenHidden) {
             // View 若曾由可重算的旧模板复用，仍要恢复旧值；正常 OS4 路径不会进入此分支。
             if (restoreHostAncSectionVisibility(detail, route)) {
@@ -2126,7 +2402,7 @@ object MiLinkServiceHook : HookContext() {
             supportsAnc = route.supportsAnc,
         )
         if (collapse) {
-            if (!forceHostAncSectionCollapsed(detail, route)) return
+            if (!forceHostAncSectionCollapsed(detail, route, hostSpec)) return
         } else {
             if (!restoreHostAncSectionVisibility(detail, route)) return
         }
@@ -2140,7 +2416,9 @@ object MiLinkServiceHook : HookContext() {
     private fun forceHostAncSectionCollapsed(
         detail: View,
         route: HuaweiDeviceRoute,
+        hostSpec: MiLinkAncHostSpec? = null,
     ): Boolean {
+        if (hostSpec != null && shouldReserveLegacyMiLinkAncHeight(route, hostSpec)) return false
         if (!FreeClip2MiLinkUiPolicy.shouldCollapseHostAncSection(
                 isSupported = route.isSupported,
                 supportsAnc = route.supportsAnc,
@@ -2437,10 +2715,27 @@ object MiLinkServiceHook : HookContext() {
                 "MiLink no-ANC presentation fallback route=$presentationRoute reason=$reason",
             )
         }
+        val nativeStateRefresh = reason in binding.hostSpec.refreshMethodNames.orEmpty()
+        val ancStateOnlyRefresh = nativeStateRefresh ||
+            reason == "anc-changed" ||
+            reason == "anc-level-changed"
         detail?.let {
-            syncMiLinkHeadsetIcon(it, presentationRoute)
-            syncUnsupportedAncHeading(it, presentationRoute)
-            syncHostAncSectionHeight(it, presentationRoute, binding.hostSpec)
+            if (!ancStateOnlyRefresh) {
+                syncMiLinkHeadsetIcon(it, presentationRoute)
+                syncUnsupportedAncHeading(it, presentationRoute)
+                syncHostAncSectionHeight(it, presentationRoute, binding.hostSpec)
+            }
+            if (presentationRoute == HuaweiDeviceRoute.HUAWEI_FREEBUDS6I) {
+                val existingControls = findTaggedView(it, HUAWEI_EQUALIZER_CONTROLS_TAG)
+                if (!ancStateOnlyRefresh || existingControls == null) {
+                    syncFreeBuds6iSoundEffectControls(it)
+                }
+                if (!ancStateOnlyRefresh && currentHuaweiEqualizerSelectedId == null) {
+                    requestHuaweiEqualizerState("anc-card-$reason", force = reason == "constructor")
+                }
+            } else if (!ancStateOnlyRefresh) {
+                restoreHuaweiEqualizerControls(it)
+            }
         }
         val clearView = resolveAncTransparencyView(card, binding, detail)
             ?: binding.clearView?.get()
@@ -2595,11 +2890,7 @@ object MiLinkServiceHook : HookContext() {
             val activeRoute = currentHuaweiRoute()
             val selection = selectionForStatus(activeRoute, currentAnc, subMode)
                 ?: return@HuaweiAncSubModeSelectorView
-            applyAncSelection(selection)
-            saveState(ancContainer.context)
-            sendHuaweiAnc(selection, ancContainer.context)
-            sendAncChanged(selection, ancContainer.context)
-            refreshAncCards("submode-selected")
+            dispatchAncSelection(selection, ancContainer.context, "submode-selected")
         }.apply {
             tag = ANC_SUBMODE_SELECTOR_TAG
             val insertIndex = (ancContainer.indexOfChild(modeRow) + 1)
@@ -2624,32 +2915,52 @@ object MiLinkServiceHook : HookContext() {
     ): List<HuaweiAncSubModeSelectorView.Option> = when (status) {
         NoiseControlMode.NOISE_CANCELLATION.broadcastStatus -> route.ancLevelOptions.map { option ->
             val label = when (option.level) {
-                HuaweiAncLevel.ADAPTIVE -> moduleString(R.string.anc_level_adaptive, "智慧动态")
+                HuaweiAncLevel.ADAPTIVE -> if (route == HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5) {
+                    moduleString(R.string.freebuds_pro5_anc_level_adaptive, "智慧双擎降噪")
+                } else {
+                    moduleString(R.string.anc_level_adaptive, "智慧动态")
+                }
                 HuaweiAncLevel.LIGHT -> moduleString(R.string.anc_level_light, "轻度")
                 HuaweiAncLevel.BALANCED -> moduleString(R.string.anc_level_balanced, "均衡")
                 HuaweiAncLevel.DEEP -> moduleString(R.string.anc_level_deep, "深度")
             }
             HuaweiAncSubModeSelectorView.Option(option.protocolValue, label)
         }
-        NoiseControlMode.TRANSPARENCY.broadcastStatus -> when (route) {
-            HuaweiDeviceRoute.HUAWEI_FREEBUDS6I -> transparencyOptions(standardValue = 0x02)
-            HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3,
-            HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5 -> transparencyOptions(standardValue = 0xFF)
-            else -> emptyList()
-        }
+        NoiseControlMode.TRANSPARENCY.broadcastStatus -> transparencyOptions(route)
         else -> emptyList()
     }
 
-    private fun transparencyOptions(standardValue: Int) = listOf(
-        HuaweiAncSubModeSelectorView.Option(
-            standardValue,
-            moduleString(R.string.transparency_standard, "普通"),
-        ),
-        HuaweiAncSubModeSelectorView.Option(
-            0x01,
-            moduleString(R.string.transparency_voice, "人声增强"),
-        ),
-    )
+    private fun transparencyOptions(
+        route: HuaweiDeviceRoute,
+    ): List<HuaweiAncSubModeSelectorView.Option> {
+        val standard = route.defaultTransparencySubMode ?: return emptyList()
+        return buildList {
+            if (standard in route.transparencySubModes) {
+                add(
+                    HuaweiAncSubModeSelectorView.Option(
+                        standard,
+                        moduleString(R.string.transparency_standard, "普通"),
+                    ),
+                )
+            }
+            if (0x01 in route.transparencySubModes && 0x01 != standard) {
+                add(
+                    HuaweiAncSubModeSelectorView.Option(
+                        0x01,
+                        moduleString(R.string.transparency_voice, "人声增强"),
+                    ),
+                )
+            }
+            if (0x04 in route.transparencySubModes) {
+                add(
+                    HuaweiAncSubModeSelectorView.Option(
+                        0x04,
+                        moduleString(R.string.transparency_adaptive, "智慧动态透传"),
+                    ),
+                )
+            }
+        }
+    }
 
     private fun moduleString(resId: Int, fallback: String): String {
         val hostContext = context ?: return fallback
@@ -3393,29 +3704,48 @@ object MiLinkServiceHook : HookContext() {
                         val status = receivedIntent.getIntExtra("status", currentAnc)
                         val requestedSubMode = receivedIntent.getIntExtra("submode", -1)
                             .takeIf { receivedIntent.hasExtra("submode") && it >= 0 }
+                        val confirmedSelection = status
+                            .takeIf { it in setOf(1, 2, 3) }
+                            ?.let { selectionForStatus(route, it, requestedSubMode) }
+                        if (
+                            route.supportsAncStateReadback &&
+                            confirmedSelection != null &&
+                            !ancPendingGate.shouldAcceptConfirmation(
+                                confirmedSelection,
+                                SystemClock.elapsedRealtime(),
+                            )
+                        ) {
+                            Log.i(
+                                TAG,
+                                "MiLink stale ANC confirmation deferred selection=$confirmedSelection " +
+                                    "pending=${ancPendingGate.current()}",
+                            )
+                            return
+                        }
                         when {
                             !route.supportsAnc -> applyAncSelection(MiLinkAncSelection(1))
                             status == 3 && !route.supportsTransparency -> Unit
-                            status in setOf(1, 2, 3) -> {
-                                selectionForStatus(route, status, requestedSubMode)
-                                    ?.let(::applyAncSelection)
-                            }
+                            confirmedSelection != null -> applyAncSelection(confirmedSelection)
                             status in setOf(5, 6, 7, 8) -> currentAnc = status
                         }
                         saveState(context)
-                        refreshAncCards("anc-changed")
+                        refreshAncPresentation("anc-changed", refreshDetails = false)
                     }
                     HuaweiPodsAction.ACTION_HUAWEI_ANC_LEVEL_CHANGED -> {
                         if (!rememberSupportedDevice(receivedIntent)) return
                         currentSessionConfirmed = true
                         val route = currentHuaweiRoute()
                         if (!route.supportsDiscreteAncLevels || currentAnc != 2) return
+                        if (ancPendingGate.hasPending(SystemClock.elapsedRealtime())) {
+                            Log.d(TAG, "MiLink ANC level deferred while mode confirmation is pending")
+                            return
+                        }
                         val level = receivedIntent.getIntExtra("level", -1)
                         selectionForStatus(route, currentAnc, level)
                             ?.let(::applyAncSelection)
                             ?: return
                         saveState(context)
-                        refreshAncCards("anc-level-changed")
+                        refreshAncPresentation("anc-level-changed", refreshDetails = false)
                     }
                     HuaweiPodsAction.ACTION_FREECLIP2_AUDIO_CHANGED -> {
                         if (!receivedIntent.getBooleanExtra(
@@ -3437,20 +3767,50 @@ object MiLinkServiceHook : HookContext() {
                         val soundEffectValue = receivedIntent.getStringExtra(
                             HuaweiPodsAction.EXTRA_FREECLIP2_SOUND_EFFECT,
                         )
+                        val acceptedSpatialModeValue = spatialModeValue?.takeIf {
+                            freeClip2AudioPendingGate.shouldApplyConfirmed(
+                                HuaweiPodsAction.FREECLIP2_AUDIO_KIND_SPATIAL_MODE,
+                                it,
+                            )
+                        }
+                        val acceptedSpatialSceneValue = spatialSceneValue?.takeIf {
+                            freeClip2AudioPendingGate.shouldApplyConfirmed(
+                                HuaweiPodsAction.FREECLIP2_AUDIO_KIND_SPATIAL_SCENE,
+                                it,
+                            )
+                        }
+                        val acceptedSoundEffectValue = soundEffectValue?.takeIf {
+                            freeClip2AudioPendingGate.shouldApplyConfirmed(
+                                HuaweiPodsAction.FREECLIP2_AUDIO_KIND_SOUND_EFFECT,
+                                it,
+                            )
+                        }
                         FreeClip2SpatialAudioMode.fromExtraValue(
-                            spatialModeValue,
+                            acceptedSpatialModeValue,
                         )?.let { currentFreeClip2SpatialMode = it }
                         FreeClip2SpatialScene.fromExtraValue(
-                            spatialSceneValue,
+                            acceptedSpatialSceneValue,
                         )?.let { currentFreeClip2SpatialScene = it }
                         FreeClip2SoundEffect.fromExtraValue(
-                            soundEffectValue,
+                            acceptedSoundEffectValue,
                         )?.let { currentFreeClip2SoundEffect = it }
-                        freeClip2AudioPendingGate.observeConfirmed(
-                            spatialModeValue,
-                            spatialSceneValue,
-                            soundEffectValue,
-                        )
+                        if (receivedIntent.hasExtra(
+                                HuaweiPodsAction.EXTRA_FREECLIP2_BRIDGE_EQ_SELECTED_ID,
+                            )
+                        ) {
+                            currentFreeClip2EqualizerSelectedId = receivedIntent.getIntExtra(
+                                HuaweiPodsAction.EXTRA_FREECLIP2_BRIDGE_EQ_SELECTED_ID,
+                                -1,
+                            ).takeIf { it in 0..0xFF }
+                        }
+                        receivedIntent.readHuaweiEqualizerCustomPresets()?.let {
+                            currentFreeClip2CustomPresets = it
+                        }
+                        if (pendingFreeClip2CustomEqualizerId ==
+                            currentFreeClip2EqualizerSelectedId
+                        ) {
+                            pendingFreeClip2CustomEqualizerId = null
+                        }
                         saveState(context)
                         refreshFreeClip2AudioEffectSections("audio-changed")
                     }
@@ -3480,6 +3840,7 @@ object MiLinkServiceHook : HookContext() {
                             ?: return
                         saveState(context)
                         refreshFreeClip2AudioEffectSections("equalizer-changed")
+                        refreshHuaweiEqualizerControls()
                     }
                     HuaweiPodsAction.ACTION_HUAWEI_LOW_LATENCY_CHANGED -> {
                         if (!rememberSupportedDevice(receivedIntent) ||
@@ -3629,14 +3990,160 @@ object MiLinkServiceHook : HookContext() {
         }
     }
 
-    private fun refreshAncCards(reason: String) {
+    private fun dispatchAncSelection(
+        selection: MiLinkAncSelection,
+        fallbackContext: Context? = null,
+        reason: String,
+    ): Boolean {
+        val route = currentHuaweiRoute()
+        if (route.supportsAncStateReadback &&
+            !ancPendingGate.tryBegin(selection, SystemClock.elapsedRealtime())
+        ) {
+            refreshAncPresentation("$reason-duplicate")
+            return false
+        }
+        applyAncSelection(selection)
+        saveState(fallbackContext)
+        sendHuaweiAnc(selection, fallbackContext)
+        // 有回读的机型只接受蓝牙进程发布的确认值；本地乐观广播会提前清掉待确认状态。
+        if (!route.supportsAncStateReadback) {
+            sendAncChanged(selection, fallbackContext)
+        }
+        refreshAncPresentation(reason)
+        return true
+    }
+
+    private fun refreshAncCards(
+        reason: String,
+        refreshDetails: Boolean = true,
+    ) {
         val cards = synchronized(ancCards) { ancCards.keys.toList() }
         cards.forEach { card ->
-            runCatching { configureAncCard(card, reason) }
+            runCatching {
+                val binding = ancCards[card]
+                if (binding == null || !renderHostAncCardState(card, binding, reason)) {
+                    configureAncCard(card, reason)
+                }
+            }
                 .onFailure { Log.w(TAG, "MiLink ANC card refresh failed reason=$reason", it) }
         }
+        if (refreshDetails) {
+            val details = synchronized(headsetDetails) { headsetDetails.keys.toList() }
+            details.forEach { detail -> rememberAndRefreshHeadsetDetail(detail, reason) }
+        }
+    }
+
+    /**
+     * 同时走宿主属性监听和当前卡片重画。前者让融合中心重新读取我们接管的 getAncState()，
+     * 后者保证已展开的卡片立即更新；两条路径都只作用于当前耳机，不扫描完整 View 树。
+     */
+    private fun refreshAncPresentation(
+        reason: String,
+        refreshDetails: Boolean = true,
+    ) {
+        currentBluetoothDevice()?.let { device ->
+            notifyHeadsetPropertyChanged(lastAncBatteryController, device, 8)
+            notifyHeadsetPropertyChanged(lastAncBatteryController, device, 4)
+        }
+        refreshAncCards(reason, refreshDetails)
+    }
+
+    private fun refreshHuaweiEqualizerControls() {
         val details = synchronized(headsetDetails) { headsetDetails.keys.toList() }
-        details.forEach { detail -> rememberAndRefreshHeadsetDetail(detail, reason) }
+        details.forEach { detail ->
+            if (routeForAncCardDetail(detail) == HuaweiDeviceRoute.HUAWEI_FREEBUDS6I) {
+                syncFreeBuds6iSoundEffectControls(detail)
+            }
+        }
+    }
+
+    /** HyperOS 4 的 M(int) 才会重画原生三态按钮；失败时回退到模块附加区域刷新。 */
+    private fun renderHostAncCardState(
+        card: Any,
+        binding: AncCardBinding,
+        reason: String,
+    ): Boolean {
+        val refreshNames = binding.hostSpec.refreshMethodNames
+        if (refreshNames == null) {
+            scheduleLegacyAncCardState(card, binding, reason)
+            return false
+        }
+        val method = card.javaClass.declaredMethods.firstOrNull { candidate ->
+            candidate.name in refreshNames &&
+                candidate.returnType == Void.TYPE &&
+                candidate.parameterTypes.contentEquals(arrayOf(Int::class.javaPrimitiveType!!))
+        } ?: return false
+        return runCatching {
+            method.isAccessible = true
+            val hostState = miLinkAncState()
+            method.invoke(card, hostState)
+            binding.renderedHostAncState = hostState
+            Log.d(TAG, "MiLink native ANC card rendered method=${method.name} reason=$reason")
+            true
+        }.getOrElse { error ->
+            Log.w(TAG, "MiLink native ANC card render failed reason=$reason", error)
+            false
+        }
+    }
+
+    /**
+     * legacy 卡片没有等价于新版 M(int) 的刷新入口。复用它自身的按钮监听器最稳定：
+     * callOnClick() 只执行卡片内部选中态切换，不产生点击音效；控制 API 会被同步深度拦截，
+     * 因此不会重复向耳机写指令。
+     */
+    private fun scheduleLegacyAncCardState(
+        card: Any,
+        binding: AncCardBinding,
+        reason: String,
+    ) {
+        if (binding.hostSpec.adapterName != "legacy") return
+        val hostState = miLinkAncState()
+        if (binding.renderedHostAncState == hostState || binding.pendingHostAncState == hostState) return
+        val detail = binding.detail.get() as? View ?: return
+        val clearView = resolveAncTransparencyView(card, binding, detail)
+            ?: binding.clearView?.get()
+            ?: return
+        val modeRow = capabilityParent(clearView) ?: return
+        val target = findLegacyAncModeButton(modeRow, hostState) ?: run {
+            Log.w(TAG, "MiLink legacy ANC button missing state=$hostState reason=$reason")
+            return
+        }
+        binding.pendingHostAncState = hostState
+        target.post {
+            if (binding.pendingHostAncState != hostState || miLinkAncState() != hostState) return@post
+            ancInternalUiSyncDepth.incrementAndGet()
+            val handled = try {
+                runCatching { target.callOnClick() }.getOrElse { error ->
+                    Log.w(TAG, "MiLink legacy ANC button replay failed state=$hostState reason=$reason", error)
+                    false
+                }
+            } finally {
+                ancInternalUiSyncDepth.decrementAndGet()
+            }
+            binding.pendingHostAncState = null
+            if (handled) {
+                binding.renderedHostAncState = hostState
+                Log.d(TAG, "MiLink legacy ANC card rendered state=$hostState reason=$reason")
+            } else {
+                Log.w(TAG, "MiLink legacy ANC button had no listener state=$hostState reason=$reason")
+            }
+        }
+    }
+
+    private fun findLegacyAncModeButton(modeRow: ViewGroup, hostState: Int): View? {
+        val labels = miLinkAncModeLabels(hostState)
+        if (labels.isEmpty()) return null
+        val label = collectTextViews(modeRow).firstOrNull { textView ->
+            textView.text?.toString()?.trim()?.lowercase() in labels
+        } ?: return null
+        var candidate: View = label
+        var directChild: View = label
+        while (candidate !== modeRow) {
+            if (candidate.isClickable) return candidate
+            directChild = candidate
+            candidate = candidate.parent as? View ?: break
+        }
+        return directChild.takeIf { it.parent === modeRow && it.hasOnClickListeners() }
     }
 
     private fun refreshFreeClip2AudioEffectSections(reason: String) {
@@ -3730,6 +4237,55 @@ object MiLinkServiceHook : HookContext() {
         )
     }
 
+    private fun requestFreeClip2CustomSoundEffectSelection(
+        preset: HuaweiEqualizerPreset,
+        source: String,
+    ) {
+        val route = currentHuaweiRoute()
+        val address = currentAddress?.takeIf(String::isNotBlank) ?: return
+        val ctx = context ?: return
+        if (route != HuaweiDeviceRoute.HUAWEI_FREECLIP2) return
+        val payload = HuaweiEqualizerPresetTransport.encode(listOf(preset))
+        if (payload.ids.size != 1 || payload.names.size != 1 || payload.gains.size != 10) {
+            Log.w(TAG, "MiLink invalid custom sound effect ignored id=${preset.id} source=$source")
+            return
+        }
+        if (pendingFreeClip2CustomEqualizerId == preset.id) {
+            Log.d(TAG, "MiLink duplicate custom sound effect ignored id=${preset.id} source=$source")
+            return
+        }
+        pendingFreeClip2CustomEqualizerId = preset.id
+        val dispatched = runCatching {
+            ctx.sendIdentitySharingBroadcast(
+                Intent(HuaweiPodsAction.ACTION_SMART_AUDIO_FREECLIP2_EQ_SET).apply {
+                    putExtra(HuaweiPodsAction.EXTRA_FREECLIP2_BRIDGE_NONCE, UUID.randomUUID().toString())
+                    putExtra(HuaweiPodsAction.EXTRA_FREECLIP2_BRIDGE_ADDRESS, address)
+                    putExtra(HuaweiPodsAction.EXTRA_FREECLIP2_BRIDGE_EQ_PRESET_ID, payload.ids.single())
+                    putExtra(HuaweiPodsAction.EXTRA_FREECLIP2_BRIDGE_EQ_NAME, payload.names.single())
+                    putExtra(
+                        HuaweiPodsAction.EXTRA_FREECLIP2_BRIDGE_EQ_GAINS,
+                        payload.gains.toIntArray(),
+                    )
+                    setPackage(SmartAudioFreeClip2BridgePolicy.SMART_AUDIO_PACKAGE)
+                    addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
+                },
+            )
+        }.onFailure {
+            Log.w(TAG, "MiLink custom sound effect send failed id=${preset.id}", it)
+        }.isSuccess
+        if (!dispatched) {
+            pendingFreeClip2CustomEqualizerId = null
+            return
+        }
+        mainHandler.postDelayed({
+            if (pendingFreeClip2CustomEqualizerId == preset.id) {
+                pendingFreeClip2CustomEqualizerId = null
+                requestFreeClip2AudioState("custom-sound-effect-confirm", force = true)
+            }
+        }, FREECLIP2_CUSTOM_EQ_CONFIRM_DELAY_MS)
+        Log.d(TAG, "MiLink custom sound effect sent id=${preset.id} source=$source")
+    }
+
     private fun requestFreeClip2AudioSelection(
         kind: String,
         value: String,
@@ -3755,6 +4311,16 @@ object MiLinkServiceHook : HookContext() {
             Log.w(TAG, "MiLink FreeClip2 selection send failed $description source=$source")
             return
         }
+        FreeClip2AudioUiState(
+            spatialMode = currentFreeClip2SpatialMode,
+            spatialScene = currentFreeClip2SpatialScene,
+            soundEffect = currentFreeClip2SoundEffect,
+        ).withSelection(kind, value)?.let { selected ->
+            currentFreeClip2SpatialMode = selected.spatialMode
+            currentFreeClip2SpatialScene = selected.spatialScene
+            currentFreeClip2SoundEffect = selected.soundEffect
+            saveState(context)
+        }
         Log.d(TAG, "MiLink FreeClip2 selection pending $description source=$source")
     }
 
@@ -3779,6 +4345,23 @@ object MiLinkServiceHook : HookContext() {
             addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
         })
         Log.d(TAG, "MiLink FreeClip2 audio readback requested reason=$reason address=$address")
+    }
+
+    private fun requestMiLinkAncState(reason: String) {
+        val route = currentHuaweiRoute()
+        val address = currentAddress?.takeIf(String::isNotBlank) ?: return
+        val ctx = context ?: return
+        if (!route.supportsAncStateReadback) return
+        ctx.sendBroadcast(Intent(HuaweiPodsAction.ACTION_HUAWEI_ANC_REFRESH).apply {
+            putExtra("address", address)
+            currentName?.let { putExtra("device_name", it) }
+            encodeHuaweiDeviceRouteForBroadcast(route)?.let {
+                putExtra(HuaweiPodsAction.EXTRA_DEVICE_ROUTE, it)
+            }
+            setPackage("com.android.bluetooth")
+            addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
+        })
+        Log.d(TAG, "MiLink ANC readback requested reason=$reason address=$address")
     }
 
     private fun sendFreeClip2AudioSetting(
@@ -3943,6 +4526,7 @@ object MiLinkServiceHook : HookContext() {
         currentAnc = NoiseControlMode.OFF.broadcastStatus
         currentAncSubMode = null
         currentTransparencySubMode = null
+        ancPendingGate.clear()
         currentLowLatencyEnabled = false
         resetFreeClip2AudioState()
         resetHuaweiEqualizerState()
@@ -3953,6 +4537,7 @@ object MiLinkServiceHook : HookContext() {
     }
 
     private fun resetAncState(route: HuaweiDeviceRoute) {
+        ancPendingGate.clear()
         currentAnc = NoiseControlMode.OFF.broadcastStatus
         currentAncSubMode = normalizeMiLinkAncSubMode(
             route,
@@ -3972,6 +4557,9 @@ object MiLinkServiceHook : HookContext() {
         currentFreeClip2SpatialMode = FreeClip2SpatialAudioMode.OFF
         currentFreeClip2SpatialScene = FreeClip2SpatialScene.DEFAULT
         currentFreeClip2SoundEffect = FreeClip2SoundEffect.DEFAULT
+        currentFreeClip2EqualizerSelectedId = null
+        currentFreeClip2CustomPresets = emptyList()
+        pendingFreeClip2CustomEqualizerId = null
         freeClip2AudioPendingGate.clear()
         lastFreeClip2AudioRefreshRequestAt = 0L
     }
@@ -4536,6 +5124,22 @@ object MiLinkServiceHook : HookContext() {
         currentHuaweiEqualizerSelectedId?.let {
             editor.putInt(PREF_HUAWEI_EQUALIZER_SELECTED_ID, it)
         } ?: editor.remove(PREF_HUAWEI_EQUALIZER_SELECTED_ID)
+        currentFreeClip2EqualizerSelectedId?.let {
+            editor.putInt(PREF_FREECLIP2_EQ_SELECTED_ID, it)
+        } ?: editor.remove(PREF_FREECLIP2_EQ_SELECTED_ID)
+        (0x64..0x66).forEach { id ->
+            val preset = currentFreeClip2CustomPresets.firstOrNull { it.id == id }
+            if (preset == null) {
+                editor.remove(PREF_FREECLIP2_CUSTOM_EQ_NAME_PREFIX + id)
+                editor.remove(PREF_FREECLIP2_CUSTOM_EQ_GAINS_PREFIX + id)
+            } else {
+                editor.putString(PREF_FREECLIP2_CUSTOM_EQ_NAME_PREFIX + id, preset.name)
+                editor.putString(
+                    PREF_FREECLIP2_CUSTOM_EQ_GAINS_PREFIX + id,
+                    preset.gains.joinToString(","),
+                )
+            }
+        }
         editor.apply()
     }
 
@@ -4580,6 +5184,7 @@ object MiLinkServiceHook : HookContext() {
                 .remove(PREF_FREECLIP2_SPATIAL_MODE)
                 .remove(PREF_FREECLIP2_SPATIAL_SCENE)
                 .remove(PREF_FREECLIP2_SOUND_EFFECT)
+                .remove(PREF_FREECLIP2_EQ_SELECTED_ID)
                 .remove(PREF_HUAWEI_EQUALIZER_SELECTED_ID)
                 .remove("left_battery")
                 .remove("left_charging")
@@ -4590,6 +5195,12 @@ object MiLinkServiceHook : HookContext() {
                 .remove("case_battery")
                 .remove("case_charging")
                 .remove("case_connected")
+                .apply {
+                    (0x64..0x66).forEach { id ->
+                        remove(PREF_FREECLIP2_CUSTOM_EQ_NAME_PREFIX + id)
+                        remove(PREF_FREECLIP2_CUSTOM_EQ_GAINS_PREFIX + id)
+                    }
+                }
                 .apply()
             Log.i(TAG, "removed unsupported legacy headset state name=${persistedName.orEmpty()}")
             return
@@ -4634,6 +5245,25 @@ object MiLinkServiceHook : HookContext() {
             currentFreeClip2SoundEffect = FreeClip2SoundEffect.fromExtraValue(
                 prefs.getString(PREF_FREECLIP2_SOUND_EFFECT, null),
             ) ?: FreeClip2SoundEffect.DEFAULT
+            currentFreeClip2EqualizerSelectedId = prefs.getInt(
+                PREF_FREECLIP2_EQ_SELECTED_ID,
+                -1,
+            ).takeIf { it in 0..0xFF }
+            val storedPresets = (0x64..0x66).mapNotNull { id ->
+                val name = prefs.getString(PREF_FREECLIP2_CUSTOM_EQ_NAME_PREFIX + id, null)
+                    ?: return@mapNotNull null
+                val gains = prefs.getString(PREF_FREECLIP2_CUSTOM_EQ_GAINS_PREFIX + id, null)
+                    ?.split(',')
+                    ?.mapNotNull(String::toIntOrNull)
+                    ?: return@mapNotNull null
+                HuaweiEqualizerPreset(id, name, gains)
+            }
+            val storedPayload = HuaweiEqualizerPresetTransport.encode(storedPresets)
+            currentFreeClip2CustomPresets = HuaweiEqualizerPresetTransport.decode(
+                storedPayload.ids,
+                storedPayload.names,
+                storedPayload.gains,
+            ).orEmpty()
         } else {
             resetFreeClip2AudioState()
         }

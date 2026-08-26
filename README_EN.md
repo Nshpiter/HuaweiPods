@@ -31,10 +31,10 @@ The unified build supports the 14 models below in one APK. Model-specific test A
 | HUAWEI FreeBuds 6i | Extended support | Battery, transparency/ANC/off, four ANC levels, voice transparency, double/triple-tap gestures, four official sound presets, a 10-band custom EQ, low-latency auto-apply, and dedicated images |
 | HUAWEI FreeBuds Pro 3 | Extended support | Battery, three-mode control and readback, four ANC levels, voice transparency, long-press/pinch/swipe gestures, and low-latency auto-apply |
 | HUAWEI FreeBuds Pro 4 | Basic support | Battery and ANC/off; no verified ANC state readback or gesture settings |
-| HUAWEI FreeBuds Pro 5 | Basic support | Battery, transparency/ANC/off, state readback, and low-latency auto-apply; ANC levels and gestures remain pending |
+| HUAWEI FreeBuds Pro 5 | Extended support | Battery, three-mode readback, four ANC levels, standard/voice/adaptive transparency, triple-tap/pinch/swipe-volume gestures, wear detection, adaptive volume, head-motion and voice controls, spatial audio, nine Yuezhang/scene/AI sound presets, a 10-band custom EQ, high-quality audio, low-latency auto-apply, dual-device connection, case-open sound, and ear-tip material |
 | HUAWEI FreeBuds 7i | Extended support | Battery, transparency/ANC/off readback, four ANC levels, double/triple-tap, long-press and swipe-volume gestures, wear detection, head-motion control, spatial audio, four sound presets, a 10-band custom EQ, high-quality audio, low-latency auto-apply, dual-device list management, and official color images |
 | HUAWEI FreeClip | Basic support | Left/right/case battery; no traditional ANC |
-| HUAWEI FreeClip 2 | Extended support | Battery, double/triple-tap and swipe gestures, spatial audio, low-latency auto-apply, and selected wearing/audio settings; no traditional ANC |
+| HUAWEI FreeClip 2 | Extended support | Battery, double/triple-tap and swipe gestures, spatial audio, four official sound presets, saved custom presets, low-latency auto-apply, and selected wearing/audio settings; no traditional ANC |
 | HUAWEI FreeArc | Extended support | Left/right/case battery, double/triple-tap, press-and-hold and swipe gestures, five official sound presets, a 10-band custom EQ, and official color images; no traditional ANC |
 | HUAWEI Eyewear (1st generation) | Basic support | Left/right temple battery and system UI integration; no ANC |
 | HUAWEI Eyewear 2 | Basic support | Left/right temple battery, double-tap/swipe gestures, and low-latency auto-apply; no ANC |
@@ -72,6 +72,7 @@ The unified build supports the 14 models below in one APK. Model-specific test A
    - `com.android.settings`
    - `com.milink.service`
    - `com.xiaomi.bluetooth`
+   - `com.huawei.smartaudio` (when installed, for FreeClip 2 spatial-audio and custom-EQ synchronization)
 4. Reboot the phone, or restart the scoped apps from HuaweiPods.
 5. Connect a supported device and view its integrated capabilities in HuaweiPods, Super Island, Fusion Device Center, or the system Bluetooth detail page. Modern models are identified from their protocol identity; if a renamed or legacy device is not identified, select its actual model once in HuaweiPods.
 

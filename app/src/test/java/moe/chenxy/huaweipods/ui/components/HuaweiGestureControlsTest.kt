@@ -53,8 +53,17 @@ class HuaweiGestureControlsTest {
 
         val pro3 = huaweiGestureControlLayout(HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3)
         assertTrue(pro3.hasModernLongPressControls)
+        assertTrue(pro3.hasModernPinchControls)
         assertTrue(pro3.hasModernSwipeVolumeToggle)
         assertTrue(pro3.hasWearDetection)
+
+        val pro5 = huaweiGestureControlLayout(HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5)
+        assertEquals(listOf(HuaweiGestureKind.TRIPLE_TAP), pro5.tapKinds)
+        assertFalse(pro5.hasSwipe)
+        assertFalse(pro5.hasModernLongPressControls)
+        assertTrue(pro5.hasModernPinchControls)
+        assertTrue(pro5.hasModernSwipeVolumeToggle)
+        assertTrue(pro5.hasWearDetection)
 
         val freeBuds7i = huaweiGestureControlLayout(HuaweiDeviceRoute.HUAWEI_FREEBUDS7I)
         assertEquals(

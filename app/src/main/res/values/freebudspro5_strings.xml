@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="transparency_adaptive">Adaptive transparency</string>
+    <string name="freebuds_pro5_anc_level_adaptive">Intelligent dual-driver ANC</string>
+    <string name="freebuds_pro5_smart_features">Smart features</string>
+    <string name="freebuds_pro5_adaptive_volume">Adaptive volume</string>
+    <string name="freebuds_pro5_voice_control">Voice control</string>
+    <string name="freebuds_pro5_sound_effect">HUAWEI SOUND effects</string>
+    <string name="freebuds_pro5_dual_device">Dual-device connection</string>
+    <string name="freebuds_pro5_case_and_fit">Charging case and fit</string>
+    <string name="freebuds_pro5_case_prompt_sound">Case-open sound</string>
+    <string name="freebuds_pro5_ear_tip_material">Ear tip material</string>
+    <string name="freebuds_pro5_ear_tip_silicone">Silicone ear tips</string>
+    <string name="freebuds_pro5_ear_tip_memory_foam">Memory-foam ear tips</string>
+    <string name="freebuds_pro5_effect_yuezhang_balanced">Yuezhang Balanced</string>
+    <string name="freebuds_pro5_effect_yuezhang_vocal">Yuezhang Vocal</string>
+    <string name="freebuds_pro5_effect_yuezhang_classical">Yuezhang Classical</string>
+    <string name="freebuds_pro5_effect_yuezhang_bass">Yuezhang Bass</string>
+    <string name="freebuds_pro5_effect_movie">Movie mode</string>
+    <string name="freebuds_pro5_effect_podcast_voice">Podcast voice</string>
+    <string name="freebuds_pro5_effect_game">Game audio</string>
+    <string name="freebuds_pro5_effect_sport">Workout mode</string>
+    <string name="freebuds_pro5_effect_ai">AI sound</string>
+</resources>

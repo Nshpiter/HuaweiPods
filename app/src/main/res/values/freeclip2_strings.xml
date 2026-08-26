@@ -22,7 +22,8 @@
     <string name="freeclip2_sound_effect_sport">Sport boost</string>
     <string name="freeclip2_sound_effect_treble">Treble boost</string>
     <string name="freeclip2_sound_effect_clear_voice">Clear voice</string>
-    <string name="freeclip2_sound_effect_custom">Official/custom effect</string>
+    <string name="freeclip2_sound_effect_custom">Custom</string>
+    <string name="freeclip2_sound_effect_custom_empty">No saved custom effects</string>
     <string name="freeclip2_custom_effect_title">Custom effects</string>
     <string name="freeclip2_custom_effect_summary">Read and edit the earphones’ 10-band custom curves</string>
     <string name="freeclip2_custom_effect_existing">Saved custom effects</string>

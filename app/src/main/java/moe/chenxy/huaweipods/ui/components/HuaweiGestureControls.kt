@@ -150,11 +150,16 @@ fun HuaweiGestureControls(
                 )
             }
 
-            if (layout.hasModernLongPressControls) {
+            if (layout.hasModernLongPressControls ||
+                layout.hasModernPinchControls ||
+                layout.hasModernSwipeVolumeToggle
+            ) {
                 ModernEarbudsGestureControls(
                     route = route,
                     address = address,
                     prefs = prefs,
+                    showLongPressControls = layout.hasModernLongPressControls,
+                    showPinchControls = layout.hasModernPinchControls,
                     showSwipeVolumeToggle = layout.hasModernSwipeVolumeToggle,
                     confirmedActions = confirmedReadback.longPressActions,
                 )
@@ -349,37 +354,43 @@ private fun ModernEarbudsGestureControls(
     route: HuaweiDeviceRoute,
     address: String,
     prefs: SharedPreferences,
+    showLongPressControls: Boolean,
+    showPinchControls: Boolean,
     showSwipeVolumeToggle: Boolean,
     confirmedActions: Map<HuaweiGestureSide, FreeBudsPro3LongPressAction>,
 ) {
     val context = LocalContext.current
-    GestureSectionTitle(
-        if (route.isHoldGestureRoute()) {
-            R.string.huawei_gesture_hold_section
-        } else {
-            R.string.huawei_gesture_pro3_long_press_section
-        },
-    )
-    HuaweiGestureSide.entries.forEach { side ->
-        ModernEarbudsLongPressPreference(
-            route = route,
-            address = address,
-            side = side,
-            prefs = prefs,
-            confirmedAction = confirmedActions[side],
+    if (showLongPressControls) {
+        GestureSectionTitle(
+            if (route.isHoldGestureRoute()) {
+                R.string.huawei_gesture_hold_section
+            } else {
+                R.string.huawei_gesture_pro3_long_press_section
+            },
         )
+        HuaweiGestureSide.entries.forEach { side ->
+            ModernEarbudsLongPressPreference(
+                route = route,
+                address = address,
+                side = side,
+                prefs = prefs,
+                confirmedAction = confirmedActions[side],
+            )
+        }
     }
 
-    if (route == HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3) {
+    if (showPinchControls) {
         GestureSectionTitle(R.string.huawei_gesture_pro3_pinch_section)
         FreeBudsPro3GestureToggle.entries.forEach { gesture ->
-            val key = remember(address, gesture) { pro3TogglePreferenceKey(address, gesture) }
+            val key = remember(route, address, gesture) {
+                modernTogglePreferenceKey(route, address, gesture)
+            }
             GestureTogglePreference(
                 stateKey = key,
                 title = stringResource(gesture.labelRes()),
                 initialValue = prefs.getBoolean(key, true),
                 onChange = { enabled, complete ->
-                    context.sendPro3GestureToggle(address, gesture, enabled) { success ->
+                    context.sendModernGestureToggle(route, address, gesture, enabled) { success ->
                         if (success) prefs.edit().putBoolean(key, enabled).apply()
                         complete(success)
                     }
@@ -668,14 +679,22 @@ private fun Context.sendModernLongPress(
     HuaweiGestureController.setModernEarbudsLongPress(this, device, route, side, action, complete)
 }
 
-private fun Context.sendPro3GestureToggle(
+private fun Context.sendModernGestureToggle(
+    route: HuaweiDeviceRoute,
     address: String,
     gesture: FreeBudsPro3GestureToggle,
     enabled: Boolean,
     complete: (Boolean) -> Unit,
 ) {
     val device = gestureDevice(address) ?: return complete(false)
-    HuaweiGestureController.setFreeBudsPro3GestureToggle(this, device, gesture, enabled, complete)
+    HuaweiGestureController.setModernEarbudsGestureToggle(
+        this,
+        device,
+        route,
+        gesture,
+        enabled,
+        complete,
+    )
 }
 
 private fun Context.sendModernSwipeVolume(
@@ -879,12 +898,14 @@ internal data class HuaweiGestureControlLayout(
     val hasSwipe: Boolean = false,
     val hasFixedSwipeVolume: Boolean = false,
     val hasModernLongPressControls: Boolean = false,
+    val hasModernPinchControls: Boolean = false,
     val hasModernSwipeVolumeToggle: Boolean = false,
     val hasWearDetection: Boolean = false,
 ) {
     val isVisible: Boolean
         get() = tapKinds.isNotEmpty() || hasSwipe || hasFixedSwipeVolume ||
-            hasModernLongPressControls || hasWearDetection
+            hasModernLongPressControls || hasModernPinchControls ||
+            hasModernSwipeVolumeToggle || hasWearDetection
 }
 
 internal fun huaweiGestureControlLayout(route: HuaweiDeviceRoute): HuaweiGestureControlLayout {
@@ -901,10 +922,14 @@ internal fun huaweiGestureControlLayout(route: HuaweiDeviceRoute): HuaweiGesture
             route == HuaweiDeviceRoute.HUAWEI_FREEBUDS7I ||
             route == HuaweiDeviceRoute.HUAWEI_FREEARC,
         hasModernSwipeVolumeToggle = route == HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3 ||
+            route == HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5 ||
             route == HuaweiDeviceRoute.HUAWEI_FREEBUDS7I,
+        hasModernPinchControls = route == HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3 ||
+            route == HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5,
         hasWearDetection = route == HuaweiDeviceRoute.HUAWEI_FREEBUDS6I ||
             route == HuaweiDeviceRoute.HUAWEI_FREEBUDS4E ||
-            route == HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3,
+            route == HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3 ||
+            route == HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5,
     )
 }
 
@@ -933,8 +958,11 @@ private fun modernLongPressPreferenceKey(
     side: HuaweiGestureSide,
 ): String = "${gesturePreferencePrefix(route, address)}_long_press_${side.extraValue}"
 
-private fun pro3TogglePreferenceKey(address: String, gesture: FreeBudsPro3GestureToggle): String =
-    "${gesturePreferencePrefix(HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3, address)}_${gesture.extraValue}"
+private fun modernTogglePreferenceKey(
+    route: HuaweiDeviceRoute,
+    address: String,
+    gesture: FreeBudsPro3GestureToggle,
+): String = "${gesturePreferencePrefix(route, address)}_${gesture.extraValue}"
 
 private fun modernSwipePreferenceKey(route: HuaweiDeviceRoute, address: String): String =
     "${gesturePreferencePrefix(route, address)}_swipe_volume"

@@ -229,6 +229,12 @@ object HuaweiHfpController {
                     if (!targetsCurrentSession(receivedIntent, requireAddress = true)) return
                     setAncLevel(receivedIntent.getIntExtra("level", currentAncLevel))
                 }
+                HuaweiPodsAction.ACTION_HUAWEI_ANC_REFRESH -> {
+                    if (!targetsCurrentSession(receivedIntent, requireAddress = false)) return
+                    if (sessionRoute.supportsAncStateReadback) {
+                        requestAncState(force = true)
+                    }
+                }
                 HuaweiPodsAction.ACTION_HUAWEI_LOW_LATENCY_SET -> {
                     if (!targetsCurrentSession(receivedIntent, requireAddress = true)) return
                     setLowLatency(receivedIntent)
@@ -755,6 +761,7 @@ object HuaweiHfpController {
                     values.size == HuaweiEqualizerCodec.BAND_COUNT &&
                         values.all { value -> value in HuaweiEqualizerCodec.GAIN_RANGE }
                 }
+            val customPresets = it.readHuaweiEqualizerCustomPresets()
             selectedId.takeIf { value -> value in 0..0xFF }?.let { validId ->
                 HuaweiEqualizerState(
                     supported = it.getBooleanExtra(
@@ -766,7 +773,9 @@ object HuaweiHfpController {
                     bandCount = gains?.size ?: HuaweiEqualizerCodec.BAND_COUNT,
                     selectedName = it.getStringExtra(HuaweiPodsAction.EXTRA_FREECLIP2_BRIDGE_EQ_NAME),
                     selectedGains = gains,
-                    customPresets = if (validId in 0x64..0x66 && gains != null) {
+                    customPresets = customPresets ?: if (
+                        validId in 0x64..0x66 && gains != null
+                    ) {
                         listOf(
                             HuaweiEqualizerPreset(
                                 id = validId,
@@ -782,7 +791,10 @@ object HuaweiHfpController {
                 )
             }
         }
-        if (mode == null && effect == null && equalizer == null) return
+        val resolvedEffect = effect ?: equalizer?.selectedId?.let(
+            SmartAudioFreeClip2BridgePolicy::soundEffectFromOfficial,
+        )
+        if (mode == null && resolvedEffect == null && equalizer == null) return
 
         pendingSmartAudioAudioQuery?.let { pending ->
             if (address.equals(pending.request.address, ignoreCase = true)) {
@@ -812,7 +824,7 @@ object HuaweiHfpController {
         val externalMode = mode.takeIf { pending == null }
         val update = FreeClip2AudioState(
             mode = externalMode,
-            effect = effect,
+            effect = resolvedEffect,
             equalizer = equalizer,
         )
         if (update.mode == null && update.effect == null && update.equalizer == null) return
@@ -823,7 +835,7 @@ object HuaweiHfpController {
         sendFreeClip2AudioState(confirmed)
         Log.i(
             TAG,
-            "FreeClip 2 official state confirmed mode=$mode effect=$effect " +
+            "FreeClip 2 official state confirmed mode=$mode effect=$resolvedEffect " +
                 "equalizer=${equalizer?.selectedId} device=$address",
         )
     }
@@ -1874,7 +1886,30 @@ object HuaweiHfpController {
                 return@accept
             }
             if (update == null) {
-                Log.w(TAG, "FreeClip 2 audio state query returned no verified state device=${request.address}")
+                val fallback = request.pendingUpdate
+                    ?.takeIf { request.pendingOnly }
+                    ?.let { pendingUpdate ->
+                        synchronized(sessionStateLock) {
+                            freeClip2AudioStateTracker.acceptUnavailableQueryFallback(
+                                request.queryToken,
+                                pendingUpdate,
+                            )
+                        }
+                    }
+                if (fallback != null) {
+                    sendFreeClip2AudioState(fallback)
+                    Log.i(
+                        TAG,
+                        "FreeClip 2 audio state accepted after successful write; " +
+                            "firmware returned no readable confirmation device=${request.address}",
+                    )
+                } else {
+                    Log.w(
+                        TAG,
+                        "FreeClip 2 audio state query returned no verified state " +
+                            "device=${request.address}",
+                    )
+                }
                 return@accept
             }
             val confirmed = synchronized(sessionStateLock) {
@@ -1935,6 +1970,7 @@ object HuaweiHfpController {
             addHuaweiPodsAction(HuaweiPodsAction.ACTION_ANC_SELECT)
             addHuaweiPodsAction(HuaweiPodsAction.ACTION_CYCLE_ANC)
             addHuaweiPodsAction(HuaweiPodsAction.ACTION_HUAWEI_ANC_LEVEL_SET)
+            addHuaweiPodsAction(HuaweiPodsAction.ACTION_HUAWEI_ANC_REFRESH)
             addHuaweiPodsAction(HuaweiPodsAction.ACTION_HUAWEI_LOW_LATENCY_SET)
             if (BuildConfig.DEBUG) {
                 addHuaweiPodsAction(HuaweiPodsAction.ACTION_HUAWEI_LEGACY_DEBUG_SEND)
@@ -2039,7 +2075,7 @@ object HuaweiHfpController {
     }
 
     private fun defaultTransparencySubMode(route: HuaweiDeviceRoute): Int =
-        if (route == HuaweiDeviceRoute.HUAWEI_FREEBUDS6I) 0x02 else 0xFF
+        route.defaultTransparencySubMode ?: 0xFF
 
     private fun sendGestureState(state: HuaweiGestureState) {
         val fillState: Intent.() -> Unit = {
@@ -2085,6 +2121,7 @@ object HuaweiHfpController {
                 it.selectedGains?.let { gains ->
                     putExtra(HuaweiPodsAction.EXTRA_FREECLIP2_BRIDGE_EQ_GAINS, gains.toIntArray())
                 }
+                putHuaweiEqualizerCustomPresets(it.customPresets)
             }
         }
         sendAppBroadcast(HuaweiPodsAction.ACTION_FREECLIP2_AUDIO_CHANGED, fillState)
@@ -2299,18 +2336,12 @@ internal fun normalizeHuaweiAncSubMode(
             ?: route.defaultAncSubMode
     }
     if (mode != NoiseControlMode.TRANSPARENCY || !route.supportsTransparency) return null
-    val accepted = when (route) {
-        HuaweiDeviceRoute.HUAWEI_FREEBUDS6I -> setOf(0x01, 0x02)
-        HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3,
-        HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5 -> setOf(0x01, 0xFF)
-        HuaweiDeviceRoute.HUAWEI_FREEBUDS7I -> setOf(0xFF)
-        else -> emptySet()
-    }
+    val accepted = route.transparencySubModes
     if (accepted.isEmpty()) return null
     return requestedSubMode
         ?.takeIf(accepted::contains)
         ?: previousState.subMode?.takeIf { previousState.mode == mode && it in accepted }
-        ?: if (route == HuaweiDeviceRoute.HUAWEI_FREEBUDS6I) 0x02 else 0xFF
+        ?: route.defaultTransparencySubMode
 }
 
 /**

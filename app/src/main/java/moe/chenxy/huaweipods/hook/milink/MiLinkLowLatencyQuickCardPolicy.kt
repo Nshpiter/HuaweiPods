@@ -22,4 +22,7 @@ internal object MiLinkLowLatencyQuickCardPolicy {
         enabled -> ENABLED_STATE
         else -> DISABLED_STATE
     }
+
+    /** 该宿主入口传入的是点击前的查找耳机状态，复用为开关时应切换当前模块状态。 */
+    fun toggledEnabled(currentEnabled: Boolean): Boolean = !currentEnabled
 }
