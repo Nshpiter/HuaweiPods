@@ -165,6 +165,46 @@ internal fun shouldPollVisibleMiLinkAnc(
     visibleDetailCount: Int,
 ): Boolean = route.supportsAncStateReadback && visibleDetailCount > 0
 
+/**
+ * HyperOS 4 的原生卡片只有主动调用刷新方法才会绘制初始选中态。legacy 卡片需要
+ * 回放点击，构造阶段执行会误触发两态按钮的自定义监听，因此只初始化有原生刷新入口的卡片。
+ */
+internal fun shouldPrimeMiLinkAncCard(
+    route: HuaweiDeviceRoute,
+    hostSpec: MiLinkAncHostSpec,
+    reason: String,
+): Boolean = route.supportsAnc &&
+    hostSpec.refreshMethodNames != null &&
+    (reason == "constructor" || reason == "constructor-post")
+
+internal data class MiLinkAncHostRefreshDecision(
+    val hostState: Int,
+    val guardAsUiOnly: Boolean,
+)
+
+/**
+ * 融合中心会晚于卡片构造和用户点击再次送入自己的 ANC 缓存。
+ * HyperOS 4 的 M(int) 只负责重画卡片，真正点击由 setAncStateBlock 独立处理；
+ * 因此当前 ANC 卡片必须始终以模块状态重画，不能让宿主旧值反向改写耳机。
+ */
+internal fun miLinkAncHostRefreshDecision(
+    cardRoute: HuaweiDeviceRoute,
+    activeRoute: HuaweiDeviceRoute,
+    currentHuaweiStatus: Int,
+    hostSpec: MiLinkAncHostSpec,
+    incomingHostState: Int,
+): MiLinkAncHostRefreshDecision = if (cardRoute.supportsAnc && cardRoute == activeRoute) {
+    MiLinkAncHostRefreshDecision(
+        hostState = miLinkHostAncStateFor(cardRoute, currentHuaweiStatus, hostSpec),
+        guardAsUiOnly = true,
+    )
+} else {
+    MiLinkAncHostRefreshDecision(
+        hostState = incomingHostState,
+        guardAsUiOnly = false,
+    )
+}
+
 private data class HiddenCapabilityView(
     val parent: ViewGroup,
     val index: Int,
@@ -182,8 +222,14 @@ internal data class MiLinkAncHostSpec(
     val selectCardIdName: String?,
     val heightMethodName: String,
     val recomputeHeightWhenHidden: Boolean,
+    val displayValueOrder: MiLinkAncValueOrder,
     val refreshMethodNames: Set<String>? = null,
 )
+
+internal enum class MiLinkAncValueOrder {
+    OFF_NOISE_TRANSPARENCY,
+    NOISE_TRANSPARENCY_OFF,
+}
 
 internal val miLinkAncHostSpecs = listOf(
     MiLinkAncHostSpec(
@@ -193,6 +239,7 @@ internal val miLinkAncHostSpecs = listOf(
         selectCardIdName = null,
         heightMethodName = "B",
         recomputeHeightWhenHidden = true,
+        displayValueOrder = MiLinkAncValueOrder.OFF_NOISE_TRANSPARENCY,
     ),
     MiLinkAncHostSpec(
         adapterName = "hyperos4-v18",
@@ -203,6 +250,9 @@ internal val miLinkAncHostSpecs = listOf(
         // OS4 的总高度同时覆盖设备信息、ANC、空间音频等区域。FreeClip 2 会用自定义音效卡
         // 替代被隐藏的 ANC 区域，不能再让宿主扣掉这段高度，否则顶部名称/电量会被裁掉。
         recomputeHeightWhenHidden = false,
+        // HyperOS 4 v18 的 HeadsetInfo/M(int) 显示域：0=降噪、1=通透、2=关闭。
+        // AncBatteryController 的命令域仍是 0=关闭、1=降噪、2=通透，不能共用此顺序。
+        displayValueOrder = MiLinkAncValueOrder.NOISE_TRANSPARENCY_OFF,
         // r 还包含测量、点击和动画回调，只在 M(int) 真正刷新 ANC 状态时处理。
         refreshMethodNames = setOf("M"),
     ),
@@ -325,14 +375,36 @@ private data class MiLinkVolumeProgressBinding(
 internal fun miLinkAncModeFor(
     route: HuaweiDeviceRoute,
     huaweiStatus: Int,
+    valueOrder: MiLinkAncValueOrder = MiLinkAncValueOrder.OFF_NOISE_TRANSPARENCY,
 ): Int? {
     if (!route.supportsAnc) return null
-    return when (huaweiStatus) {
-        2, 5, 6, 7, 8 -> 1
-        3 -> if (route.supportsTransparency) 2 else 0
-        else -> 0
+    val mode = when (huaweiStatus) {
+        2, 5, 6, 7, 8 -> NoiseControlMode.NOISE_CANCELLATION
+        3 -> NoiseControlMode.TRANSPARENCY.takeIf { route.supportsTransparency }
+            ?: NoiseControlMode.OFF
+        else -> NoiseControlMode.OFF
+    }
+    return when (valueOrder) {
+        MiLinkAncValueOrder.OFF_NOISE_TRANSPARENCY -> when (mode) {
+            NoiseControlMode.OFF -> 0
+            NoiseControlMode.NOISE_CANCELLATION -> 1
+            NoiseControlMode.TRANSPARENCY -> 2
+            NoiseControlMode.UNKNOWN -> 0
+        }
+        MiLinkAncValueOrder.NOISE_TRANSPARENCY_OFF -> when (mode) {
+            NoiseControlMode.NOISE_CANCELLATION -> 0
+            NoiseControlMode.TRANSPARENCY -> 1
+            NoiseControlMode.OFF -> 2
+            NoiseControlMode.UNKNOWN -> 2
+        }
     }
 }
+
+internal fun miLinkAncModeFor(
+    route: HuaweiDeviceRoute,
+    huaweiStatus: Int,
+    hostSpec: MiLinkAncHostSpec,
+): Int? = miLinkAncModeFor(route, huaweiStatus, hostSpec.displayValueOrder)
 
 /**
  * 小米的虚拟耳机模板始终读取一个 ANC 状态，即使当前机型没有 ANC。
@@ -341,7 +413,18 @@ internal fun miLinkAncModeFor(
 internal fun miLinkHostAncStateFor(
     route: HuaweiDeviceRoute,
     huaweiStatus: Int,
-): Int = miLinkAncModeFor(route, huaweiStatus) ?: 0
+    valueOrder: MiLinkAncValueOrder = MiLinkAncValueOrder.OFF_NOISE_TRANSPARENCY,
+): Int = miLinkAncModeFor(route, huaweiStatus, valueOrder)
+    ?: when (valueOrder) {
+        MiLinkAncValueOrder.OFF_NOISE_TRANSPARENCY -> 0
+        MiLinkAncValueOrder.NOISE_TRANSPARENCY_OFF -> 2
+    }
+
+internal fun miLinkHostAncStateFor(
+    route: HuaweiDeviceRoute,
+    huaweiStatus: Int,
+    hostSpec: MiLinkAncHostSpec,
+): Int = miLinkHostAncStateFor(route, huaweiStatus, hostSpec.displayValueOrder)
 
 /** legacy 卡片没有公开刷新方法，只能按当前模式定位其原生按钮。 */
 internal fun miLinkAncModeLabels(hostState: Int): Set<String> = when (hostState) {
@@ -419,19 +502,88 @@ internal fun shouldReserveLegacyMiLinkAncHeight(
 internal fun huaweiAncStatusForMiLink(
     route: HuaweiDeviceRoute,
     miLinkMode: Int,
+    valueOrder: MiLinkAncValueOrder = MiLinkAncValueOrder.OFF_NOISE_TRANSPARENCY,
 ): Int? {
     if (!route.supportsAnc) return null
-    return when (miLinkMode) {
-        0 -> NoiseControlMode.OFF.broadcastStatus
-        1 -> NoiseControlMode.NOISE_CANCELLATION.broadcastStatus
-        2 -> NoiseControlMode.TRANSPARENCY.broadcastStatus.takeIf { route.supportsTransparency }
+    val mode = when (valueOrder) {
+        MiLinkAncValueOrder.OFF_NOISE_TRANSPARENCY -> when (miLinkMode) {
+            0 -> NoiseControlMode.OFF
+            1 -> NoiseControlMode.NOISE_CANCELLATION
+            2 -> NoiseControlMode.TRANSPARENCY
+            else -> null
+        }
+        MiLinkAncValueOrder.NOISE_TRANSPARENCY_OFF -> when (miLinkMode) {
+            0 -> NoiseControlMode.NOISE_CANCELLATION
+            1 -> NoiseControlMode.TRANSPARENCY
+            2 -> NoiseControlMode.OFF
+            else -> null
+        }
+    }
+    return when (mode) {
+        NoiseControlMode.OFF -> NoiseControlMode.OFF.broadcastStatus
+        NoiseControlMode.NOISE_CANCELLATION -> NoiseControlMode.NOISE_CANCELLATION.broadcastStatus
+        NoiseControlMode.TRANSPARENCY ->
+            NoiseControlMode.TRANSPARENCY.broadcastStatus.takeIf { route.supportsTransparency }
         else -> null
     }
 }
 
-/** 两态 ANC 机型必须把宿主的通透按钮从层级中移走，避免异步绑定再次显示。 */
+internal fun huaweiAncStatusForMiLink(
+    route: HuaweiDeviceRoute,
+    miLinkMode: Int,
+    hostSpec: MiLinkAncHostSpec,
+): Int? = huaweiAncStatusForMiLink(route, miLinkMode, hostSpec.displayValueOrder)
+
+/** 两态 ANC 机型必须摘除宿主通透按钮，避免异步绑定再次把它设为可见。 */
 internal fun shouldDetachMiLinkTransparency(route: HuaweiDeviceRoute): Boolean =
     route.supportsAnc && !route.supportsTransparency
+
+/**
+ * HyperOS 4 的两态 ANC 卡仍按三态索引回调，移除“通透”后两个可见按钮可能都会落到索引 0。
+ * 两态机型改为按按钮自身文案决定华为协议状态，不再依赖宿主子 View 的当前位置。
+ */
+internal fun miLinkTwoStateAncStatusForLabel(label: String?): Int? =
+    when (label?.trim()?.lowercase()) {
+        "降噪", "noise cancellation", "noise reduction" ->
+            NoiseControlMode.NOISE_CANCELLATION.broadcastStatus
+        "关闭", "off" -> NoiseControlMode.OFF.broadcastStatus
+        else -> null
+    }
+
+/**
+ * 宿主可能在设备切换时复用同一组 ANC 按钮。两态机型安装的文案监听若仍存在，
+ * 在三态 ANC 机型上也应继续处理“降噪 / 关闭”，不能让按钮变成无响应。
+ */
+internal fun miLinkBoundAncStatusForRoute(
+    route: HuaweiDeviceRoute,
+    label: String?,
+): Int? = miLinkTwoStateAncStatusForLabel(label).takeIf { route.supportsAnc }
+
+internal fun shouldRemoveMiLinkCapabilityView(
+    detachWhenHidden: Boolean,
+    parentAvailable: Boolean,
+    stillInParent: Boolean,
+): Boolean = detachWhenHidden && parentAvailable && stillInParent
+
+internal inline fun <T> withMiLinkAncUiSync(
+    depth: AtomicInteger,
+    block: () -> T,
+): T {
+    depth.incrementAndGet()
+    return try {
+        block()
+    } finally {
+        depth.decrementAndGet()
+    }
+}
+
+internal fun shouldReapplyMiLinkHeadsetIcon(
+    requestedKey: String?,
+    cachedKey: String?,
+    alreadyApplied: Boolean,
+): Boolean = !requestedKey.isNullOrBlank() &&
+    requestedKey == cachedKey &&
+    !alreadyApplied
 
 /** 原位替换宿主槽位时必须保留固定高度；追加独立卡片才允许按内容测量。 */
 internal fun miLinkSoundEffectCardHeight(
@@ -586,6 +738,7 @@ object MiLinkServiceHook : HookContext() {
     private const val FREECLIP2_AUDIO_REFRESH_MIN_INTERVAL_MS = 750L
     private const val FREECLIP2_CUSTOM_EQ_CONFIRM_DELAY_MS = 750L
     private const val HUAWEI_EQUALIZER_REFRESH_MIN_INTERVAL_MS = 750L
+    private const val HUAWEI_ANC_REFRESH_MIN_INTERVAL_MS = 750L
     private const val VISIBLE_ANC_REFRESH_INTERVAL_MS = 2_500L
     private const val MILINK_HEADSET_ICON_MAX_DIMENSION = 512
     private const val VOLUME_CHANGED_ACTION = "android.media.VOLUME_CHANGED_ACTION"
@@ -674,6 +827,9 @@ object MiLinkServiceHook : HookContext() {
     private var miLinkHeadsetIconBitmapCache: MiLinkHeadsetIconBitmapCache? = null
     @Volatile
     private var miLinkHeadsetIconRequestCache: MiLinkHeadsetIconRequest? = null
+    @Volatile
+    private var activeMiLinkAncHostSpec: MiLinkAncHostSpec? = null
+    private val miLinkHeadsetIconInternalRenderDepth = AtomicInteger(0)
     private val stateLoadLock = Any()
     @Volatile
     private var stateLoaded = false
@@ -699,6 +855,7 @@ object MiLinkServiceHook : HookContext() {
     private val freeClip2AudioPendingGate = FreeClip2AudioPendingGate()
     private var lastFreeClip2AudioRefreshRequestAt = 0L
     private var lastHuaweiEqualizerRefreshRequestAt = 0L
+    private var lastHuaweiAncRefreshRequestAt = 0L
     private val freeClip2AudioInternalRenderDepth = AtomicInteger(0)
     private val ancInternalUiSyncDepth = AtomicInteger(0)
     private var currentSessionConfirmed = false
@@ -715,6 +872,7 @@ object MiLinkServiceHook : HookContext() {
     override fun onHook() {
         hookMiLinkMediaVolumeChanges()
         hookMiLinkVolumeProgressChanges()
+        hookMiLinkHeadsetIconWrites()
         hookContextEntry()
         hookMxBluetoothRuntime()
         hookMiLinkAudioGlassesClassification()
@@ -754,7 +912,7 @@ object MiLinkServiceHook : HookContext() {
                 className,
                 "getAncState",
                 requiresCurrentState = true,
-            ) { miLinkAncState() }
+            ) { miLinkAncRuntimeState() }
             hookBluetoothDeviceResult(className, "getDeviceRunInfo") { 0 }
             hookBluetoothDeviceResult(className, "getWearStatus") { "0,0" }
             hookBluetoothDeviceResult(className, "isLeAudio") { false }
@@ -782,7 +940,7 @@ object MiLinkServiceHook : HookContext() {
             "com.miui.headset.runtime.AncBatteryController",
             "getAncState",
             requiresCurrentState = true,
-        ) { miLinkAncState() }
+        ) { miLinkAncRuntimeState() }
         hookBluetoothDeviceResult(
             "com.miui.headset.runtime.AncBatteryController",
             "getBatteryLevelCache",
@@ -807,8 +965,8 @@ object MiLinkServiceHook : HookContext() {
         hookHeadsetInfoNoArg("component3") { fakeDeviceId() }
         hookHeadsetInfoNoArg("getPowers", requiresCurrentState = true) { miLinkBatteryLevels() }
         hookHeadsetInfoNoArg("component4", requiresCurrentState = true) { miLinkBatteryLevels() }
-        hookHeadsetInfoNoArg("getMode", requiresCurrentState = true) { miLinkAncState() }
-        hookHeadsetInfoNoArg("component5", requiresCurrentState = true) { miLinkAncState() }
+        hookHeadsetInfoNoArg("getMode", requiresCurrentState = true) { miLinkAncDisplayState() }
+        hookHeadsetInfoNoArg("component5", requiresCurrentState = true) { miLinkAncDisplayState() }
         hookHeadsetInfoNoArg("getSwitchState", requiresCurrentState = true) { miLinkSwitchState() }
         hookHeadsetInfoNoArg("component8", requiresCurrentState = true) { miLinkSwitchState() }
         hookHeadsetInfoNoArg("getFindRingState", requiresCurrentState = true) {
@@ -898,29 +1056,44 @@ object MiLinkServiceHook : HookContext() {
                     return@hookBefore
                 }
                 if (ancInternalUiSyncDepth.get() > 0) {
-                    this.result = miLinkAncState()
+                    this.result = miLinkAncRuntimeState()
                     return@hookBefore
                 }
                 lastAncBatteryController = instance
                 captureRuntimeContext(instance)
                 val miLinkMode = args[1] as? Int ?: return@hookBefore
+                // Runtime 命令域在 HyperOS 4 仍保持 0=关闭、1=降噪、2=通透；
+                // 宿主卡片的 M(int) 显示域另由 displayValueOrder 处理。
                 val huaweiStatus = huaweiAncStatusForMiLink(route, miLinkMode)
                 val selection = huaweiStatus?.let { selectionForStatus(route, it) }
                 if (selection == null) {
                     this.result = 0
                     return@hookBefore
                 }
+                Log.i(
+                    TAG,
+                    "MiLink ANC runtime command hostState=$miLinkMode " +
+                        "huaweiStatus=$huaweiStatus route=$route",
+                )
                 val instanceContext = runCatching { getObjectField(instance, "context") as? Context }.getOrNull()
                 if (instanceContext != null) {
                     context = instanceContext.applicationContext ?: instanceContext
                 }
                 dispatchAncSelection(selection, instanceContext, "setAncStateBlock")
-                this.result = miLinkAncState()
+                this.result = miLinkAncRuntimeState()
             }
         }.onFailure { Log.w(TAG, "hook AncBatteryController.setAncStateBlock skipped", it) }
     }
 
     private fun hookLowLatencyQuickCard() {
+        val hostAdapterName = activeMiLinkAncHostSpec?.adapterName
+        if (!MiLinkLowLatencyQuickCardPolicy.isHostSupported(hostAdapterName)) {
+            Log.i(
+                TAG,
+                "MiLink low-latency quick card disabled for unverified host adapter=$hostAdapterName",
+            )
+            return
+        }
         runCatching {
             hookBefore(
                 findMethod(
@@ -1002,6 +1175,7 @@ object MiLinkServiceHook : HookContext() {
     ): Boolean = MiLinkLowLatencyQuickCardPolicy.isAvailable(
         route = route,
         configured = ConfigManager.milinkLowLatencyCardEnabled(),
+        hostAdapterName = activeMiLinkAncHostSpec?.adapterName,
     )
 
     private fun miLinkLowLatencyState(): Int {
@@ -1010,6 +1184,7 @@ object MiLinkServiceHook : HookContext() {
             route = currentHuaweiRoute(),
             configured = ConfigManager.milinkLowLatencyCardEnabled(),
             enabled = currentLowLatencyEnabled,
+            hostAdapterName = activeMiLinkAncHostSpec?.adapterName,
         )
     }
 
@@ -1171,6 +1346,8 @@ object MiLinkServiceHook : HookContext() {
             if (hostSpecs.isEmpty()) {
                 throw NoSuchMethodException("No compatible MiLink ANC card constructor")
             }
+            // 只有一个实现时，卡片构造前的 HeadsetInfo 初始读取也必须使用正确枚举顺序。
+            activeMiLinkAncHostSpec = hostSpecs.singleOrNull()
             hostSpecs.forEach { hostSpec ->
                 hookMiLinkAncHostCard(detailClass, hostSpec)
             }
@@ -1195,6 +1372,7 @@ object MiLinkServiceHook : HookContext() {
                     detail = WeakReference(detail),
                     hostSpec = hostSpec,
                 )
+                activeMiLinkAncHostSpec = hostSpec
                 safelyConfigureAncCard(card, "constructor")
             }
             cardClass.declaredMethods
@@ -1206,12 +1384,61 @@ object MiLinkServiceHook : HookContext() {
                 .forEach { method ->
                     runCatching {
                         method.isAccessible = true
-                        hookAfter(method) {
-                            safelyConfigureAncCard(
-                                instance,
-                                method.name,
-                                schedulePostRefresh = hostSpec.refreshMethodNames == null,
-                            )
+                        if (hostSpec.refreshMethodNames != null) {
+                            hookBefore(method) {
+                                val card = instance ?: return@hookBefore
+                                val binding = ancCards[card] ?: return@hookBefore
+                                val incomingHostState = args.singleOrNull() as? Int
+                                    ?: return@hookBefore
+                                val decision = runCatching {
+                                    loadState()
+                                    val cardRoute = resolvedAncCardRoute(
+                                        binding = binding,
+                                        forceResolve = false,
+                                    )
+                                    miLinkAncHostRefreshDecision(
+                                        cardRoute = cardRoute,
+                                        activeRoute = currentHuaweiRoute(),
+                                        currentHuaweiStatus = currentAnc,
+                                        hostSpec = binding.hostSpec,
+                                        incomingHostState = incomingHostState,
+                                    )
+                                }.getOrElse { error ->
+                                    // Hook 的身份/状态解析失败不能阻断融合中心原生刷新。
+                                    Log.w(TAG, "MiLink ANC host refresh decision failed", error)
+                                    proceedWithArgs(incomingHostState)
+                                    return@hookBefore
+                                }
+                                if (decision.guardAsUiOnly &&
+                                    incomingHostState != decision.hostState
+                                ) {
+                                    Log.i(
+                                        TAG,
+                                        "MiLink stale ANC host refresh corrected " +
+                                            "incoming=$incomingHostState current=${decision.hostState}",
+                                    )
+                                }
+                                if (decision.guardAsUiOnly && ancInternalUiSyncDepth.get() == 0) {
+                                    withMiLinkAncUiSync(ancInternalUiSyncDepth) {
+                                        proceedWithArgs(decision.hostState)
+                                    }
+                                } else {
+                                    proceedWithArgs(decision.hostState)
+                                }
+                                safelyConfigureAncCard(
+                                    card,
+                                    method.name,
+                                    schedulePostRefresh = false,
+                                )
+                            }
+                        } else {
+                            hookAfter(method) {
+                                safelyConfigureAncCard(
+                                    instance,
+                                    method.name,
+                                    schedulePostRefresh = true,
+                                )
+                            }
                         }
                     }.onFailure { Log.w(TAG, "hook ${cardClass.name}.${method.name} hide transparency skipped", it) }
                 }
@@ -1296,6 +1523,37 @@ object MiLinkServiceHook : HookContext() {
                 syncMiLinkVolumeLabel(root, binding.route, percent)
             }
         }.onFailure { logOptionalMiLinkHookSkipped("MiLink volume progress refresh", it) }
+    }
+
+    /**
+     * 融合中心会在详情绑定结束后继续异步写回通用耳机图。这里只观察已经由
+     * [syncMiLinkHeadsetIcon] 精确登记的主图 View，避免宿主晚到的写入造成闪回。
+     */
+    private fun hookMiLinkHeadsetIconWrites() {
+        listOf(
+            ImageView::class.java.getDeclaredMethod("setImageDrawable", Drawable::class.java),
+            ImageView::class.java.getDeclaredMethod("setImageBitmap", Bitmap::class.java),
+            ImageView::class.java.getDeclaredMethod("setImageResource", Int::class.javaPrimitiveType!!),
+        ).forEach { method ->
+            runCatching {
+                method.isAccessible = true
+                hookAfter(method) {
+                    if (miLinkHeadsetIconInternalRenderDepth.get() > 0) return@hookAfter
+                    val imageView = instance as? ImageView ?: return@hookAfter
+                    val requestedKey = synchronized(miLinkHeadsetIconViewStates) {
+                        miLinkHeadsetIconViewStates[imageView]?.requestedKey
+                    }
+                    val cached = miLinkHeadsetIconBitmapCache ?: return@hookAfter
+                    val alreadyApplied = (imageView.drawable as? BitmapDrawable)?.bitmap === cached.bitmap
+                    if (!shouldReapplyMiLinkHeadsetIcon(requestedKey, cached.key, alreadyApplied)) {
+                        return@hookAfter
+                    }
+                    applyMiLinkHeadsetIcon(imageView, cached.key, cached.bitmap)
+                }
+            }.onFailure { error ->
+                logOptionalMiLinkHookSkipped("MiLink headset icon write guard ${method.name}", error)
+            }
+        }
     }
 
     /** 图片替换不再依赖 ANC 卡片是否存在；无 ANC 机型也能在详情绑定后独立刷新。 */
@@ -2617,9 +2875,14 @@ object MiLinkServiceHook : HookContext() {
         ) {
             return
         }
-        imageView.setImageBitmap(bitmap)
-        imageView.scaleType = ImageView.ScaleType.FIT_CENTER
-        imageView.adjustViewBounds = true
+        miLinkHeadsetIconInternalRenderDepth.incrementAndGet()
+        try {
+            imageView.setImageBitmap(bitmap)
+            imageView.scaleType = ImageView.ScaleType.FIT_CENTER
+            imageView.adjustViewBounds = true
+        } finally {
+            miLinkHeadsetIconInternalRenderDepth.decrementAndGet()
+        }
         Log.d(TAG, "MiLink headset icon replaced size=${bitmap.width}x${bitmap.height}")
     }
 
@@ -2751,7 +3014,8 @@ object MiLinkServiceHook : HookContext() {
         }
 
         if (schedulePostRefresh) {
-            clearView?.post {
+            // 两态机型会在下面摘除“通透”View，不能把二次初始化挂在将被摘除的子 View 上。
+            (detail ?: clearView)?.post {
                 safelyConfigureAncCard(card, "$reason-post", schedulePostRefresh = false)
             }
         }
@@ -2761,6 +3025,12 @@ object MiLinkServiceHook : HookContext() {
             return
         }
         configureAncCardViews(card, binding, presentationRoute, clearView, reason)
+        if (shouldPrimeMiLinkAncCard(route, binding.hostSpec, reason)) {
+            renderHostAncCardState(card, binding, "initial-$reason")
+            if (reason == "constructor") {
+                requestMiLinkAncState("anc-card-constructor")
+            }
+        }
     }
 
     private fun resolveAncTransparencyView(
@@ -2867,6 +3137,11 @@ object MiLinkServiceHook : HookContext() {
             route.supportsTransparency,
             detachWhenHidden = shouldDetachMiLinkTransparency(route),
         )
+        if (shouldDetachMiLinkTransparency(route)) {
+            (hostSelectCard as? ViewGroup)?.let { selectCard ->
+                bindTwoStateAncButtons(selectCard, reason)
+            }
+        }
         if (modeRow == null || ancContainer == null) return
 
         val selector = findTaggedView(ancContainer, ANC_SUBMODE_SELECTOR_TAG) as? HuaweiAncSubModeSelectorView
@@ -2907,6 +3182,49 @@ object MiLinkServiceHook : HookContext() {
         targetSelector.render(options, selected, isDarkSurface(ancContainer))
         targetSelector.visibility = View.VISIBLE
         Log.d(TAG, "MiLink ANC submode configured route=$route mode=$currentAnc reason=$reason")
+    }
+
+    private fun bindTwoStateAncButtons(selectCard: ViewGroup, reason: String) {
+        val boundStatuses = linkedSetOf<Int>()
+        collectTextViews(selectCard).forEach { label ->
+            val status = miLinkTwoStateAncStatusForLabel(label.text?.toString()) ?: return@forEach
+            val button = directChildUnder(selectCard, label) ?: return@forEach
+            button.setOnClickListener { clicked ->
+                val activeRoute = currentHuaweiRoute()
+                val activeStatus = miLinkBoundAncStatusForRoute(
+                    activeRoute,
+                    label.text?.toString(),
+                )
+                if (activeStatus == null) {
+                    Log.w(
+                        TAG,
+                        "MiLink bound ANC click ignored for route=$activeRoute status=$status",
+                    )
+                    return@setOnClickListener
+                }
+                val selection = selectionForStatus(activeRoute, activeStatus)
+                    ?: return@setOnClickListener
+                Log.i(
+                    TAG,
+                    "MiLink bound ANC button handled status=$activeStatus " +
+                        "label=${label.text} reason=$reason",
+                )
+                dispatchAncSelection(selection, clicked.context, "bound-anc-button")
+            }
+            button.isClickable = true
+            boundStatuses += status
+        }
+        if (
+            boundStatuses != setOf(
+                NoiseControlMode.OFF.broadcastStatus,
+                NoiseControlMode.NOISE_CANCELLATION.broadcastStatus,
+            )
+        ) {
+            Log.w(
+                TAG,
+                "MiLink two-state ANC buttons incomplete statuses=$boundStatuses reason=$reason",
+            )
+        }
     }
 
     private fun selectorOptions(
@@ -3075,7 +3393,16 @@ object MiLinkServiceHook : HookContext() {
         if (view.visibility != View.GONE) view.visibility = View.GONE
         if (view.isEnabled) view.isEnabled = false
         if (view.isClickable) view.isClickable = false
-        if (detachWhenHidden && view.parent === parent) parent.removeView(view)
+        // 已经摘除的 View 再次进入宿主刷新时 parent 为 null；不能把 null===null
+        // 当作仍在原父布局中，否则会在第二次刷新时触发 removeView 空指针。
+        if (shouldRemoveMiLinkCapabilityView(
+                detachWhenHidden = detachWhenHidden,
+                parentAvailable = parent != null,
+                stillInParent = view.parent === parent,
+            )
+        ) {
+            parent?.removeView(view)
+        }
     }
 
     private fun isDarkSurface(view: View): Boolean {
@@ -3900,9 +4227,22 @@ object MiLinkServiceHook : HookContext() {
         return null
     }
 
-    private fun miLinkAncState(): Int {
+    /** AncBatteryController/MxBluetoothSdk 的运行时命令域始终为 0=关、1=降噪、2=通透。 */
+    private fun miLinkAncRuntimeState(): Int {
         loadState()
         return miLinkHostAncStateFor(currentHuaweiRoute(), currentAnc)
+    }
+
+    /** HeadsetInfo 与原生 ANC 卡片刷新方法使用各宿主版本自己的显示域。 */
+    private fun miLinkAncDisplayState(
+        hostSpec: MiLinkAncHostSpec? = activeMiLinkAncHostSpec,
+    ): Int {
+        loadState()
+        return miLinkHostAncStateFor(
+            currentHuaweiRoute(),
+            currentAnc,
+            hostSpec?.displayValueOrder ?: MiLinkAncValueOrder.OFF_NOISE_TRANSPARENCY,
+        )
     }
 
     private fun currentHuaweiRoute(): HuaweiDeviceRoute =
@@ -4075,8 +4415,12 @@ object MiLinkServiceHook : HookContext() {
         } ?: return false
         return runCatching {
             method.isAccessible = true
-            val hostState = miLinkAncState()
-            method.invoke(card, hostState)
+            val hostState = miLinkAncDisplayState(binding.hostSpec)
+            // 当前 HyperOS 4 的 M(int) 是纯显示刷新。仍在 UI 同步作用域内调用，
+            // 避免宿主小版本改变实现后，把卡片重画误当成一次新的耳机控制命令。
+            withMiLinkAncUiSync(ancInternalUiSyncDepth) {
+                method.invoke(card, hostState)
+            }
             binding.renderedHostAncState = hostState
             Log.d(TAG, "MiLink native ANC card rendered method=${method.name} reason=$reason")
             true
@@ -4097,7 +4441,7 @@ object MiLinkServiceHook : HookContext() {
         reason: String,
     ) {
         if (binding.hostSpec.adapterName != "legacy") return
-        val hostState = miLinkAncState()
+        val hostState = miLinkAncDisplayState(binding.hostSpec)
         if (binding.renderedHostAncState == hostState || binding.pendingHostAncState == hostState) return
         val detail = binding.detail.get() as? View ?: return
         val clearView = resolveAncTransparencyView(card, binding, detail)
@@ -4110,15 +4454,16 @@ object MiLinkServiceHook : HookContext() {
         }
         binding.pendingHostAncState = hostState
         target.post {
-            if (binding.pendingHostAncState != hostState || miLinkAncState() != hostState) return@post
-            ancInternalUiSyncDepth.incrementAndGet()
-            val handled = try {
+            if (binding.pendingHostAncState != hostState ||
+                miLinkAncDisplayState(binding.hostSpec) != hostState
+            ) {
+                return@post
+            }
+            val handled = withMiLinkAncUiSync(ancInternalUiSyncDepth) {
                 runCatching { target.callOnClick() }.getOrElse { error ->
                     Log.w(TAG, "MiLink legacy ANC button replay failed state=$hostState reason=$reason", error)
                     false
                 }
-            } finally {
-                ancInternalUiSyncDepth.decrementAndGet()
             }
             binding.pendingHostAncState = null
             if (handled) {
@@ -4352,6 +4697,14 @@ object MiLinkServiceHook : HookContext() {
         val address = currentAddress?.takeIf(String::isNotBlank) ?: return
         val ctx = context ?: return
         if (!route.supportsAncStateReadback) return
+        val now = SystemClock.elapsedRealtime()
+        if (
+            lastHuaweiAncRefreshRequestAt != 0L &&
+            now - lastHuaweiAncRefreshRequestAt in 0 until HUAWEI_ANC_REFRESH_MIN_INTERVAL_MS
+        ) {
+            return
+        }
+        lastHuaweiAncRefreshRequestAt = now
         ctx.sendBroadcast(Intent(HuaweiPodsAction.ACTION_HUAWEI_ANC_REFRESH).apply {
             putExtra("address", address)
             currentName?.let { putExtra("device_name", it) }
@@ -4538,6 +4891,7 @@ object MiLinkServiceHook : HookContext() {
 
     private fun resetAncState(route: HuaweiDeviceRoute) {
         ancPendingGate.clear()
+        lastHuaweiAncRefreshRequestAt = 0L
         currentAnc = NoiseControlMode.OFF.broadcastStatus
         currentAncSubMode = normalizeMiLinkAncSubMode(
             route,

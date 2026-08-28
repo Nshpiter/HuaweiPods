@@ -4,6 +4,7 @@ import moe.chenxy.huaweipods.pods.HuaweiDeviceRoute
 import moe.chenxy.huaweipods.pods.ancLevelOptions
 import moe.chenxy.huaweipods.pods.isSupported
 import moe.chenxy.huaweipods.pods.supportsAnc
+import moe.chenxy.huaweipods.pods.supportsAncDirectionDial
 import moe.chenxy.huaweipods.pods.supportsDiscreteAncLevels
 import moe.chenxy.huaweipods.pods.supportsGestureConfiguration
 import moe.chenxy.huaweipods.pods.supportsTransparency
@@ -64,6 +65,37 @@ internal fun shouldUpdateSettingsAncUi(route: HuaweiDeviceRoute): Boolean =
 
 internal fun usesCustomSettingsAncSelector(route: HuaweiDeviceRoute): Boolean =
     route.supportsDiscreteAncLevels && route.ancLevelOptions.size != 4
+
+/** 原生档位条被方向圆盘或自定义档位选择器取代时，需要在宿主异步重绘后再次隐藏。 */
+internal fun requiresDeferredSettingsAncLevelPrune(route: HuaweiDeviceRoute): Boolean =
+    route.supportsAncDirectionDial || usesCustomSettingsAncSelector(route)
+
+/**
+ * 小米设置页不同版本使用过 SeekBar、Slider 和自定义 AncLevel 容器。
+ * 只认明确的 ANC 档位命名，或 2～9 档的短范围滑杆，避免误伤音量、亮度等普通进度条。
+ */
+internal fun isNativeSettingsAncLevelControl(
+    className: String,
+    resourceEntryName: String?,
+    progressMax: Int?,
+): Boolean {
+    val identity = "$className ${resourceEntryName.orEmpty()}".lowercase()
+    val explicitlyAncLevel = "anc" in identity &&
+        listOf("level", "strength", "depth").any(identity::contains)
+    val shortRangeSlider = listOf("seekbar", "slider").any(identity::contains) &&
+        progressMax != null && progressMax in 2..9
+    return explicitlyAncLevel || shortRangeSlider
+}
+
+/** FreeBuds 3 的原生档位分支应位于主模式按钮组与模块方向圆盘之间。 */
+internal fun nativeSettingsAncLevelSiblingIndexes(
+    modeBranchIndex: Int,
+    dialIndex: Int,
+): List<Int> = if (modeBranchIndex >= 0 && dialIndex > modeBranchIndex + 1) {
+    (modeBranchIndex + 1 until dialIndex).toList()
+} else {
+    emptyList()
+}
 
 /** 6i 原生二态通透映射已经过真机校正；其他子模式机型使用模块的协议选择器。 */
 internal fun usesNativeSettingsTransparencySelector(route: HuaweiDeviceRoute): Boolean =

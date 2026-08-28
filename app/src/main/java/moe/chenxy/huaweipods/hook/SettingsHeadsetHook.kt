@@ -21,6 +21,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.ImageView
+import android.widget.ProgressBar
 import android.widget.TextView
 import moe.chenxy.huaweipods.BuildConfig
 import moe.chenxy.huaweipods.R
@@ -599,6 +600,11 @@ object SettingsHeadsetHook : HookContext() {
                 fragmentRootView(instance)?.let { root ->
                     runCatching { pruneFreeBudsUnsupportedViews(root) }
                         .onFailure { Log.w(TAG, "Settings prune after updateAncUi failed", it) }
+                    // 宿主会在 updateAncUi 返回后继续通过动画/绑定恢复原生档位条。
+                    // 保留立即裁剪避免闪现，再在消息队列和动画稳定后重新应用一次。
+                    if (requiresDeferredSettingsAncLevelPrune(currentHuaweiRoute())) {
+                        schedulePruneFreeBudsUnsupportedViews(root)
+                    }
                 }
             }
         }.onFailure { Log.w(TAG, "hook MiuiHeadsetFragment.updateAncUi skipped", it) }
@@ -2121,6 +2127,7 @@ object SettingsHeadsetHook : HookContext() {
         if (dial != null) {
             dial.setLevel(currentHuaweiAncLevel)
             dial.visibility = View.VISIBLE
+            hideNativeSettingsAncLevelControls(root, dial)
         }
     }
 
@@ -2274,6 +2281,115 @@ object SettingsHeadsetHook : HookContext() {
     private fun hideHuaweiAncLevelArea(root: View, anchor: View) {
         setSettingsCapabilityViewVisible(anchor, false)
         Log.d(TAG, "Settings MIUI ANC level anchor hidden view=${anchor.javaClass.name}")
+    }
+
+    private fun hideNativeSettingsAncLevelControls(
+        root: View,
+        replacementDial: HuaweiAncLevelDialView,
+    ) {
+        val nativeLevelRegion = replacementDial.parent as? ViewGroup ?: return
+        hideNativeSettingsAncLevelSiblingBranches(root, nativeLevelRegion, replacementDial)
+        val candidates = mutableListOf<View>()
+
+        fun visit(view: View) {
+            if (
+                view === replacementDial ||
+                view.tag == SETTINGS_HUAWEI_DIAL_TAG ||
+                view.tag == SETTINGS_HUAWEI_ANC_SELECTOR_TAG ||
+                view.tag == SETTINGS_HUAWEI_TRANSPARENCY_SELECTOR_TAG
+            ) {
+                return
+            }
+            val resourceEntryName = view.resourceEntryNameOrNull()
+            val progressMax = (view as? ProgressBar)?.max
+            if (
+                view !== root &&
+                view !== nativeLevelRegion &&
+                view.isDescendantOf(nativeLevelRegion) &&
+                isNativeSettingsAncLevelControl(
+                    className = view.javaClass.name,
+                    resourceEntryName = resourceEntryName,
+                    progressMax = progressMax,
+                )
+            ) {
+                candidates += view
+            }
+            if (view is ViewGroup) {
+                for (index in 0 until view.childCount) visit(view.getChildAt(index))
+            }
+        }
+
+        visit(root)
+        val eligibleCandidates = candidates.filter { candidate ->
+            findTaggedView(candidate, SETTINGS_HUAWEI_DIAL_TAG) == null
+        }
+        val candidateSet = eligibleCandidates.toSet()
+        eligibleCandidates
+            .filter { candidate ->
+                generateSequence(candidate.parent as? View) { parent -> parent.parent as? View }
+                    .takeWhile { ancestor -> ancestor !== root }
+                    .none(candidateSet::contains)
+            }
+            .forEach { candidate ->
+                setSettingsCapabilityViewVisible(candidate, false, collapseLayout = true)
+                Log.i(
+                    TAG,
+                    "Settings native ANC level control hidden " +
+                        "class=${candidate.javaClass.name} " +
+                        "id=${candidate.resourceEntryNameOrNull().orEmpty()} " +
+                        "max=${(candidate as? ProgressBar)?.max}",
+                )
+            }
+    }
+
+    private fun hideNativeSettingsAncLevelSiblingBranches(
+        root: View,
+        nativeLevelRegion: ViewGroup,
+        replacementDial: HuaweiAncLevelDialView,
+    ) {
+        val modeLabels = mutableListOf<TextView>()
+        collectAncModeTextMatches(nativeLevelRegion, modeLabels)
+        val modeBranch = modeLabels
+            .mapNotNull { label -> directChildUnder(nativeLevelRegion, label) }
+            .groupingBy { it }
+            .eachCount()
+            .maxByOrNull { it.value }
+            ?.key
+            ?: modeButtonContainer(root)?.let { directChildUnder(nativeLevelRegion, it) }
+            ?: return
+        val modeIndex = nativeLevelRegion.indexOfChild(modeBranch)
+        val dialIndex = nativeLevelRegion.indexOfChild(replacementDial)
+        val targets = nativeSettingsAncLevelSiblingIndexes(modeIndex, dialIndex)
+            .map(nativeLevelRegion::getChildAt)
+            .filter { view ->
+                view.tag != SETTINGS_HUAWEI_DIAL_TAG &&
+                    view.tag != SETTINGS_HUAWEI_ANC_SELECTOR_TAG &&
+                    view.tag != SETTINGS_HUAWEI_TRANSPARENCY_SELECTOR_TAG &&
+                    findTaggedView(view, SETTINGS_HUAWEI_DIAL_TAG) == null
+            }
+        targets.forEach { target ->
+            setSettingsCapabilityViewVisible(target, false, collapseLayout = true)
+            Log.i(
+                TAG,
+                "Settings native ANC level sibling hidden " +
+                    "index=${nativeLevelRegion.indexOfChild(target)} " +
+                    "class=${target.javaClass.name} " +
+                    "id=${target.resourceEntryNameOrNull().orEmpty()}",
+            )
+        }
+    }
+
+    private fun directChildUnder(parent: ViewGroup, descendant: View): View? {
+        var current = descendant
+        while (current.parent is View && current.parent !== parent) {
+            current = current.parent as View
+        }
+        return current.takeIf { it.parent === parent }
+    }
+
+    private fun View.resourceEntryNameOrNull(): String? {
+        if (id == View.NO_ID) return null
+        return runCatching { resources.getResourceEntryName(id) }.getOrNull()
     }
 
     private fun setSettingsCapabilityViewVisible(

@@ -13,18 +13,39 @@ class MiLinkLowLatencyQuickCardPolicyTest {
             MiLinkLowLatencyQuickCardPolicy.isAvailable(
                 HuaweiDeviceRoute.HUAWEI_FREECLIP2,
                 configured = true,
+                hostAdapterName = "legacy",
             ),
         )
         assertFalse(
             MiLinkLowLatencyQuickCardPolicy.isAvailable(
                 HuaweiDeviceRoute.HUAWEI_FREECLIP,
                 configured = true,
+                hostAdapterName = "legacy",
             ),
         )
         assertFalse(
             MiLinkLowLatencyQuickCardPolicy.isAvailable(
                 HuaweiDeviceRoute.HUAWEI_FREECLIP2,
                 configured = false,
+                hostAdapterName = "legacy",
+            ),
+        )
+    }
+
+    @Test
+    fun `card is hidden on HyperOS 4 and unknown host adapters`() {
+        assertFalse(
+            MiLinkLowLatencyQuickCardPolicy.isAvailable(
+                HuaweiDeviceRoute.HUAWEI_FREEBUDS6I,
+                configured = true,
+                hostAdapterName = "hyperos4-v18",
+            ),
+        )
+        assertFalse(
+            MiLinkLowLatencyQuickCardPolicy.isAvailable(
+                HuaweiDeviceRoute.HUAWEI_FREEBUDS6I,
+                configured = true,
+                hostAdapterName = null,
             ),
         )
     }
@@ -37,6 +58,7 @@ class MiLinkLowLatencyQuickCardPolicyTest {
                 HuaweiDeviceRoute.HUAWEI_FREEBUDS3,
                 configured = true,
                 enabled = true,
+                hostAdapterName = "legacy",
             ),
         )
         assertEquals(
@@ -45,6 +67,7 @@ class MiLinkLowLatencyQuickCardPolicyTest {
                 HuaweiDeviceRoute.HUAWEI_FREEBUDS5,
                 configured = false,
                 enabled = true,
+                hostAdapterName = "legacy",
             ),
         )
     }
@@ -57,6 +80,7 @@ class MiLinkLowLatencyQuickCardPolicyTest {
                 HuaweiDeviceRoute.HUAWEI_FREEBUDS5,
                 configured = true,
                 enabled = false,
+                hostAdapterName = "legacy",
             ),
         )
         assertEquals(
@@ -65,6 +89,7 @@ class MiLinkLowLatencyQuickCardPolicyTest {
                 HuaweiDeviceRoute.HUAWEI_FREEBUDS5,
                 configured = true,
                 enabled = true,
+                hostAdapterName = "legacy",
             ),
         )
     }

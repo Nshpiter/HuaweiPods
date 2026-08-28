@@ -135,6 +135,62 @@ class SettingsHeadsetPolicyTest {
     }
 
     @Test
+    fun `only replaced native ANC level rows need a deferred prune`() {
+        assertTrue(requiresDeferredSettingsAncLevelPrune(HuaweiDeviceRoute.HUAWEI_FREEBUDS3))
+        assertTrue(requiresDeferredSettingsAncLevelPrune(HuaweiDeviceRoute.HUAWEI_FREEBUDS5))
+        assertFalse(requiresDeferredSettingsAncLevelPrune(HuaweiDeviceRoute.HUAWEI_FREEBUDS6I))
+        assertFalse(requiresDeferredSettingsAncLevelPrune(HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5))
+    }
+
+    @Test
+    fun `native short-range ANC level controls are detected without matching ordinary sliders`() {
+        assertTrue(
+            isNativeSettingsAncLevelControl(
+                className = "com.android.settings.bluetooth.AncLevelView",
+                resourceEntryName = null,
+                progressMax = null,
+            ),
+        )
+        assertTrue(
+            isNativeSettingsAncLevelControl(
+                className = "miuix.androidbasewidget.widget.SeekBar",
+                resourceEntryName = "anc_level_seekbar",
+                progressMax = 3,
+            ),
+        )
+        assertTrue(
+            isNativeSettingsAncLevelControl(
+                className = "miuix.androidbasewidget.widget.SeekBar",
+                resourceEntryName = null,
+                progressMax = 3,
+            ),
+        )
+        assertFalse(
+            isNativeSettingsAncLevelControl(
+                className = "android.widget.SeekBar",
+                resourceEntryName = "media_volume",
+                progressMax = 15,
+            ),
+        )
+        assertFalse(
+            isNativeSettingsAncLevelControl(
+                className = "android.widget.ProgressBar",
+                resourceEntryName = "battery_level",
+                progressMax = 100,
+            ),
+        )
+    }
+
+    @Test
+    fun `native ANC level siblings are only the branches between mode row and direction dial`() {
+        assertEquals(listOf(2, 3), nativeSettingsAncLevelSiblingIndexes(1, 4))
+        assertEquals(listOf(1), nativeSettingsAncLevelSiblingIndexes(0, 2))
+        assertTrue(nativeSettingsAncLevelSiblingIndexes(2, 3).isEmpty())
+        assertTrue(nativeSettingsAncLevelSiblingIndexes(3, 2).isEmpty())
+        assertTrue(nativeSettingsAncLevelSiblingIndexes(-1, 3).isEmpty())
+    }
+
+    @Test
     fun `only FreeBuds 6i reuses the corrected native transparency selector`() {
         assertTrue(usesNativeSettingsTransparencySelector(HuaweiDeviceRoute.HUAWEI_FREEBUDS6I))
         assertFalse(usesNativeSettingsTransparencySelector(HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5))

@@ -1,8 +1,9 @@
 package moe.chenxy.huaweipods.hook.milink
 
 import android.view.ViewGroup
-import moe.chenxy.huaweipods.pods.HuaweiDeviceRoute
+import java.util.concurrent.atomic.AtomicInteger
 import moe.chenxy.huaweipods.pods.FreeClip2SpatialAudioMode
+import moe.chenxy.huaweipods.pods.HuaweiDeviceRoute
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -10,6 +11,58 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class MiLinkAncRoutingTest {
+    @Test
+    fun `two-state ANC buttons route by their own labels instead of compressed host indexes`() {
+        assertEquals(2, miLinkTwoStateAncStatusForLabel("降噪"))
+        assertEquals(2, miLinkTwoStateAncStatusForLabel(" Noise cancellation "))
+        assertEquals(2, miLinkTwoStateAncStatusForLabel("noise reduction"))
+        assertEquals(1, miLinkTwoStateAncStatusForLabel("关闭"))
+        assertEquals(1, miLinkTwoStateAncStatusForLabel("OFF"))
+        assertNull(miLinkTwoStateAncStatusForLabel("通透"))
+        assertNull(miLinkTwoStateAncStatusForLabel("噪声控制"))
+        assertNull(miLinkTwoStateAncStatusForLabel(null))
+    }
+
+    @Test
+    fun `bound two-state buttons remain usable if host reuses them for a three-state route`() {
+        assertEquals(
+            2,
+            miLinkBoundAncStatusForRoute(HuaweiDeviceRoute.HUAWEI_FREEBUDS3, "降噪"),
+        )
+        assertEquals(
+            2,
+            miLinkBoundAncStatusForRoute(HuaweiDeviceRoute.HUAWEI_FREEBUDS6I, "降噪"),
+        )
+        assertEquals(
+            1,
+            miLinkBoundAncStatusForRoute(HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5, "关闭"),
+        )
+        assertNull(miLinkBoundAncStatusForRoute(HuaweiDeviceRoute.HUAWEI_FREECLIP2, "降噪"))
+        assertNull(miLinkBoundAncStatusForRoute(HuaweiDeviceRoute.UNSUPPORTED, "关闭"))
+    }
+
+    @Test
+    fun `native ANC card rendering is guarded as UI-only and always restores depth`() {
+        val depth = AtomicInteger(0)
+
+        assertEquals(
+            "rendered",
+            withMiLinkAncUiSync(depth) {
+                assertEquals(1, depth.get())
+                "rendered"
+            },
+        )
+        assertEquals(0, depth.get())
+
+        runCatching {
+            withMiLinkAncUiSync(depth) {
+                assertEquals(1, depth.get())
+                error("render failed")
+            }
+        }
+        assertEquals(0, depth.get())
+    }
+
     @Test
     fun `visible MiLink detail polls ANC only for routes with verified readback`() {
         assertTrue(
@@ -28,6 +81,158 @@ class MiLinkAncRoutingTest {
             shouldPollVisibleMiLinkAnc(
                 route = HuaweiDeviceRoute.HUAWEI_FREECLIP2,
                 visibleDetailCount = 1,
+            ),
+        )
+        assertFalse(
+            shouldPollVisibleMiLinkAnc(
+                route = HuaweiDeviceRoute.HUAWEI_FREEBUDS3,
+                visibleDetailCount = 1,
+            ),
+        )
+    }
+
+    @Test
+    fun `HyperOS 4 ANC card primes cached selection during its first layout`() {
+        val hyperOs4 = miLinkAncHostSpecs.first { it.adapterName == "hyperos4-v18" }
+        val legacy = miLinkAncHostSpecs.first { it.adapterName == "legacy" }
+
+        assertTrue(
+            shouldPrimeMiLinkAncCard(
+                HuaweiDeviceRoute.HUAWEI_FREEBUDS3,
+                hyperOs4,
+                "constructor",
+            ),
+        )
+        assertTrue(
+            shouldPrimeMiLinkAncCard(
+                HuaweiDeviceRoute.HUAWEI_FREEBUDS3,
+                hyperOs4,
+                "constructor-post",
+            ),
+        )
+        assertFalse(
+            shouldPrimeMiLinkAncCard(
+                HuaweiDeviceRoute.HUAWEI_FREEBUDS3,
+                hyperOs4,
+                "M",
+            ),
+        )
+        assertFalse(
+            shouldPrimeMiLinkAncCard(
+                HuaweiDeviceRoute.HUAWEI_FREEBUDS3,
+                legacy,
+                "constructor",
+            ),
+        )
+        assertFalse(
+            shouldPrimeMiLinkAncCard(
+                HuaweiDeviceRoute.HUAWEI_FREECLIP2,
+                hyperOs4,
+                "constructor",
+            ),
+        )
+    }
+
+    @Test
+    fun `late HyperOS 4 ANC refresh uses current FreeBuds 3 state as UI only`() {
+        val hyperOs4 = miLinkAncHostSpecs.first { it.adapterName == "hyperos4-v18" }
+
+        assertEquals(
+            MiLinkAncHostRefreshDecision(hostState = 0, guardAsUiOnly = true),
+            miLinkAncHostRefreshDecision(
+                cardRoute = HuaweiDeviceRoute.HUAWEI_FREEBUDS3,
+                activeRoute = HuaweiDeviceRoute.HUAWEI_FREEBUDS3,
+                currentHuaweiStatus = 2,
+                hostSpec = hyperOs4,
+                incomingHostState = 2,
+            ),
+        )
+        assertEquals(
+            MiLinkAncHostRefreshDecision(hostState = 2, guardAsUiOnly = true),
+            miLinkAncHostRefreshDecision(
+                cardRoute = HuaweiDeviceRoute.HUAWEI_FREEBUDS3,
+                activeRoute = HuaweiDeviceRoute.HUAWEI_FREEBUDS3,
+                currentHuaweiStatus = 1,
+                hostSpec = hyperOs4,
+                incomingHostState = 0,
+            ),
+        )
+    }
+
+    @Test
+    fun `late HyperOS 4 ANC refresh cannot roll FreeBuds 6i back to an older mode`() {
+        val hyperOs4 = miLinkAncHostSpecs.first { it.adapterName == "hyperos4-v18" }
+
+        assertEquals(
+            MiLinkAncHostRefreshDecision(hostState = 0, guardAsUiOnly = true),
+            miLinkAncHostRefreshDecision(
+                cardRoute = HuaweiDeviceRoute.HUAWEI_FREEBUDS6I,
+                activeRoute = HuaweiDeviceRoute.HUAWEI_FREEBUDS6I,
+                currentHuaweiStatus = 2,
+                hostSpec = hyperOs4,
+                incomingHostState = 2,
+            ),
+        )
+        assertEquals(
+            MiLinkAncHostRefreshDecision(hostState = 1, guardAsUiOnly = true),
+            miLinkAncHostRefreshDecision(
+                cardRoute = HuaweiDeviceRoute.HUAWEI_FREEBUDS6I,
+                activeRoute = HuaweiDeviceRoute.HUAWEI_FREEBUDS6I,
+                currentHuaweiStatus = 3,
+                hostSpec = hyperOs4,
+                incomingHostState = 2,
+            ),
+        )
+        assertEquals(
+            MiLinkAncHostRefreshDecision(hostState = 2, guardAsUiOnly = true),
+            miLinkAncHostRefreshDecision(
+                cardRoute = HuaweiDeviceRoute.HUAWEI_FREEBUDS6I,
+                activeRoute = HuaweiDeviceRoute.HUAWEI_FREEBUDS6I,
+                currentHuaweiStatus = 1,
+                hostSpec = hyperOs4,
+                incomingHostState = 1,
+            ),
+        )
+    }
+
+    @Test
+    fun `ANC host refresh never rewrites another route or a no-ANC card`() {
+        val hyperOs4 = miLinkAncHostSpecs.first { it.adapterName == "hyperos4-v18" }
+
+        assertEquals(
+            MiLinkAncHostRefreshDecision(hostState = 2, guardAsUiOnly = false),
+            miLinkAncHostRefreshDecision(
+                cardRoute = HuaweiDeviceRoute.HUAWEI_FREEBUDS3,
+                activeRoute = HuaweiDeviceRoute.HUAWEI_FREEBUDS6I,
+                currentHuaweiStatus = 2,
+                hostSpec = hyperOs4,
+                incomingHostState = 2,
+            ),
+        )
+        assertEquals(
+            MiLinkAncHostRefreshDecision(hostState = 1, guardAsUiOnly = false),
+            miLinkAncHostRefreshDecision(
+                cardRoute = HuaweiDeviceRoute.HUAWEI_FREECLIP2,
+                activeRoute = HuaweiDeviceRoute.HUAWEI_FREECLIP2,
+                currentHuaweiStatus = 2,
+                hostSpec = hyperOs4,
+                incomingHostState = 1,
+            ),
+        )
+    }
+
+    @Test
+    fun `late HyperOS 4 ANC refresh is UI only for every active ANC route`() {
+        val hyperOs4 = miLinkAncHostSpecs.first { it.adapterName == "hyperos4-v18" }
+
+        assertEquals(
+            MiLinkAncHostRefreshDecision(hostState = 0, guardAsUiOnly = true),
+            miLinkAncHostRefreshDecision(
+                cardRoute = HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5,
+                activeRoute = HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5,
+                currentHuaweiStatus = 2,
+                hostSpec = hyperOs4,
+                incomingHostState = 1,
             ),
         )
     }
@@ -75,6 +280,14 @@ class MiLinkAncRoutingTest {
             setOf("M"),
             miLinkAncHostSpecs.first { it.adapterName == "hyperos4-v18" }
                 .refreshMethodNames,
+        )
+        assertEquals(
+            MiLinkAncValueOrder.NOISE_TRANSPARENCY_OFF,
+            miLinkAncHostSpecs.first { it.adapterName == "hyperos4-v18" }.displayValueOrder,
+        )
+        assertEquals(
+            MiLinkAncValueOrder.OFF_NOISE_TRANSPARENCY,
+            miLinkAncHostSpecs.first { it.adapterName == "legacy" }.displayValueOrder,
         )
         assertNull(
             miLinkAncHostSpecs.first { it.adapterName == "legacy" }
@@ -247,6 +460,37 @@ class MiLinkAncRoutingTest {
     }
 
     @Test
+    fun `HyperOS 4 v18 keeps display and runtime ANC value domains separate`() {
+        val hostSpec = miLinkAncHostSpecs.first { it.adapterName == "hyperos4-v18" }
+        val route = HuaweiDeviceRoute.HUAWEI_FREEBUDS6I
+
+        // HeadsetInfo/M(int) display domain: 0=ANC, 1=transparency, 2=off.
+        assertEquals(0, miLinkAncModeFor(route, 2, hostSpec))
+        assertEquals(1, miLinkAncModeFor(route, 3, hostSpec))
+        assertEquals(2, miLinkAncModeFor(route, 1, hostSpec))
+        assertEquals(2, huaweiAncStatusForMiLink(route, 0, hostSpec))
+        assertEquals(3, huaweiAncStatusForMiLink(route, 1, hostSpec))
+        assertEquals(1, huaweiAncStatusForMiLink(route, 2, hostSpec))
+
+        // Runtime command domain: 0=off, 1=ANC, 2=transparency.
+        assertEquals(1, huaweiAncStatusForMiLink(route, 0))
+        assertEquals(2, huaweiAncStatusForMiLink(route, 1))
+        assertEquals(3, huaweiAncStatusForMiLink(route, 2))
+    }
+
+    @Test
+    fun `HyperOS 4 two-state card renders cached FreeBuds 3 ANC and off selections`() {
+        val hostSpec = miLinkAncHostSpecs.first { it.adapterName == "hyperos4-v18" }
+        val route = HuaweiDeviceRoute.HUAWEI_FREEBUDS3
+
+        assertEquals(0, miLinkHostAncStateFor(route, 2, hostSpec))
+        assertEquals(2, miLinkHostAncStateFor(route, 1, hostSpec))
+        assertEquals(2, huaweiAncStatusForMiLink(route, 0, hostSpec))
+        assertEquals(1, huaweiAncStatusForMiLink(route, 2, hostSpec))
+        assertNull(huaweiAncStatusForMiLink(route, 1, hostSpec))
+    }
+
+    @Test
     fun `two-state ANC routes reject transparency`() {
         listOf(
             HuaweiDeviceRoute.HUAWEI_FREEBUDS3,
@@ -277,6 +521,45 @@ class MiLinkAncRoutingTest {
             HuaweiDeviceRoute.HUAWEI_FREEARC,
             HuaweiDeviceRoute.HUAWEI_EYEWEAR2,
         ).forEach { route -> assertFalse(shouldDetachMiLinkTransparency(route)) }
+    }
+
+    @Test
+    fun `detached transparency view is not removed again after its parent is gone`() {
+        assertTrue(
+            shouldRemoveMiLinkCapabilityView(
+                detachWhenHidden = true,
+                parentAvailable = true,
+                stillInParent = true,
+            ),
+        )
+        assertFalse(
+            shouldRemoveMiLinkCapabilityView(
+                detachWhenHidden = true,
+                parentAvailable = false,
+                stillInParent = true,
+            ),
+        )
+        assertFalse(
+            shouldRemoveMiLinkCapabilityView(
+                detachWhenHidden = true,
+                parentAvailable = false,
+                stillInParent = false,
+            ),
+        )
+    }
+
+    @Test
+    fun `headset image guard only restores a tracked matching cache entry`() {
+        assertTrue(
+            shouldReapplyMiLinkHeadsetIcon(
+                requestedKey = "device|image",
+                cachedKey = "device|image",
+                alreadyApplied = false,
+            ),
+        )
+        assertFalse(shouldReapplyMiLinkHeadsetIcon(null, "device|image", false))
+        assertFalse(shouldReapplyMiLinkHeadsetIcon("other", "device|image", false))
+        assertFalse(shouldReapplyMiLinkHeadsetIcon("device|image", "device|image", true))
     }
 
     @Test
