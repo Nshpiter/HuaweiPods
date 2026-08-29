@@ -111,6 +111,32 @@ class LowLatencyPrefsTest {
         )
     }
 
+    @Test
+    fun `read-only hook preferences fail closed instead of crashing the host`() {
+        val readOnlyPrefs = Proxy.newProxyInstance(
+            SharedPreferences::class.java.classLoader ?: javaClass.classLoader,
+            arrayOf(SharedPreferences::class.java),
+        ) { _, method, _ ->
+            if (method.name == "edit") {
+                throw UnsupportedOperationException("Read only implementation")
+            }
+            null
+        } as SharedPreferences
+        LowLatencyPrefs.attachHookPreferences(readOnlyPrefs)
+
+        try {
+            assertFalse(
+                LowLatencyPrefs.setDesiredFromHook(
+                    address,
+                    HuaweiDeviceRoute.HUAWEI_FREEBUDS5,
+                    true,
+                ),
+            )
+        } finally {
+            LowLatencyPrefs.attachHookPreferences(inMemoryPreferences())
+        }
+    }
+
     private fun inMemoryPreferences(): SharedPreferences {
         val values = ConcurrentHashMap<String, Any>()
         return Proxy.newProxyInstance(

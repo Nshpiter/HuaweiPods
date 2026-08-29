@@ -176,10 +176,23 @@ object ConfigManager {
         val normalized = config.copy(fakeDeviceId = config.fakeDeviceId.normalizedFakeDeviceId())
         cachedConfig = normalized
         writePrefs(prefs, normalized)
-        service?.getRemotePreferences(PREFS_NAME)?.let { remotePrefs ->
-            writePrefs(remotePrefs, normalized)
-            Log.d(TAG, "save remote prefs class=${remotePrefs.javaClass.name} fakeDeviceId=${normalized.fakeDeviceId}")
-        } ?: Log.w(TAG, "save remote prefs skipped: LSPosed service is null")
+        val remotePrefs = runCatching {
+            service?.getRemotePreferences(PREFS_NAME)
+        }.onFailure {
+            Log.w(TAG, "save remote prefs unavailable", it)
+        }.getOrNull()
+        if (remotePrefs == null) {
+            Log.w(TAG, "save remote prefs skipped: LSPosed service is null")
+        } else {
+            runCatching { writePrefs(remotePrefs, normalized) }
+                .onSuccess {
+                    Log.d(
+                        TAG,
+                        "save remote prefs class=${remotePrefs.javaClass.name} fakeDeviceId=${normalized.fakeDeviceId}",
+                    )
+                }
+                .onFailure { Log.w(TAG, "save remote prefs failed", it) }
+        }
         logConfigChange("save", oldConfig, normalized)
     }
 

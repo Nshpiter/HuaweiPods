@@ -12,4 +12,5 @@ class ModuleResourceResolverTest {
         assertFalse(ModuleResourceResolver.moduleBuildMatches(null, "b123"))
         assertFalse(ModuleResourceResolver.moduleBuildMatches("", "b123"))
     }
+
 }

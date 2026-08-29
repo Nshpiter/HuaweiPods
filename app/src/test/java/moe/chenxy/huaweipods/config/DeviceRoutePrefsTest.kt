@@ -92,6 +92,27 @@ class DeviceRoutePrefsTest {
     }
 
     @Test
+    fun `read-only preferences fail closed instead of crashing the host`() {
+        val readOnlyPrefs = Proxy.newProxyInstance(
+            SharedPreferences::class.java.classLoader ?: javaClass.classLoader,
+            arrayOf(SharedPreferences::class.java),
+        ) { _, method, _ ->
+            if (method.name == "edit") {
+                throw UnsupportedOperationException("Read only implementation")
+            }
+            null
+        } as SharedPreferences
+
+        assertFalse(
+            DeviceRoutePrefs.bind(
+                readOnlyPrefs,
+                "AA:BB:CC:DD:EE:FF",
+                HuaweiDeviceRoute.HUAWEI_FREEBUDS3,
+            ),
+        )
+    }
+
+    @Test
     fun `automatic binding never overwrites a different manual route`() {
         val prefs = inMemoryPreferences()
         val address = "AA:BB:CC:DD:EE:FF"

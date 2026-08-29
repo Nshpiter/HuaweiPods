@@ -1,6 +1,7 @@
 [
   "com.android.bluetooth",
   "com.android.settings",
+  "com.huawei.smartaudio",
   "com.milink.service",
   "com.xiaomi.bluetooth"
 ]

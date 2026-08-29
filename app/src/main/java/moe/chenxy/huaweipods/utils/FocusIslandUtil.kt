@@ -26,6 +26,12 @@ object FocusIslandUtil {
     private val mainHandler = Handler(Looper.getMainLooper())
     private var dismissRunnable: Runnable? = null
 
+    @Synchronized
+    fun closeForHotReload() {
+        dismissRunnable?.let(mainHandler::removeCallbacks)
+        dismissRunnable = null
+    }
+
     fun showBatteryIsland(
         context: Context,
         prefs: SharedPreferences,

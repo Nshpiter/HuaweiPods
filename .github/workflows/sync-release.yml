@@ -16,13 +16,17 @@ permissions:
 
 jobs:
   sync:
-    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    if: >-
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_repository.full_name == github.repository)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.workflow_run.head_sha || github.ref }}
+          ref: ${{ inputs.tag || github.event.workflow_run.head_sha }}
 
       - name: Resolve release
         id: release
@@ -79,7 +83,8 @@ jobs:
           printf '%s\n' "$TAG" > VERSION
           cp ../README.md README.md
           cp ../README_EN.md README_EN.md
-          git add VERSION README.md README_EN.md
+          cp ../SCOPE SCOPE
+          git add VERSION README.md README_EN.md SCOPE
           if git diff --cached --quiet; then
             git commit --allow-empty -m "release: refresh HuaweiPods $VERSION_NAME"
           else

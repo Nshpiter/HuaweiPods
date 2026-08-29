@@ -14,8 +14,12 @@ import java.io.IOException
 import java.net.SocketTimeoutException
 import java.util.UUID
 import java.util.concurrent.CancellationException
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.ExperimentalStdlibApi
@@ -39,6 +43,44 @@ object HuaweiL2capAncController {
     private var deviceAddress: String? = null
     private var socketLabel: String? = null
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val activeConnectSockets = ConcurrentHashMap.newKeySet<BluetoothSocket>()
+    private val activeConnectThreads = ConcurrentHashMap.newKeySet<Thread>()
+    private val activeOperations = AtomicInteger(0)
+    private val closing = AtomicBoolean(false)
+
+    /** 预检必须无副作用；正在执行系统蓝牙 I/O 时让框架回退为进程重启。 */
+    fun canCloseForHotReload(): Boolean =
+        !closing.get() &&
+            activeOperations.get() == 0 &&
+            activeConnectThreads.isEmpty() &&
+            activeConnectSockets.isEmpty()
+
+    fun closeForHotReload(): Boolean {
+        closing.set(true)
+        synchronized(submissionLock) {
+            transportGeneration.invalidate()
+            closeSocket()
+            activeConnectSockets.toList().forEach { connectingSocket ->
+                runCatching { connectingSocket.close() }
+            }
+            activeConnectThreads.toList().forEach(Thread::interrupt)
+            executor.shutdownNow()
+            routeProbeExecutor.shutdownNow()
+        }
+        mainHandler.removeCallbacksAndMessages(null)
+        val executorStopped = runCatching { executor.awaitTermination(1, TimeUnit.SECONDS) }
+            .getOrDefault(false)
+        val routeProbeStopped = runCatching {
+            routeProbeExecutor.awaitTermination(1, TimeUnit.SECONDS)
+        }.getOrDefault(false)
+        activeConnectThreads.toList().forEach { thread ->
+            runCatching { thread.join(250L) }
+        }
+        val connectThreadsStopped = activeConnectThreads.none(Thread::isAlive)
+        activeConnectThreads.clear()
+        activeConnectSockets.clear()
+        return executorStopped && routeProbeStopped && connectThreadsStopped
+    }
 
     fun setAncEnabled(
         context: Context,
@@ -168,7 +210,7 @@ object HuaweiL2capAncController {
         val appContext = context.applicationContext ?: context
         val address = runCatching { device.address }.getOrDefault("")
         runCatching {
-            routeProbeExecutor.execute {
+            executeTracked(routeProbeExecutor) {
                 var probeSocket: BluetoothSocket? = null
                 val identity = runCatching {
                     val packet = HuaweiAncPackets.routeFreeDeviceInfoQuery()
@@ -334,7 +376,7 @@ object HuaweiL2capAncController {
                     notifyComplete(onComplete, false)
                     return@synchronized
                 }
-                executor.execute worker@{
+                executeTracked(executor) worker@{
                     if (!transportGeneration.isCurrent(requestGeneration)) {
                         logInfo(
                             appContext,
@@ -400,7 +442,7 @@ object HuaweiL2capAncController {
                 TAG,
                 "Huawei ANC disconnect queued generation=$invalidatedGeneration device=${device?.address.orEmpty()}",
             )
-            executor.execute { closeSocket() }
+            executeTracked(executor) { closeSocket() }
         }
     }
 
@@ -497,13 +539,28 @@ object HuaweiL2capAncController {
         val connected = AtomicBoolean(false)
         val failure = AtomicReference<Throwable?>(null)
         val thread = Thread({
-            runCatching {
-                socket.connect()
-                connected.set(true)
-            }.onFailure { failure.set(it) }
+            try {
+                runCatching {
+                    socket.connect()
+                    connected.set(true)
+                }.onFailure { failure.set(it) }
+            } finally {
+                activeConnectThreads.remove(Thread.currentThread())
+                activeConnectSockets.remove(socket)
+            }
         }, "HuaweiAnc-rfcomm-connect")
+        activeConnectSockets.add(socket)
+        activeConnectThreads.add(thread)
         thread.start()
-        thread.join(timeoutMs)
+        try {
+            thread.join(timeoutMs)
+        } catch (interrupted: InterruptedException) {
+            runCatching { socket.close() }
+            Thread.currentThread().interrupt()
+            throw CancellationException("Huawei RFCOMM connect interrupted").apply {
+                initCause(interrupted)
+            }
+        }
 
         if (connected.get()) return socket
         failure.get()?.let {
@@ -586,6 +643,23 @@ object HuaweiL2capAncController {
             val belongsToCurrentGeneration = requestGeneration == null ||
                 transportGeneration.isCurrent(requestGeneration)
             callback(success && belongsToCurrentGeneration)
+        }
+    }
+
+    private fun executeTracked(executorService: ExecutorService, block: () -> Unit) {
+        check(!closing.get()) { "Huawei RFCOMM controller is closing" }
+        activeOperations.incrementAndGet()
+        runCatching {
+            executorService.execute {
+                try {
+                    block()
+                } finally {
+                    activeOperations.decrementAndGet()
+                }
+            }
+        }.onFailure {
+            activeOperations.decrementAndGet()
+            throw it
         }
     }
 }

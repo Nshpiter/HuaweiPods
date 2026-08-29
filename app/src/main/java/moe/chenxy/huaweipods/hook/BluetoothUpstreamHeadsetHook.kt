@@ -2,6 +2,7 @@ package moe.chenxy.huaweipods.hook
 
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothDevice
+import android.bluetooth.BluetoothManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -65,6 +66,7 @@ class BluetoothUpstreamHeadsetHook : HookContext() {
     private var lastHuaweiDevice: BluetoothDevice? = null
     private var context: Context? = null
     private var receiverRegistered = false
+    private var statusReceiver: BroadcastReceiver? = null
     private var currentBattery: BatteryParams? = null
     private var currentAnc = 1
     private var currentAncSubMode: Int? = null
@@ -79,6 +81,100 @@ class BluetoothUpstreamHeadsetHook : HookContext() {
         hookHeadsetServiceBinder()
         hookNotificationBatteryUpstream()
         hookHuaweiHfpBattery()
+        runCatching {
+            val activityThread = Class.forName("android.app.ActivityThread")
+            activityThread.getDeclaredMethod("currentApplication").invoke(null) as? Context
+        }.getOrNull()?.let(::registerStatusReceiver)
+    }
+
+    override fun onCanClose(): Boolean =
+        callbacks.isEmpty() && pendingHuaweiCallbacks.isEmpty()
+
+    override fun onSaveHotReloadState(outState: Bundle) {
+        outState.putString("address", currentAddress)
+        outState.putString("name", currentName)
+        outState.putString("route", currentRoute?.name)
+        outState.putInt("anc", currentAnc)
+        currentAncSubMode?.let { outState.putInt("anc_submode", it) }
+        currentBattery?.let { battery ->
+            putPodState(outState, "left", battery.left)
+            putPodState(outState, "right", battery.right)
+            putPodState(outState, "case", battery.case)
+        }
+    }
+
+    override fun onRestoreHotReloadState(savedState: Bundle) {
+        currentAddress = savedState.getString("address")
+        currentName = savedState.getString("name")
+        currentRoute = savedState.getString("route")?.let { routeName ->
+            runCatching { HuaweiDeviceRoute.valueOf(routeName) }.getOrNull()
+        }
+        currentAnc = savedState.getInt("anc", NoiseControlMode.OFF.broadcastStatus)
+        currentAncSubMode = savedState.getInt("anc_submode", -1).takeIf { it >= 0 }
+        val left = getPodState(savedState, "left")
+        val right = getPodState(savedState, "right")
+        val case = getPodState(savedState, "case")
+        currentBattery = if (left != null || right != null || case != null) {
+            BatteryParams(left, right, case)
+        } else {
+            null
+        }
+        val appContext = context ?: currentApplicationOrNull()
+        lastHuaweiDevice = currentAddress?.let { address ->
+            runCatching {
+                appContext?.getSystemService(BluetoothManager::class.java)
+                    ?.adapter
+                    ?.getRemoteDevice(address)
+            }.getOrNull()
+        }
+        requestBluetoothStatus("hot-reload-restored")
+        notifyRealStatus("hot-reload-restored")
+    }
+
+    private fun putPodState(bundle: Bundle, prefix: String, pod: PodParams?) {
+        pod ?: return
+        bundle.putBoolean("${prefix}_present", true)
+        bundle.putInt("${prefix}_battery", pod.battery)
+        bundle.putBoolean("${prefix}_charging", pod.isCharging)
+        bundle.putBoolean("${prefix}_connected", pod.isConnected)
+        bundle.putInt("${prefix}_raw", pod.rawStatus)
+    }
+
+    private fun getPodState(bundle: Bundle, prefix: String): PodParams? {
+        if (!bundle.getBoolean("${prefix}_present", false)) return null
+        return PodParams(
+            battery = bundle.getInt("${prefix}_battery", 0),
+            isCharging = bundle.getBoolean("${prefix}_charging", false),
+            isConnected = bundle.getBoolean("${prefix}_connected", false),
+            rawStatus = bundle.getInt("${prefix}_raw", 0),
+        )
+    }
+
+    override fun onClose() {
+        handler.removeCallbacksAndMessages(null)
+        val receiver = statusReceiver
+        val receiverContext = context
+        if (receiver != null && receiverContext != null) {
+            runCatching { receiverContext.unregisterReceiver(receiver) }
+                .onFailure { error ->
+                    if (error !is IllegalArgumentException) {
+                        Log.w(TAG, "Failed to unregister status receiver", error)
+                    }
+                }
+        }
+        statusReceiver = null
+        receiverRegistered = false
+        callbacks.clear()
+        pendingHuaweiCallbacks.clear()
+        synchronized(knownHuaweiAddresses) { knownHuaweiAddresses.clear() }
+        synchronized(hookedBinderClasses) { hookedBinderClasses.clear() }
+        lastHuaweiDevice = null
+        currentBattery = null
+        currentAncSubMode = null
+        currentAddress = null
+        currentName = null
+        currentRoute = null
+        context = null
     }
 
     private fun hookNotificationBatteryUpstream() {
@@ -420,7 +516,7 @@ class BluetoothUpstreamHeadsetHook : HookContext() {
             addHuaweiPodsAction(HuaweiPodsAction.ACTION_PODS_ANC_CHANGED)
             addHuaweiPodsAction(HuaweiPodsAction.ACTION_CONFIG_CHANGED)
         }
-        context?.registerReceiver(object : BroadcastReceiver() {
+        val receiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context?, intent: Intent?) {
                 val receivedIntent = intent ?: return
                 when (HuaweiPodsAction.canonical(receivedIntent.action)) {
@@ -463,7 +559,9 @@ class BluetoothUpstreamHeadsetHook : HookContext() {
                 Log.d(TAG, "state action=${receivedIntent.action} address=$currentAddress name=$currentName anc=$currentAnc battery=${currentBattery.debugString()}")
                 notifyRealStatus("broadcast:${receivedIntent.action}")
             }
-        }, filter, Context.RECEIVER_EXPORTED)
+        }
+        context?.registerReceiver(receiver, filter, Context.RECEIVER_EXPORTED)
+        statusReceiver = receiver
         receiverRegistered = true
         context?.sendBroadcast(Intent(HuaweiPodsAction.ACTION_REFRESH_STATUS).apply {
             setPackage("com.android.bluetooth")

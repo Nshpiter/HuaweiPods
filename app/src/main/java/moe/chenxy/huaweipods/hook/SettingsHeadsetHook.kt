@@ -133,6 +133,7 @@ object SettingsHeadsetHook : HookContext() {
     private val swipeActionCache = linkedMapOf<String, HuaweiSwipeAction>()
     private var context: Context? = null
     private var receiverRegistered = false
+    private var statusReceiver: BroadcastReceiver? = null
     private var currentAddress: String? = null
     private var currentName: String? = null
     private var currentRoute: HuaweiDeviceRoute? = null
@@ -152,8 +153,10 @@ object SettingsHeadsetHook : HookContext() {
     private var settingsHeaderBitmapCache: SettingsHeaderBitmapCache? = null
     private val hiddenSettingsCapabilityViews = WeakHashMap<View, HiddenSettingsCapabilityView>()
     private val relabeledFreeBuds6iTransparencyTexts = WeakHashMap<TextView, CharSequence>()
-    private val observedSettingsRoots = WeakHashMap<View, Boolean>()
+    private val observedSettingsRoots =
+        WeakHashMap<View, android.view.ViewTreeObserver.OnScrollChangedListener>()
     private val pendingSettingsScrollPrunes = WeakHashMap<View, Runnable>()
+    private val pendingSettingsInitialPrunes = WeakHashMap<View, MutableSet<Runnable>>()
     private val refreshHandler = Handler(Looper.getMainLooper())
     private var refreshLoopStarted = false
     private val refreshRunnable = object : Runnable {
@@ -174,6 +177,122 @@ object SettingsHeadsetHook : HookContext() {
         hookServiceProxy()
         hookBatteryView()
         hookFragmentState()
+        runCatching {
+            val activityThread = Class.forName("android.app.ActivityThread")
+            activityThread.getDeclaredMethod("currentApplication").invoke(null) as? Context
+        }.getOrNull()?.let(::registerStatusReceiver)
+        recreateVisibleHeadsetActivities()
+    }
+
+    override fun onCanClose(): Boolean = runOnMainThreadBlocking { }
+
+    override fun onSaveHotReloadState(outState: Bundle) {
+        outState.putString("address", currentAddress)
+        outState.putString("name", currentName)
+        outState.putString("route", currentRoute?.name)
+        outState.putBoolean("anc_confirmed", currentAncConfirmed)
+    }
+
+    override fun onRestoreHotReloadState(savedState: Bundle) {
+        currentAddress = savedState.getString("address")
+        currentName = savedState.getString("name")
+        currentRoute = savedState.getString("route")?.let { routeName ->
+            runCatching { HuaweiDeviceRoute.valueOf(routeName) }.getOrNull()
+        }
+        currentAncConfirmed = savedState.getBoolean("anc_confirmed", false)
+        requestBluetoothStatus("hot-reload-restored")
+    }
+
+    override fun onClose() {
+        refreshLoopStarted = false
+        refreshHandler.removeCallbacksAndMessages(null)
+        check(runOnMainThreadBlocking {
+            pendingSettingsScrollPrunes.entries.toList().forEach { (root, task) ->
+                root.removeCallbacks(task)
+            }
+            pendingSettingsScrollPrunes.clear()
+            pendingSettingsInitialPrunes.entries.toList().forEach { (root, tasks) ->
+                tasks.toList().forEach(root::removeCallbacks)
+            }
+            pendingSettingsInitialPrunes.clear()
+
+            observedSettingsRoots.entries.toList().forEach { (root, listener) ->
+                runCatching {
+                    if (root.viewTreeObserver.isAlive) {
+                        root.viewTreeObserver.removeOnScrollChangedListener(listener)
+                    }
+                }
+                restoreTrackedSettingsCapabilityViews(root)
+                restoreFreeBuds6iTransparencyLabels(root)
+                removeHotReloadInjectedViews(root)
+            }
+            observedSettingsRoots.clear()
+        }) { "Settings UI cleanup timed out" }
+
+        val receiver = statusReceiver
+        val receiverContext = context
+        if (receiver != null && receiverContext != null) {
+            runCatching { receiverContext.unregisterReceiver(receiver) }
+                .onFailure { error ->
+                    if (error !is IllegalArgumentException) {
+                        Log.w(TAG, "Failed to unregister Settings status receiver", error)
+                    }
+                }
+        }
+        statusReceiver = null
+        receiverRegistered = false
+        context = null
+
+        knownHuaweiAddresses.clear()
+        batteryViews.clear()
+        headsetFragments.clear()
+        keyConfigFragments.clear()
+        gestureActionCache.clear()
+        swipeActionCache.clear()
+        hiddenSettingsCapabilityViews.clear()
+        relabeledFreeBuds6iTransparencyTexts.clear()
+        settingsHeaderBitmapCache = null
+        currentAddress = null
+        currentName = null
+        currentRoute = null
+        currentAncConfirmed = false
+    }
+
+    private fun removeHotReloadInjectedViews(root: View) {
+        listOf(
+            SETTINGS_HUAWEI_DIAL_TAG,
+            SETTINGS_HUAWEI_TRANSPARENCY_SELECTOR_TAG,
+            SETTINGS_HUAWEI_ANC_SELECTOR_TAG,
+            SETTINGS_FREECLIP2_AUDIO_CONTROLS_TAG,
+        ).forEach { tag ->
+            while (true) {
+                val injected = findTaggedView(root, tag) ?: break
+                val parent = injected.parent as? ViewGroup ?: break
+                parent.removeView(injected)
+            }
+        }
+    }
+
+    /** API 102 不会重放 Fragment 生命周期；重建当前耳机页让新代重新注入完整 UI。 */
+    private fun recreateVisibleHeadsetActivities() {
+        runCatching {
+            val activityThreadClass = Class.forName("android.app.ActivityThread")
+            val activityThread = activityThreadClass.getDeclaredMethod("currentActivityThread")
+                .apply { isAccessible = true }
+                .invoke(null) ?: return@runCatching
+            val records = getObjectField(activityThread, "mActivities") as? Map<*, *>
+                ?: return@runCatching
+            records.values.mapNotNull { record ->
+                getObjectField(record, "activity")
+            }.filter { activity ->
+                activity.javaClass.name.contains("MiuiHeadsetActivity", ignoreCase = true)
+            }.forEach { activity ->
+                Handler(Looper.getMainLooper()).post {
+                    runCatching { callMethod(activity, "recreate") }
+                        .onFailure { Log.w(TAG, "Unable to recreate active headset activity", it) }
+                }
+            }
+        }.onFailure { Log.w(TAG, "Unable to inspect active headset activities", it) }
     }
 
     private fun hookActivityEntry() {
@@ -656,7 +775,7 @@ object SettingsHeadsetHook : HookContext() {
             addHuaweiPodsAction(HuaweiPodsAction.ACTION_POD_IMAGES_CHANGED)
             addHuaweiPodsAction(HuaweiPodsAction.ACTION_CONFIG_CHANGED)
         }
-        context?.registerReceiver(object : BroadcastReceiver() {
+        val receiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context?, intent: Intent?) {
                 val receivedIntent = intent ?: return
                 when (HuaweiPodsAction.canonical(receivedIntent.action)) {
@@ -801,7 +920,9 @@ object SettingsHeadsetHook : HookContext() {
                 }
                 Log.d(TAG, "state action=${receivedIntent.action} address=$currentAddress anc=$currentAnc battery=${settingsBatteryString()}")
             }
-        }, filter, Context.RECEIVER_EXPORTED)
+        }
+        context?.registerReceiver(receiver, filter, Context.RECEIVER_EXPORTED)
+        statusReceiver = receiver
         receiverRegistered = true
         requestBluetoothStatus("receiver-register")
         Log.d(TAG, "registered status receiver context=$context")
@@ -1631,9 +1752,8 @@ object SettingsHeadsetHook : HookContext() {
 
     private fun moduleString(context: Context, resId: Int, fallback: String): String {
         return runCatching {
-            val moduleContext = context.createPackageContext(BuildConfig.APPLICATION_ID, Context.CONTEXT_IGNORE_SECURITY)
-            if (!ModuleResourceResolver.isCurrentModuleBuild(moduleContext)) return fallback
-            moduleContext.getString(resId)
+            if (!ModuleResourceResolver.isCurrentModuleBuild(context)) return fallback
+            ModuleResourceResolver.resources(context)?.getString(resId) ?: fallback
         }.getOrElse { fallback }
     }
 
@@ -1708,14 +1828,21 @@ object SettingsHeadsetHook : HookContext() {
         val expectedAddress = currentAddress?.takeIf(String::isNotBlank) ?: return
         val expectedRoute = currentHuaweiRoute()
         listOf(0L, 180L).forEach { delay ->
-            root.postDelayed({
+            lateinit var task: Runnable
+            task = Runnable {
+                pendingSettingsInitialPrunes[root]?.let { tasks ->
+                    tasks.remove(task)
+                    if (tasks.isEmpty()) pendingSettingsInitialPrunes.remove(root)
+                }
                 if (!expectedAddress.equals(currentAddress, ignoreCase = true) || expectedRoute != currentHuaweiRoute()) {
                     Log.d(TAG, "Settings unsupported row prune skipped for stale device address=$expectedAddress route=$expectedRoute")
-                    return@postDelayed
+                    return@Runnable
                 }
                 runCatching { pruneFreeBudsUnsupportedViews(root) }
                     .onFailure { Log.w(TAG, "Settings unsupported row prune failed", it) }
-            }, delay)
+            }
+            pendingSettingsInitialPrunes.getOrPut(root, ::linkedSetOf).add(task)
+            root.postDelayed(task, delay)
         }
     }
 
@@ -1723,15 +1850,15 @@ object SettingsHeadsetHook : HookContext() {
         this == HuaweiDeviceRoute.HUAWEI_FREECLIP2 || this == HuaweiDeviceRoute.HUAWEI_FREEARC
 
     private fun observeSettingsScroll(root: View) {
-        if (observedSettingsRoots.put(root, true) == true) return
-        root.viewTreeObserver.addOnScrollChangedListener {
-            if (!root.isAttachedToWindow) return@addOnScrollChangedListener
+        if (observedSettingsRoots.containsKey(root)) return
+        val listener = android.view.ViewTreeObserver.OnScrollChangedListener listener@{
+            if (!root.isAttachedToWindow) return@listener
 
             // RecyclerView 滚动时会高频触发回调。整棵树的恢复、关键词扫描和布局裁剪都必须
             // 留到滚动停止后再做，否则会与每一帧 measure/layout 争用主线程，造成明显掉帧。
             pendingSettingsScrollPrunes.remove(root)?.let(root::removeCallbacks)
             val expectedAddress = currentAddress?.takeIf(String::isNotBlank)
-                ?: return@addOnScrollChangedListener
+                ?: return@listener
             val expectedRoute = currentHuaweiRoute()
             val task = object : Runnable {
                 override fun run() {
@@ -1751,6 +1878,8 @@ object SettingsHeadsetHook : HookContext() {
             pendingSettingsScrollPrunes[root] = task
             root.postDelayed(task, SETTINGS_SCROLL_SETTLE_MS)
         }
+        observedSettingsRoots[root] = listener
+        root.viewTreeObserver.addOnScrollChangedListener(listener)
     }
 
     private fun pruneFreeBudsUnsupportedViews(root: View) {
@@ -1968,8 +2097,8 @@ object SettingsHeadsetHook : HookContext() {
             if (address != null) {
                 PodImageLoader.loadBoxBitmap(context, prefs, address)
             } else {
-                val moduleContext = context.createPackageContext(BuildConfig.APPLICATION_ID, Context.CONTEXT_IGNORE_SECURITY)
-                if (!ModuleResourceResolver.isCurrentModuleBuild(moduleContext)) return null
+                if (!ModuleResourceResolver.isCurrentModuleBuild(context)) return null
+                val moduleResources = ModuleResourceResolver.resources(context) ?: return null
                 val resourceId = when (route) {
                     HuaweiDeviceRoute.HUAWEI_FREEBUDS5 -> R.drawable.img_freebuds5_box
                     HuaweiDeviceRoute.HUAWEI_FREEBUDS6I -> R.drawable.img_freebuds6i_settings
@@ -1977,7 +2106,7 @@ object SettingsHeadsetHook : HookContext() {
                     HuaweiDeviceRoute.HUAWEI_EYEWEAR2 -> R.drawable.img_eyewear2_box
                     else -> R.drawable.img_box
                 }
-                BitmapFactory.decodeResource(moduleContext.resources, resourceId)
+                BitmapFactory.decodeResource(moduleResources, resourceId)
             }
         }.onSuccess { bitmap ->
             if (bitmap != null) settingsHeaderBitmapCache = SettingsHeaderBitmapCache(key, bitmap)

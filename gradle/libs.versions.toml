@@ -9,6 +9,8 @@ composeBom = "2026.05.01"
 kotlinxSerializationJson = "1.11.0"
 libxposedApi = "101.0.1"
 libxposedService = "101.0.0"
+libxposedApi102 = "102.0.0"
+libxposedService102 = "102.0.0"
 miuix = "0.9.2"
 navigation3 = "1.1.2"
 
@@ -25,6 +27,8 @@ compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "
 coreKtx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 libxposedApi = { group = "io.github.libxposed", name = "api", version.ref = "libxposedApi" }
 libxposedService = { group = "io.github.libxposed", name = "service", version.ref = "libxposedService" }
+libxposedApi102 = { group = "io.github.libxposed", name = "api", version.ref = "libxposedApi102" }
+libxposedService102 = { group = "io.github.libxposed", name = "service", version.ref = "libxposedService102" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinxSerializationJson" }
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidx-activity-compose" }
 compose-bom = { module = "androidx.compose:compose-bom", version.ref = "composeBom" }

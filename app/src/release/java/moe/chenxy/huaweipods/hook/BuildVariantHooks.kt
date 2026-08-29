@@ -1,14 +1,15 @@
 package moe.chenxy.huaweipods.hook
 
-import io.github.libxposed.api.XposedModuleInterface.PackageLoadedParam
-
 internal object BuildVariantHooks {
-    fun onPackageLoaded(entry: HookEntry, param: PackageLoadedParam) {
-        if (param.packageName != "com.huawei.smartaudio") return
+    fun supportsPackage(packageName: String): Boolean = packageName == "com.huawei.smartaudio"
+
+    fun installForPackage(entry: HookEntry, packageName: String, classLoader: ClassLoader) {
+        if (packageName != "com.huawei.smartaudio") return
         entry.loadHook(
+            "smart-audio-freeclip2-bridge",
             SmartAudioFreeClip2BridgeHook,
-            param.defaultClassLoader,
-            param.packageName,
+            classLoader,
+            packageName,
         )
     }
 }

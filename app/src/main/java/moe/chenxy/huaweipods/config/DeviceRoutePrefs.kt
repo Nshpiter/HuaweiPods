@@ -111,21 +111,27 @@ object DeviceRoutePrefs {
         service: XposedService?,
     ) {
         synchronized(bindingLock) {
-            val remotePrefs = service?.getRemotePreferences(ConfigManager.PREFS_NAME)
-                ?: return@synchronized
-            val localBindings = validBindings(prefs)
-            val remoteBindings = validBindings(remotePrefs)
+            // RemotePreferences 在注入进程中可能是只读代理；同步失败不能影响宿主。
+            val remotePrefs = runCatching {
+                service?.getRemotePreferences(ConfigManager.PREFS_NAME)
+            }.getOrNull() ?: return@synchronized
+            val localBindings = runCatching { validBindings(prefs) }.getOrDefault(emptyMap())
+            val remoteBindings = runCatching { validBindings(remotePrefs) }.getOrDefault(emptyMap())
 
             if (localBindings.isNotEmpty()) {
-                val remoteEditor = remotePrefs.edit()
-                localBindings.forEach(remoteEditor::putString)
-                remoteEditor.commit()
+                runCatching {
+                    val remoteEditor = remotePrefs.edit()
+                    localBindings.forEach(remoteEditor::putString)
+                    remoteEditor.commit()
+                }
             }
             val missingLocalBindings = remoteBindings.filterKeys { it !in localBindings }
             if (missingLocalBindings.isNotEmpty()) {
-                val localEditor = prefs.edit()
-                missingLocalBindings.forEach(localEditor::putString)
-                localEditor.commit()
+                runCatching {
+                    val localEditor = prefs.edit()
+                    missingLocalBindings.forEach(localEditor::putString)
+                    localEditor.commit()
+                }
             }
         }
     }

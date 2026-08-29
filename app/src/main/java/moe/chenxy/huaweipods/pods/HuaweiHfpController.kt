@@ -6,6 +6,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.Process
@@ -19,6 +20,7 @@ import moe.chenxy.huaweipods.smartaudio.OfficialImageIdentityBridge
 import moe.chenxy.huaweipods.utils.miuiStrongToast.MiuiStrongToastUtil
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.BatteryParams
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.HuaweiPodsAction
+import moe.chenxy.huaweipods.utils.miuiStrongToast.data.PodParams
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.addHuaweiPodsAction
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.normalizedEarbudAvailability
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.sendIdentitySharingBroadcast
@@ -41,7 +43,11 @@ object HuaweiHfpController {
     private const val LOW_LATENCY_AUTO_APPLY_RETRY_DELAY_MS = 2_500L
     private const val LOW_LATENCY_AUTO_APPLY_MAX_ATTEMPTS = 2
     private const val FREEBUDS3_SNAPSHOT_TTL_MS = 10 * 60_000L
+    private val CACHED_NOTIFICATION_RESTORE_DELAYS_MS = longArrayOf(400L, 1_200L)
     private const val EXTRA_STATE_CACHED = "state_cached"
+    private const val HOT_RELOAD_ADDRESS_KEY = "huawei_hfp_address"
+    private const val HOT_RELOAD_ROUTE_KEY = "huawei_hfp_route"
+    private const val HOT_RELOAD_BATTERY_KEY = "huawei_hfp_battery"
 
     private var context: Context? = null
     private var device: BluetoothDevice? = null
@@ -133,6 +139,83 @@ object HuaweiHfpController {
             requestPrivateBattery()
             mainHandler.postDelayed(this, BACKGROUND_BATTERY_REFRESH_INTERVAL_MS)
         }
+    }
+
+    fun closeForHotReload() {
+        backgroundBatteryRefreshActive = false
+        mainHandler.removeCallbacksAndMessages(null)
+        cancelPendingSmartAudioSpatialWrite()
+        cancelPendingSmartAudioAudioQuery()
+        cancelAutoLowLatency()
+        synchronized(sessionStateLock) {
+            sessionGeneration++
+            freeClip2AudioStateTracker.reset()
+        }
+        val receiverContext = context
+        if (receiverRegistered && receiverContext != null) {
+            runCatching { receiverContext.unregisterReceiver(receiver) }
+                .onFailure { error ->
+                    if (error !is IllegalArgumentException) {
+                        Log.w(TAG, "Failed to unregister Huawei HFP receiver", error)
+                    }
+                }
+        }
+        receiverRegistered = false
+        HuaweiL2capAncController.disconnect(device)
+        context = null
+        device = null
+        sessionRoute = HuaweiDeviceRoute.UNSUPPORTED
+        currentBattery = null
+        currentAnc = HuaweiAncState(NoiseControlMode.UNKNOWN)
+        currentDeviceInfoIdentity = null
+        connectedBroadcastSent = false
+        batteryRequestInFlight = false
+        ancRequestInFlight = false
+        equalizerStateRequestInFlight = false
+        deviceInfoRequestInFlight = false
+        deviceIdentityPublishInFlight = false
+    }
+
+    /** 使用纯基础类型交接状态，避免跨 ClassLoader 传 Parcelable。 */
+    fun saveHotReloadState(outState: Bundle) {
+        synchronized(sessionStateLock) {
+            val currentDevice = device ?: return
+            val battery = currentBattery ?: return
+            outState.putString(HOT_RELOAD_ADDRESS_KEY, currentDevice.address)
+            outState.putString(HOT_RELOAD_ROUTE_KEY, sessionRoute.name)
+            outState.putIntArray(HOT_RELOAD_BATTERY_KEY, encodeHotReloadBattery(battery))
+        }
+    }
+
+    fun hotReloadSessionAddress(savedState: Bundle): String? =
+        savedState.getString(HOT_RELOAD_ADDRESS_KEY)
+
+    /** 在 HeadsetStateDispatcher 恢复会话后补回电量，并主动重建通知。 */
+    fun restoreHotReloadState(savedState: Bundle) {
+        val restoredAddress = savedState.getString(HOT_RELOAD_ADDRESS_KEY) ?: return
+        val restoredRoute = savedState.getString(HOT_RELOAD_ROUTE_KEY)
+            ?.let { runCatching { HuaweiDeviceRoute.valueOf(it) }.getOrNull() }
+            ?: return
+        val restoredBattery = savedState.getIntArray(HOT_RELOAD_BATTERY_KEY)
+            ?.let(::decodeHotReloadBattery)
+            ?: return
+        synchronized(sessionStateLock) {
+            val currentDevice = device ?: return
+            if (!currentDevice.address.equals(restoredAddress, ignoreCase = true) ||
+                sessionRoute != restoredRoute
+            ) {
+                return
+            }
+            // connectPod() 已经发起真实电量查询；若回包先到，不允许旧缓存覆盖新状态。
+            if (currentBattery != null && !currentBatteryIsCached) return
+            currentBattery = restoredBattery
+            currentBatteryIsCached = true
+            sendConnectionState("connected")
+            sendConnected(force = true)
+            sendBattery(restoredBattery, cached = true)
+        }
+        scheduleCachedNotificationRestore()
+        Log.i(TAG, "API 102 battery state restored device=$restoredAddress")
     }
 
     private val receiver = object : BroadcastReceiver() {
@@ -293,14 +376,16 @@ object HuaweiHfpController {
             Log.w(TAG, "Huawei session skipped: unsupported device=${device.address}")
             return
         }
-        synchronized(sessionStateLock) {
+        val restoredCachedBattery = synchronized(sessionStateLock) {
             ensureSession(context, device, route)
             val restored = restoreFreeBuds3StateAfterProcessRestart(context, device, route)
             sendConnectionState("connecting")
             sendConnected()
             restored?.battery?.let { sendBattery(it, cached = true) }
             restored?.moduleAnc?.let { sendAnc(it, cached = true) }
+            restored?.battery != null
         }
+        if (restoredCachedBattery) scheduleCachedNotificationRestore()
         requestOfficialImageIdentity(force = true)
         requestAncState(force = true)
         requestPrivateBattery()
@@ -1803,6 +1888,21 @@ object HuaweiHfpController {
         )
     }
 
+    /** 等待 API 102 的小米蓝牙新代接收器完成注册，再用缓存电量替换旧通知。 */
+    private fun scheduleCachedNotificationRestore() {
+        val currentDevice = device ?: return
+        val generation = sessionGeneration
+        val address = currentDevice.address
+        val route = sessionRoute
+        CACHED_NOTIFICATION_RESTORE_DELAYS_MS.forEach { delayMs ->
+            mainHandler.postDelayed({
+                if (!isCurrentSession(generation, address, route)) return@postDelayed
+                restoreCurrentNotification()
+                Log.i(TAG, "Cached notification restored device=$address delayMs=$delayMs")
+            }, delayMs)
+        }
+    }
+
     private fun requestFreeClip2AudioState(
         force: Boolean = false,
         pendingOnly: Boolean = false,
@@ -2211,6 +2311,43 @@ object HuaweiHfpController {
             .map { it.toInt(16).toByte() }
             .toByteArray()
     }
+}
+
+private const val HOT_RELOAD_POD_FIELD_COUNT = 5
+private const val HOT_RELOAD_BATTERY_FIELD_COUNT = HOT_RELOAD_POD_FIELD_COUNT * 3
+
+internal fun encodeHotReloadBattery(battery: BatteryParams): IntArray = IntArray(
+    HOT_RELOAD_BATTERY_FIELD_COUNT,
+).also { encoded ->
+    fun write(offset: Int, pod: PodParams?) {
+        encoded[offset] = if (pod == null) 0 else 1
+        if (pod == null) return
+        encoded[offset + 1] = pod.battery
+        encoded[offset + 2] = if (pod.isCharging) 1 else 0
+        encoded[offset + 3] = if (pod.isConnected) 1 else 0
+        encoded[offset + 4] = pod.rawStatus
+    }
+    write(0, battery.left)
+    write(HOT_RELOAD_POD_FIELD_COUNT, battery.right)
+    write(HOT_RELOAD_POD_FIELD_COUNT * 2, battery.case)
+}
+
+internal fun decodeHotReloadBattery(encoded: IntArray): BatteryParams? {
+    if (encoded.size != HOT_RELOAD_BATTERY_FIELD_COUNT) return null
+    fun read(offset: Int): PodParams? {
+        if (encoded[offset] == 0) return null
+        return PodParams(
+            battery = encoded[offset + 1],
+            isCharging = encoded[offset + 2] != 0,
+            isConnected = encoded[offset + 3] != 0,
+            rawStatus = encoded[offset + 4],
+        )
+    }
+    return BatteryParams(
+        left = read(0),
+        right = read(HOT_RELOAD_POD_FIELD_COUNT),
+        case = read(HOT_RELOAD_POD_FIELD_COUNT * 2),
+    )
 }
 
 private data class FreeClip2AudioWriteRequest(

@@ -36,9 +36,14 @@ object LowLatencyPrefs {
         route: HuaweiDeviceRoute,
     ): Boolean? {
         val key = preferenceKey(address, route) ?: return null
-        if (prefs.contains(key)) return prefs.getBoolean(key, false)
+        val directValue = runCatching {
+            if (prefs.contains(key)) prefs.getBoolean(key, false) else null
+        }.getOrNull()
+        if (directValue != null) return directValue
         val legacyKey = legacyPreferenceKey(address, route) ?: return null
-        return if (prefs.contains(legacyKey)) prefs.getBoolean(legacyKey, false) else null
+        return runCatching {
+            if (prefs.contains(legacyKey)) prefs.getBoolean(legacyKey, false) else null
+        }.getOrNull()
     }
 
     fun isAutoApplyEnabled(address: String, route: HuaweiDeviceRoute): Boolean =
@@ -85,11 +90,16 @@ object LowLatencyPrefs {
         enabled: Boolean,
     ): Boolean {
         val key = preferenceKey(address, route) ?: return false
-        return prefs.edit().putBoolean(key, enabled).commit()
+        // LSPosed RemotePreferences 在注入进程中可能是只读代理；写入只能尽力而为。
+        return runCatching {
+            prefs.edit().putBoolean(key, enabled).commit()
+        }.getOrDefault(false)
     }
 
     fun syncWithRemote(prefs: SharedPreferences, service: XposedService?) {
-        val remotePrefs = service?.getRemotePreferences(ConfigManager.PREFS_NAME) ?: return
+        val remotePrefs = runCatching {
+            service?.getRemotePreferences(ConfigManager.PREFS_NAME)
+        }.getOrNull() ?: return
         syncWithRemote(prefs, remotePrefs)
     }
 
@@ -97,18 +107,22 @@ object LowLatencyPrefs {
         prefs: SharedPreferences,
         remotePrefs: SharedPreferences,
     ) = synchronized(syncLock) {
-        val local = lowLatencyValues(prefs)
-        val remote = lowLatencyValues(remotePrefs)
+        val local = runCatching { lowLatencyValues(prefs) }.getOrDefault(emptyMap())
+        val remote = runCatching { lowLatencyValues(remotePrefs) }.getOrDefault(emptyMap())
         if (local.isNotEmpty()) {
-            val editor = remotePrefs.edit()
-            local.forEach(editor::putBoolean)
-            editor.commit()
+            runCatching {
+                val editor = remotePrefs.edit()
+                local.forEach(editor::putBoolean)
+                editor.commit()
+            }
         }
         val missingLocal = remote.filterKeys { it !in local }
         if (missingLocal.isNotEmpty()) {
-            val editor = prefs.edit()
-            missingLocal.forEach(editor::putBoolean)
-            editor.commit()
+            runCatching {
+                val editor = prefs.edit()
+                missingLocal.forEach(editor::putBoolean)
+                editor.commit()
+            }
         }
     }
 

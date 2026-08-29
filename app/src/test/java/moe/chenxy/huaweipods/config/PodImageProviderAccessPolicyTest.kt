@@ -21,6 +21,20 @@ class PodImageProviderAccessPolicyTest {
     }
 
     @Test
+    fun `shared bluetooth uid may open images through an allowed package`() {
+        assertTrue(
+            PodImageProviderAccessPolicy.mayOpenImage(
+                listOf("com.android.bluetooth", "com.xiaomi.bluetooth"),
+            ),
+        )
+        assertFalse(
+            PodImageProviderAccessPolicy.mayOpenImage(
+                listOf("com.example.one", "com.example.two"),
+            ),
+        )
+    }
+
+    @Test
     fun `only trusted identity producers may submit an identity`() {
         assertTrue(PodImageProviderAccessPolicy.maySubmitOfficialImageIdentity("moe.chenxy.huaweipods"))
         assertTrue(PodImageProviderAccessPolicy.maySubmitOfficialImageIdentity("com.android.bluetooth"))

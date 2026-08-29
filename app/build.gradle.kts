@@ -18,8 +18,8 @@ android {
         applicationId = "moe.chenxy.huaweipods"
         minSdk = 35
         targetSdk = 36
-        versionCode = 15
-        versionName = "1.7.1"
+        versionCode = 16
+        versionName = "1.8.0"
         buildConfigField("long", "BUILD_TIMESTAMP", moduleBuildTimestamp.toString())
     }
 
@@ -88,8 +88,10 @@ configurations.configureEach {
 
 dependencies {
     implementation(libs.coreKtx)
-    compileOnly(libs.libxposedApi)
-    implementation(libs.libxposedService)
+    debugCompileOnly(libs.libxposedApi)
+    debugImplementation(libs.libxposedService)
+    releaseCompileOnly(libs.libxposedApi102)
+    releaseImplementation(libs.libxposedService102)
     implementation(libs.kotlinx.serialization.json)
     testImplementation("junit:junit:4.13.2")
 
@@ -113,4 +115,12 @@ dependencies {
 
     // HyperOS Focus Island API
     implementation(libs.focus.api)
+
+}
+
+configurations.matching { it.name.startsWith("release") }.configureEach {
+    resolutionStrategy.force(
+        "io.github.libxposed:api:${libs.versions.libxposedApi102.get()}",
+        "io.github.libxposed:service:${libs.versions.libxposedService102.get()}"
+    )
 }

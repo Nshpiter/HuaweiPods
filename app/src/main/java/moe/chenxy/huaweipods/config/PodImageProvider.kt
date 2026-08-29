@@ -20,7 +20,7 @@ class PodImageProvider : ContentProvider() {
     override fun openFile(uri: Uri, mode: String): ParcelFileDescriptor? {
         if (mode != "r") throw SecurityException("Pod images are read-only")
         val context = context ?: return null
-        if (!PodImageProviderAccessPolicy.mayOpenImage(resolveCallingPackage(context))) {
+        if (!PodImageProviderAccessPolicy.mayOpenImage(resolveCallingPackages(context))) {
             throw SecurityException("Caller is not an active HuaweiPods image scope")
         }
         val fileName = uri.lastPathSegment ?: return null
@@ -105,4 +105,10 @@ class PodImageProvider : ContentProvider() {
         runCatching { callingPackage }.getOrNull() ?: context.packageManager
             .getPackagesForUid(android.os.Binder.getCallingUid())
             ?.singleOrNull()
+
+    private fun resolveCallingPackages(context: Context): Set<String> = buildSet {
+        runCatching { callingPackage }.getOrNull()?.let(::add)
+        context.packageManager.getPackagesForUid(android.os.Binder.getCallingUid())
+            ?.forEach(::add)
+    }
 }

@@ -11,6 +11,8 @@ import android.content.ContextWrapper
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.Handler
+import android.os.Bundle
+import android.os.Looper
 import android.os.SystemClock
 import moe.chenxy.huaweipods.BuildConfig
 import moe.chenxy.huaweipods.pods.HuaweiHfpController
@@ -18,6 +20,7 @@ import moe.chenxy.huaweipods.pods.HuaweiDeviceInfoIdentity
 import moe.chenxy.huaweipods.pods.HuaweiDeviceRouteProbePolicy
 import moe.chenxy.huaweipods.pods.HuaweiDeviceRouteProbeSession
 import moe.chenxy.huaweipods.pods.HuaweiL2capAncController
+import moe.chenxy.huaweipods.pods.HuaweiWearDetectionController
 import moe.chenxy.huaweipods.pods.huaweiDeviceRoute
 import moe.chenxy.huaweipods.pods.isSupported
 import moe.chenxy.huaweipods.smartaudio.OfficialImageIdentityBridge
@@ -32,11 +35,22 @@ object HeadsetStateDispatcher : HookContext() {
     private const val ROUTE_PROBE_WATCHDOG_MS = 5_500L
 
     private var appRequestReceiverRegistered = false
+    private var appRequestReceiverContext: Context? = null
+    private var appRequestReceiver: BroadcastReceiver? = null
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val pendingHostCallbacks = ConcurrentHashMap<Runnable, Handler>()
+    @Volatile
+    private var acceptingCallbacks = false
     private val connectedA2dpAddresses = ConcurrentHashMap.newKeySet<String>()
     private val activeRouteProbe = AtomicReference<HuaweiDeviceRouteProbeSession?>(null)
     private val lastRouteProbeStartedAtMs = ConcurrentHashMap<String, Long>()
 
     override fun onHook() {
+        acceptingCallbacks = true
+        runCatching {
+            val activityThread = Class.forName("android.app.ActivityThread")
+            activityThread.getDeclaredMethod("currentApplication").invoke(null) as? Context
+        }.getOrNull()?.let(::registerAppRequestReceiver)
         runCatching {
             hookAfter(findMethod("com.android.bluetooth.btservice.AdapterService", "onCreate")) {
                 registerAppRequestReceiver(instance as? Context)
@@ -53,7 +67,7 @@ object HeadsetStateDispatcher : HookContext() {
             if (device == null || currState == fromState) {
                 return@hookAfter
             }
-            handler.post {
+            postTracked(handler) {
                 runCatching {
                     val normalizedAddress = device.address.uppercase()
                     if (currState == BluetoothHeadset.STATE_CONNECTED) {
@@ -85,11 +99,95 @@ object HeadsetStateDispatcher : HookContext() {
         }
     }
 
+    override fun onCanClose(): Boolean =
+        activeRouteProbe.get() == null &&
+        HuaweiL2capAncController.canCloseForHotReload() &&
+            OfficialImageIdentityBridge.canCloseForHotReload()
+
+    override fun onSaveHotReloadState(outState: Bundle) {
+        outState.putStringArrayList(
+            "connected_a2dp_addresses",
+            ArrayList(connectedA2dpAddresses),
+        )
+        HuaweiHfpController.saveHotReloadState(outState)
+    }
+
+    @SuppressLint("MissingPermission")
+    override fun onRestoreHotReloadState(savedState: Bundle) {
+        val context = appRequestReceiverContext ?: currentApplicationOrNull() ?: return
+        val adapter = context.getSystemService(BluetoothManager::class.java)?.adapter ?: return
+        val restoredAddresses = savedState.getStringArrayList("connected_a2dp_addresses")
+            .orEmpty()
+            .map(String::uppercase)
+            .toMutableSet()
+        runCatching {
+            adapter.bondedDevices.filter { device ->
+                isHuaweiPod(device) && isActiveA2dpDevice(device)
+            }.mapTo(restoredAddresses) { it.address.uppercase() }
+        }
+        val connectedDevices = restoredAddresses.mapNotNull { address ->
+            runCatching { adapter.getRemoteDevice(address) }.getOrNull()
+                ?.takeIf { isHuaweiPod(it) && isDeviceConnected(it) }
+                ?.also { connectedA2dpAddresses += address }
+        }
+        // Controller 只维护一个 HFP 会话。优先恢复旧代实际持有的设备，避免多设备
+        // 遍历时后一个地址覆盖已恢复的电量并使通知恢复任务失效。
+        val savedAddress = HuaweiHfpController.hotReloadSessionAddress(savedState)
+        val sessionDevice = connectedDevices.firstOrNull {
+            it.address.equals(savedAddress, ignoreCase = true)
+        } ?: connectedDevices.firstOrNull()
+        sessionDevice?.let { device ->
+            HuaweiHfpController.connectPod(context, device)
+            HuaweiHfpController.restoreHotReloadState(savedState)
+        }
+    }
+
+    override fun onClose() {
+        acceptingCallbacks = false
+        pendingHostCallbacks.entries.toList().forEach { (task, handler) ->
+            handler.removeCallbacks(task)
+        }
+        pendingHostCallbacks.clear()
+        mainHandler.removeCallbacksAndMessages(null)
+        val receiver = appRequestReceiver
+        val receiverContext = appRequestReceiverContext
+        if (receiver != null && receiverContext != null) {
+            runCatching { receiverContext.unregisterReceiver(receiver) }
+                .onFailure { error ->
+                    if (error !is IllegalArgumentException) {
+                        Log.w("HuaweiPods", "Failed to unregister app request receiver", error)
+                    }
+                }
+        }
+        appRequestReceiver = null
+        appRequestReceiverContext = null
+        appRequestReceiverRegistered = false
+        connectedA2dpAddresses.clear()
+        activeRouteProbe.set(null)
+        lastRouteProbeStartedAtMs.clear()
+        HuaweiHfpController.closeForHotReload()
+        val rfcommStopped = HuaweiL2capAncController.closeForHotReload()
+        HuaweiWearDetectionController.closeForHotReload()
+        val imageBridgeStopped = OfficialImageIdentityBridge.closeForHotReload()
+        check(rfcommStopped && imageBridgeStopped) {
+            "Bluetooth hot-reload workers did not stop rfcomm=$rfcommStopped image=$imageBridgeStopped"
+        }
+    }
+
+    private fun postTracked(handler: Handler, block: () -> Unit) {
+        lateinit var task: Runnable
+        task = Runnable {
+            pendingHostCallbacks.remove(task)
+            if (acceptingCallbacks) block()
+        }
+        pendingHostCallbacks[task] = handler
+        if (!handler.post(task)) pendingHostCallbacks.remove(task)
+    }
+
     @SuppressLint("MissingPermission")
     private fun registerAppRequestReceiver(context: Context?) {
         if (context == null || appRequestReceiverRegistered) return
-        val registered = runCatching {
-            context.registerReceiver(object : BroadcastReceiver() {
+        val receiver = object : BroadcastReceiver() {
                 override fun onReceive(context: Context?, intent: Intent?) {
                     if (context == null) return
                     val receivedIntent = intent ?: return
@@ -142,7 +240,9 @@ object HeadsetStateDispatcher : HookContext() {
                         Log.e("HuaweiPods", "App request receiver failed without interrupting Bluetooth", it)
                     }
                 }
-            }, IntentFilter().apply {
+            }
+        val registered = runCatching {
+            context.registerReceiver(receiver, IntentFilter().apply {
                 addHuaweiPodsAction(HuaweiPodsAction.ACTION_PODS_UI_INIT)
                 addHuaweiPodsAction(HuaweiPodsAction.ACTION_REFRESH_STATUS)
                 addHuaweiPodsAction(HuaweiPodsAction.ACTION_CONNECT_POD_REQUEST)
@@ -151,7 +251,11 @@ object HeadsetStateDispatcher : HookContext() {
         }.onFailure {
             Log.e("HuaweiPods", "Failed to register app request receiver", it)
         }.isSuccess
-        if (registered) appRequestReceiverRegistered = true
+        if (registered) {
+            appRequestReceiver = receiver
+            appRequestReceiverContext = context
+            appRequestReceiverRegistered = true
+        }
     }
 
     @SuppressLint("MissingPermission")
@@ -192,7 +296,7 @@ object HeadsetStateDispatcher : HookContext() {
             sendDeviceRouteProbeResult(context, session, null)
             return
         }
-        Handler(context.mainLooper).postDelayed(
+        mainHandler.postDelayed(
             { completeDeviceRouteProbe(context, session, null) },
             ROUTE_PROBE_WATCHDOG_MS,
         )
@@ -220,7 +324,7 @@ object HeadsetStateDispatcher : HookContext() {
                 address = session.address,
                 route = verifiedRoute,
                 identity = identity,
-                callbackHandler = Handler(context.mainLooper),
+                callbackHandler = mainHandler,
             ) { publishResult ->
                 if (activeRouteProbe.get() != session) return@publishVerifiedRouteAsync
                 val remainsConnected = HuaweiDeviceRouteProbePolicy.mayProbeInBluetoothProcess(

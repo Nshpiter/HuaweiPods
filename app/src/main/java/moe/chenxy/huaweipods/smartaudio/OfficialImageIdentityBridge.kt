@@ -4,6 +4,8 @@ import android.content.Context
 import android.os.Bundle
 import android.os.Handler
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 import moe.chenxy.huaweipods.pods.HuaweiDeviceInfoIdentity
 import moe.chenxy.huaweipods.pods.HuaweiDeviceInfoRoutePolicy
 import moe.chenxy.huaweipods.pods.HuaweiDeviceRoute
@@ -25,6 +27,16 @@ internal object OfficialImageIdentityBridge {
 
     private val executor = Executors.newSingleThreadExecutor { runnable ->
         Thread(runnable, "HuaweiPods-image-identity")
+    }
+    private val inFlight = AtomicInteger(0)
+
+    /** ContentProvider.call 不能保证响应 interrupt；有请求执行时应在预检阶段拒绝热重载。 */
+    fun canCloseForHotReload(): Boolean = inFlight.get() == 0
+
+    fun closeForHotReload(): Boolean {
+        executor.shutdownNow()
+        return runCatching { executor.awaitTermination(1, TimeUnit.SECONDS) }
+            .getOrDefault(false)
     }
 
     fun publishAsync(
@@ -61,31 +73,46 @@ internal object OfficialImageIdentityBridge {
         onComplete: (OfficialImageIdentityPublishResult) -> Unit,
     ) {
         val appContext = context.applicationContext ?: context
-        executor.execute {
-            val result = if (!HuaweiDeviceInfoRoutePolicy.isCompatible(route, identity.modelId)) {
-                OfficialImageIdentityPublishResult(false, false, false)
-            } else {
-                val extras = Bundle().apply {
-                    putString(SmartAudioImageCache.EXTRA_ADDRESS, address)
-                    putString(SmartAudioImageCache.EXTRA_MODEL_ID, identity.modelId)
-                    putString(SmartAudioImageCache.EXTRA_SUB_MODEL_ID, identity.subModelId)
+        inFlight.incrementAndGet()
+        runCatching {
+            executor.execute {
+                val result = if (!HuaweiDeviceInfoRoutePolicy.isCompatible(route, identity.modelId)) {
+                    OfficialImageIdentityPublishResult(false, false, false)
+                } else {
+                    val extras = Bundle().apply {
+                        putString(SmartAudioImageCache.EXTRA_ADDRESS, address)
+                        putString(SmartAudioImageCache.EXTRA_MODEL_ID, identity.modelId)
+                        putString(SmartAudioImageCache.EXTRA_SUB_MODEL_ID, identity.subModelId)
+                    }
+                    runCatching {
+                        appContext.contentResolver.call(
+                            SmartAudioImageCache.providerUri,
+                            SmartAudioImageCache.PROVIDER_METHOD_RECORD_IDENTITY,
+                            null,
+                            extras,
+                        )
+                    }.getOrNull()?.let { response ->
+                        OfficialImageIdentityPublishResult(
+                            identityVerified = response.getBoolean(RESULT_IDENTITY_VERIFIED, false),
+                            routeBound = response.getBoolean(RESULT_ROUTE_BOUND, false),
+                            imageScheduled = response.getBoolean(RESULT_IMAGE_SCHEDULED, false),
+                        )
+                    } ?: OfficialImageIdentityPublishResult(false, false, false)
                 }
-                runCatching {
-                    appContext.contentResolver.call(
-                        SmartAudioImageCache.providerUri,
-                        SmartAudioImageCache.PROVIDER_METHOD_RECORD_IDENTITY,
-                        null,
-                        extras,
-                    )
-                }.getOrNull()?.let { response ->
-                    OfficialImageIdentityPublishResult(
-                        identityVerified = response.getBoolean(RESULT_IDENTITY_VERIFIED, false),
-                        routeBound = response.getBoolean(RESULT_ROUTE_BOUND, false),
-                        imageScheduled = response.getBoolean(RESULT_IMAGE_SCHEDULED, false),
-                    )
-                } ?: OfficialImageIdentityPublishResult(false, false, false)
+                if (!callbackHandler.post {
+                        try {
+                            onComplete(result)
+                        } finally {
+                            inFlight.decrementAndGet()
+                        }
+                    }
+                ) {
+                    inFlight.decrementAndGet()
+                }
             }
-            callbackHandler.post { onComplete(result) }
+        }.onFailure {
+            inFlight.decrementAndGet()
+            throw it
         }
     }
 }

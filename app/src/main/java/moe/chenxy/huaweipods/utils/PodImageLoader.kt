@@ -43,14 +43,13 @@ object PodImageLoader {
         }.getOrNull()
         if (cloud != null) return cloud
 
-        val moduleContext = runCatching {
-            context.createPackageContext(BuildConfig.APPLICATION_ID, Context.CONTEXT_IGNORE_SECURITY)
-        }.getOrNull() ?: return null
+        if (!ModuleResourceResolver.isCurrentModuleBuild(context)) return null
+        val moduleResources = ModuleResourceResolver.resources(context) ?: return null
         val configuredRoute = runCatching {
             DeviceRoutePrefs.resolve(prefs, address, earphone?.name)
         }.getOrDefault(HuaweiDeviceRoute.UNSUPPORTED)
         return BitmapFactory.decodeResource(
-            moduleContext.resources,
+            moduleResources,
             modelFallbackResId(
                 imageFallbackRoute(verifiedRoute, configuredRoute),
                 resource,
@@ -82,14 +81,13 @@ object PodImageLoader {
         }.getOrNull()
         if (cloud != null) return cloud
 
-        val moduleContext = runCatching {
-            context.createPackageContext(BuildConfig.APPLICATION_ID, Context.CONTEXT_IGNORE_SECURITY)
-        }.getOrNull() ?: return null
+        if (!ModuleResourceResolver.isCurrentModuleBuild(context)) return null
+        val moduleResources = ModuleResourceResolver.resources(context) ?: return null
         val configuredRoute = runCatching {
             DeviceRoutePrefs.resolve(prefs, address, earphone?.name)
         }.getOrDefault(HuaweiDeviceRoute.UNSUPPORTED)
         return BitmapFactory.decodeResource(
-            moduleContext.resources,
+            moduleResources,
             modelFallbackResId(
                 imageFallbackRoute(verifiedRoute, configuredRoute),
                 resource,

@@ -1,6 +1,7 @@
 package moe.chenxy.huaweipods.hook.milink
 
 import android.annotation.SuppressLint
+import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
@@ -93,9 +94,12 @@ import java.util.UUID
 import java.util.WeakHashMap
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.math.roundToInt
 
 internal data class MiLinkAncSelection(
@@ -370,6 +374,30 @@ private data class MiLinkVolumeProgressBinding(
     val root: WeakReference<View>,
     val route: HuaweiDeviceRoute,
 )
+
+private data class MiLinkBoundClickState(
+    val listener: View.OnClickListener?,
+    val clickable: Boolean,
+)
+
+/**
+ * Bluetooth profile 代理是系统持有的异步回调，热重载前必须等它完成解绑。
+ * [active] 只决定回调是否还能执行业务；无论是否失效，收到代理后都要立即关闭。
+ */
+private class MiLinkProfileProxyRequest(
+    val adapter: BluetoothAdapter,
+    val profile: Int,
+    val generation: Int,
+) {
+    val callbackLock = Any()
+    val active = AtomicBoolean(true)
+    val completed = AtomicBoolean(false)
+    val completion = CountDownLatch(1)
+    val proxyClosed = AtomicBoolean(false)
+
+    @Volatile
+    var proxy: BluetoothProfile? = null
+}
 
 /** 将 Huawei 的 1/2/3 状态映射为融合设备中心的 0/1/2。无 ANC 的机型不参与接管。 */
 internal fun miLinkAncModeFor(
@@ -741,6 +769,9 @@ object MiLinkServiceHook : HookContext() {
     private const val HUAWEI_ANC_REFRESH_MIN_INTERVAL_MS = 750L
     private const val VISIBLE_ANC_REFRESH_INTERVAL_MS = 2_500L
     private const val MILINK_HEADSET_ICON_MAX_DIMENSION = 512
+    private const val HOT_RELOAD_THREAD_DRAIN_TIMEOUT_MS = 2_000L
+    private const val HOT_RELOAD_PROFILE_DRAIN_TIMEOUT_MS = 1_500L
+    private const val HOT_RELOAD_MAIN_THREAD_TIMEOUT_MS = 3_000L
     private const val VOLUME_CHANGED_ACTION = "android.media.VOLUME_CHANGED_ACTION"
     private const val EXTRA_VOLUME_STREAM_TYPE = "android.media.EXTRA_VOLUME_STREAM_TYPE"
     private const val EXTRA_VOLUME_STREAM_VALUE = "android.media.EXTRA_VOLUME_STREAM_VALUE"
@@ -835,6 +866,7 @@ object MiLinkServiceHook : HookContext() {
     private var stateLoaded = false
     internal var context: Context? = null
     private var receiverRegistered = false
+    private var statusReceiver: BroadcastReceiver? = null
     internal var currentAddress: String? = null
     private var currentName: String? = null
     private var currentRoute: HuaweiDeviceRoute = HuaweiDeviceRoute.UNSUPPORTED
@@ -868,8 +900,23 @@ object MiLinkServiceHook : HookContext() {
     private var lastHeadsetDeviceInfo: Any? = null
     private var lastHeadsetServiceInfo: Any? = null
     private val localBluetoothConnectBurstToken = AtomicInteger(0)
+    private val runtimeGeneration = AtomicInteger(0)
+    private val runtimeLifecycleLock = Any()
+    private val managedWorkerThreads = Collections.newSetFromMap(
+        IdentityHashMap<Thread, Boolean>(),
+    )
+    private val profileProxyRequests = ConcurrentHashMap.newKeySet<MiLinkProfileProxyRequest>()
+    private val boundAncButtonListeners = Collections.synchronizedMap(
+        WeakHashMap<View, MiLinkBoundClickState>(),
+    )
+    private val pendingViewCallbacks = Collections.synchronizedMap(
+        WeakHashMap<View, MutableSet<Runnable>>(),
+    )
+    @Volatile
+    private var acceptingViewCallbacks = false
 
     override fun onHook() {
+        acceptingViewCallbacks = true
         hookMiLinkMediaVolumeChanges()
         hookMiLinkVolumeProgressChanges()
         hookMiLinkHeadsetIconWrites()
@@ -884,6 +931,408 @@ object MiLinkServiceHook : HookContext() {
         hookCirculatePlusFreeClip2AudioEffectApi()
         hookCirculatePlusFreeClip2AudioEffectCard()
         hookLowLatencyQuickCard()
+        currentApplicationOrNull()?.let(::registerStatusReceiver)
+        recreateVisibleMiLinkActivities()
+    }
+
+    override fun onCanClose(): Boolean {
+        val hasWorkers = synchronized(runtimeLifecycleLock) {
+            managedWorkerThreads.any(Thread::isAlive)
+        }
+        val hasPendingProfiles = profileProxyRequests.any { !it.completed.get() }
+        return !hasWorkers &&
+            !hasPendingProfiles &&
+            miLinkHeadsetIconLoads.isEmpty() &&
+            runOnMainThreadBlocking { }
+    }
+
+    override fun onSaveHotReloadState(outState: Bundle) {
+        outState.putString("address", currentAddress)
+        outState.putString("name", currentName)
+        outState.putString("route", currentRoute.name)
+        outState.putInt("anc", currentAnc)
+        currentAncSubMode?.let { outState.putInt("anc_submode", it) }
+        currentTransparencySubMode?.let { outState.putInt("transparency_submode", it) }
+        outState.putString("spatial_mode", currentFreeClip2SpatialMode.name)
+        outState.putString("spatial_scene", currentFreeClip2SpatialScene.name)
+        outState.putString("sound_effect", currentFreeClip2SoundEffect.name)
+        currentFreeClip2EqualizerSelectedId?.let { outState.putInt("freeclip2_eq", it) }
+        currentHuaweiEqualizerSelectedId?.let { outState.putInt("huawei_eq", it) }
+        outState.putBoolean("low_latency", currentLowLatencyEnabled)
+        outState.putBoolean("session_confirmed", currentSessionConfirmed)
+        outState.putStringArrayList(
+            "known_routes",
+            ArrayList(knownHuaweiRoutes.map { (address, route) -> "$address=${route.name}" }),
+        )
+    }
+
+    override fun onRestoreHotReloadState(savedState: Bundle) {
+        currentAddress = savedState.getString("address")
+        currentName = savedState.getString("name")
+        currentRoute = enumValueOrDefault(savedState.getString("route"), HuaweiDeviceRoute.UNSUPPORTED)
+        currentAnc = savedState.getInt("anc", NoiseControlMode.OFF.broadcastStatus)
+        currentAncSubMode = savedState.getInt("anc_submode", -1).takeIf { it >= 0 }
+        currentTransparencySubMode = savedState.getInt("transparency_submode", -1)
+            .takeIf { it >= 0 }
+        currentFreeClip2SpatialMode = enumValueOrDefault(
+            savedState.getString("spatial_mode"),
+            FreeClip2SpatialAudioMode.OFF,
+        )
+        currentFreeClip2SpatialScene = enumValueOrDefault(
+            savedState.getString("spatial_scene"),
+            FreeClip2SpatialScene.DEFAULT,
+        )
+        currentFreeClip2SoundEffect = enumValueOrDefault(
+            savedState.getString("sound_effect"),
+            FreeClip2SoundEffect.DEFAULT,
+        )
+        currentFreeClip2EqualizerSelectedId = savedState.getInt("freeclip2_eq", -1)
+            .takeIf { it >= 0 }
+        currentHuaweiEqualizerSelectedId = savedState.getInt("huawei_eq", -1)
+            .takeIf { it >= 0 }
+        currentLowLatencyEnabled = savedState.getBoolean("low_latency", false)
+        currentSessionConfirmed = savedState.getBoolean("session_confirmed", false)
+        knownHuaweiRoutes.clear()
+        savedState.getStringArrayList("known_routes").orEmpty().forEach { encoded ->
+            val separator = encoded.indexOf('=')
+            if (separator <= 0 || separator == encoded.lastIndex) return@forEach
+            val address = encoded.substring(0, separator)
+            val route = enumValueOrDefault(
+                encoded.substring(separator + 1),
+                HuaweiDeviceRoute.UNSUPPORTED,
+            )
+            if (route.isSupported) knownHuaweiRoutes[address] = route
+        }
+        requestMiLinkAncState("hot-reload-restored")
+        requestFreeClip2AudioState("hot-reload-restored")
+        requestHuaweiEqualizerState("hot-reload-restored", force = true)
+        refreshLowLatencyQuickCard()
+    }
+
+    private inline fun <reified T : Enum<T>> enumValueOrDefault(value: String?, fallback: T): T =
+        value?.let { runCatching { enumValueOf<T>(it) }.getOrNull() } ?: fallback
+
+    override fun onClose() {
+        val cleanupFailures = mutableListOf<Throwable>()
+        acceptingViewCallbacks = false
+        runtimeGeneration.incrementAndGet()
+        localBluetoothConnectBurstToken.incrementAndGet()
+        visibleAncRefreshScheduled.set(false)
+        mainHandler.removeCallbacksAndMessages(null)
+
+        deactivateProfileProxyRequests()
+        val aliveWorkers = drainManagedWorkerThreads()
+        if (aliveWorkers.isNotEmpty()) {
+            cleanupFailures += IllegalStateException(
+                "MiLink workers did not stop: ${aliveWorkers.joinToString()}",
+            )
+        }
+
+        miLinkHeadsetIconExecutor.shutdownNow()
+        val iconExecutorStopped = runCatching {
+            miLinkHeadsetIconExecutor.awaitTermination(
+                HOT_RELOAD_THREAD_DRAIN_TIMEOUT_MS,
+                TimeUnit.MILLISECONDS,
+            )
+        }.onFailure(cleanupFailures::add).getOrDefault(false)
+        if (!iconExecutorStopped) {
+            cleanupFailures += IllegalStateException("MiLink icon executor did not stop")
+        }
+
+        // Worker 可能恰好在关闭边界登记了 profile 请求；再失效一次并等待系统解绑回调。
+        deactivateProfileProxyRequests()
+        val pendingProfiles = drainProfileProxyRequests()
+        if (pendingProfiles.isNotEmpty()) {
+            cleanupFailures += IllegalStateException(
+                "MiLink profile callbacks still registered: ${pendingProfiles.joinToString()}",
+            )
+        }
+
+        val receiver = statusReceiver
+        val receiverContext = context
+        if (receiver != null && receiverContext != null) {
+            runCatching { receiverContext.unregisterReceiver(receiver) }
+                .onFailure { error ->
+                    if (error !is IllegalArgumentException) {
+                        Log.w(TAG, "Failed to unregister MiLink status receiver", error)
+                    }
+                }
+        }
+        statusReceiver = null
+        receiverRegistered = false
+
+        runCatching { runOnMainThreadSync(::restoreMiLinkUiForHotReload) }
+            .onFailure(cleanupFailures::add)
+        miLinkHeadsetIconBitmapCache = null
+        miLinkHeadsetIconRequestCache = null
+        miLinkHeadsetIconLoads.clear()
+
+        ancCards.clear()
+        headsetDetails.clear()
+        miAudioEffectSections.clear()
+        freeClip2OriginalOptionOrders.clear()
+        freeClip2AudioHeadingRoots.clear()
+        freeClip2SoundEffectAnchors.clear()
+        miLinkVolumeLabels.clear()
+        miLinkVolumeProgressBindings.clear()
+        knownHuaweiRoutes.clear()
+        knownWindowsHostIds.clear()
+        ancIdentityGetterMethods.clear()
+        lastAncBatteryController = null
+        lastProfileContext = null
+        lastHeadsetServiceClient = null
+        lastHeadsetDeviceInfo = null
+        lastHeadsetServiceInfo = null
+        lowLatencyCardIcon = null
+        context = null
+        currentAddress = null
+        currentName = null
+        currentSessionConfirmed = false
+
+        if (cleanupFailures.isNotEmpty()) {
+            throw IllegalStateException(
+                "MiLink hot-reload cleanup incomplete (${cleanupFailures.size})",
+            ).also { failure -> cleanupFailures.forEach(failure::addSuppressed) }
+        }
+    }
+
+    private fun restoreMiLinkUiForHotReload() {
+        synchronized(pendingViewCallbacks) {
+            pendingViewCallbacks.entries.toList().forEach { (view, tasks) ->
+                tasks.toList().forEach(view::removeCallbacks)
+            }
+            pendingViewCallbacks.clear()
+        }
+
+        synchronized(ancCards) {
+            ancCards.entries.toList().forEach { (card, binding) ->
+                runCatching {
+                    restoreAncCardViews(card, binding, binding.clearView?.get(), "hot-reload")
+                }.onFailure { Log.w(TAG, "MiLink ANC card cleanup failed", it) }
+            }
+        }
+
+        val roots = Collections.newSetFromMap(IdentityHashMap<View, Boolean>())
+        synchronized(headsetDetails) { roots.addAll(headsetDetails.keys) }
+        synchronized(ancCards) {
+            ancCards.values.mapNotNull { it.detail.get() as? View }.forEach(roots::add)
+        }
+        synchronized(miAudioEffectSections) {
+            miAudioEffectSections.values.mapNotNull { it.detail.get() as? View }.forEach(roots::add)
+        }
+        synchronized(miLinkVolumeLabels) { roots.addAll(miLinkVolumeLabels.keys) }
+        roots.forEach { root ->
+            runCatching { restoreFreeClip2CardPresentation(root) }
+            runCatching { restoreHuaweiEqualizerControls(root) }
+            runCatching { unbindMiLinkVolumeProgress(root) }
+            findTaggedView(root, ANC_SUBMODE_SELECTOR_TAG)?.let { selector ->
+                (selector.parent as? ViewGroup)?.removeView(selector)
+            }
+        }
+
+        synchronized(originalHostModeVisibility) {
+            originalHostModeVisibility.entries.toList().forEach { (detail, visible) ->
+                runCatching { writeHostModeVisible(detail, visible) }
+            }
+            originalHostModeVisibility.clear()
+        }
+        synchronized(hiddenCapabilityViews) {
+            hiddenCapabilityViews.keys.toList().forEach(::restoreCapabilityView)
+            hiddenCapabilityViews.clear()
+        }
+        synchronized(freeClip2OriginalLabels) {
+            freeClip2OriginalLabels.entries.toList().forEach { (label, original) ->
+                label.text = original
+            }
+            freeClip2OriginalLabels.clear()
+        }
+        synchronized(miLinkVolumeOriginalLabels) {
+            miLinkVolumeOriginalLabels.entries.toList().forEach { (label, original) ->
+                label.text = original
+            }
+            miLinkVolumeOriginalLabels.clear()
+        }
+        synchronized(miLinkHeadsetIconViewStates) {
+            miLinkHeadsetIconViewStates.keys.toList().forEach(::restoreMiLinkHeadsetIcon)
+            miLinkHeadsetIconViewStates.clear()
+        }
+        synchronized(boundAncButtonListeners) {
+            boundAncButtonListeners.entries.toList().forEach { (button, state) ->
+                button.setOnClickListener(state.listener)
+                button.isClickable = state.clickable
+            }
+            boundAncButtonListeners.clear()
+        }
+    }
+
+    /** API 102 不重放页面构建回调；重建当前 MiLink Activity 让新代重新绑定控件。 */
+    private fun recreateVisibleMiLinkActivities() {
+        runCatching {
+            val activityThreadClass = Class.forName("android.app.ActivityThread")
+            val activityThread = activityThreadClass.getDeclaredMethod("currentActivityThread")
+                .apply { isAccessible = true }
+                .invoke(null) ?: return@runCatching
+            val records = getObjectField(activityThread, "mActivities") as? Map<*, *>
+                ?: return@runCatching
+            records.values.mapNotNull { record -> getObjectField(record, "activity") }
+                .filter { activity -> activity.javaClass.name.startsWith("com.milink.") }
+                .forEach { activity ->
+                    mainHandler.post {
+                        runCatching { callMethod(activity, "recreate") }
+                            .onFailure { Log.w(TAG, "Unable to recreate MiLink activity", it) }
+                    }
+                }
+        }.onFailure { Log.w(TAG, "Unable to inspect active MiLink activities", it) }
+    }
+
+    private fun runOnMainThreadSync(block: () -> Unit) {
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            block()
+            return
+        }
+        val completion = CountDownLatch(1)
+        val failure = AtomicReference<Throwable?>()
+        val task = Runnable {
+            try {
+                block()
+            } catch (throwable: Throwable) {
+                failure.set(throwable)
+            } finally {
+                completion.countDown()
+            }
+        }
+        check(mainHandler.post(task)) { "Unable to schedule MiLink UI cleanup" }
+        val completed = try {
+            completion.await(HOT_RELOAD_MAIN_THREAD_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+        } catch (interrupted: InterruptedException) {
+            Thread.currentThread().interrupt()
+            mainHandler.removeCallbacks(task)
+            throw IllegalStateException("Interrupted while waiting for MiLink UI cleanup", interrupted)
+        }
+        if (!completed) {
+            mainHandler.removeCallbacks(task)
+            throw IllegalStateException("Timed out waiting for MiLink UI cleanup")
+        }
+        failure.get()?.let { throw it }
+    }
+
+    private fun drainManagedWorkerThreads(): List<String> {
+        val workers = synchronized(runtimeLifecycleLock) {
+            managedWorkerThreads.toList()
+        }
+        workers.filter { it !== Thread.currentThread() }.forEach(Thread::interrupt)
+        val deadline = SystemClock.elapsedRealtime() + HOT_RELOAD_THREAD_DRAIN_TIMEOUT_MS
+        workers.filter { it !== Thread.currentThread() }.forEach { worker ->
+            val remainingMs = deadline - SystemClock.elapsedRealtime()
+            if (remainingMs <= 0L) return@forEach
+            try {
+                worker.join(remainingMs)
+            } catch (interrupted: InterruptedException) {
+                Thread.currentThread().interrupt()
+                return@forEach
+            }
+        }
+        return workers.filter(Thread::isAlive).map { it.name }
+    }
+
+    private fun deactivateProfileProxyRequests() {
+        profileProxyRequests.toList().forEach { request ->
+            request.active.set(false)
+            synchronized(request.callbackLock) {
+                closeProfileProxyOnce(request, request.proxy)
+            }
+        }
+    }
+
+    private fun drainProfileProxyRequests(): List<Int> {
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            val deadline = SystemClock.elapsedRealtime() + HOT_RELOAD_PROFILE_DRAIN_TIMEOUT_MS
+            profileProxyRequests.toList().forEach { request ->
+                val remainingMs = deadline - SystemClock.elapsedRealtime()
+                if (remainingMs <= 0L) return@forEach
+                try {
+                    request.completion.await(remainingMs, TimeUnit.MILLISECONDS)
+                } catch (interrupted: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                    return@forEach
+                }
+            }
+        }
+        return profileProxyRequests.filterNot { it.completed.get() }.map { it.profile }
+    }
+
+    private fun closeProfileProxyOnce(
+        request: MiLinkProfileProxyRequest,
+        proxy: BluetoothProfile?,
+    ) {
+        if (proxy == null || !request.proxyClosed.compareAndSet(false, true)) return
+        runCatching { request.adapter.closeProfileProxy(request.profile, proxy) }
+            .onFailure {
+                Log.w(TAG, "MiLink profile proxy close failed profile=${request.profile}", it)
+            }
+    }
+
+    private fun completeProfileProxyRequest(
+        request: MiLinkProfileProxyRequest,
+        proxy: BluetoothProfile? = request.proxy,
+    ) {
+        synchronized(request.callbackLock) {
+            request.proxy = proxy
+            closeProfileProxyOnce(request, proxy)
+            request.active.set(false)
+        }
+        if (request.completed.compareAndSet(false, true)) {
+            profileProxyRequests.remove(request)
+            request.completion.countDown()
+        }
+    }
+
+    private fun startManagedWorker(name: String, block: (Int) -> Unit): Boolean {
+        val generation = runtimeGeneration.get()
+        lateinit var worker: Thread
+        worker = Thread({
+            try {
+                if (acceptingViewCallbacks && runtimeGeneration.get() == generation) {
+                    block(generation)
+                }
+            } finally {
+                synchronized(runtimeLifecycleLock) {
+                    managedWorkerThreads.remove(worker)
+                }
+            }
+        }, name).apply { isDaemon = true }
+        synchronized(runtimeLifecycleLock) {
+            if (!acceptingViewCallbacks || runtimeGeneration.get() != generation) return false
+            managedWorkerThreads.add(worker)
+            worker.start()
+        }
+        return true
+    }
+
+    private fun isRuntimeGenerationActive(generation: Int): Boolean =
+        acceptingViewCallbacks && runtimeGeneration.get() == generation
+
+    private fun postTracked(view: View, block: () -> Unit) {
+        if (!acceptingViewCallbacks) return
+        lateinit var task: Runnable
+        task = Runnable {
+            synchronized(pendingViewCallbacks) {
+                pendingViewCallbacks[view]?.let { tasks ->
+                    tasks.remove(task)
+                    if (tasks.isEmpty()) pendingViewCallbacks.remove(view)
+                }
+            }
+            if (acceptingViewCallbacks) block()
+        }
+        synchronized(pendingViewCallbacks) {
+            if (!acceptingViewCallbacks) return
+            pendingViewCallbacks.getOrPut(view, ::linkedSetOf).add(task)
+        }
+        if (!view.post(task)) {
+            synchronized(pendingViewCallbacks) {
+                pendingViewCallbacks[view]?.remove(task)
+            }
+        }
     }
 
     private fun hookContextEntry() {
@@ -1149,12 +1598,13 @@ object MiLinkServiceHook : HookContext() {
                 ) {
                     return@hookBefore
                 }
-                val moduleContext = ModuleResourceResolver.createModuleContext(view.context)
+                if (!ModuleResourceResolver.isCurrentModuleBuild(view.context)) return@hookBefore
+                val moduleResources = ModuleResourceResolver.resources(view.context)
                     ?: return@hookBefore
-                setSynergyTitle(view, moduleContext.getString(R.string.low_latency_mode))
+                setSynergyTitle(view, moduleResources.getString(R.string.low_latency_mode))
                 setSynergySubtitle(
                     view,
-                    moduleContext.getString(
+                    moduleResources.getString(
                         if (currentLowLatencyEnabled) {
                             R.string.low_latency_enabled
                         } else {
@@ -1269,8 +1719,9 @@ object MiLinkServiceHook : HookContext() {
 
     private fun loadLowLatencyCardIcon(view: View): Drawable? {
         lowLatencyCardIcon?.let { return it }
-        return ModuleResourceResolver.createModuleContext(view.context)
-            ?.getDrawable(R.drawable.ic_low_latency)
+        if (!ModuleResourceResolver.isCurrentModuleBuild(view.context)) return null
+        return ModuleResourceResolver.resources(view.context)
+            ?.getDrawable(R.drawable.ic_low_latency, null)
             ?.also { lowLatencyCardIcon = it }
     }
 
@@ -1611,7 +2062,7 @@ object MiLinkServiceHook : HookContext() {
             // updateState 返回前重新写入已缓存图片，避免宿主通用图标进入下一帧。
             syncMiLinkHeadsetIcon(detail, immediateRoute)
         }
-        detail.post {
+        postTracked(detail) {
             loadState()
             val strictRoute = cachedRouteForHeadsetDetail(detail)
                 ?: routeForAncCardDetail(detail)
@@ -1858,13 +2309,13 @@ object MiLinkServiceHook : HookContext() {
         val binding = miAudioEffectSections[section] ?: return
         val detail = binding.detail.get() ?: return
         if (schedulePostRefresh) {
-            (detail as? View)?.post {
+            (detail as? View)?.let { detailView -> postTracked(detailView) {
                 safelyConfigureFreeClip2AudioEffectSection(
                     section,
                     "$reason-post",
                     schedulePostRefresh = false,
                 )
-            }
+            } }
         }
         val detailView = detail as? View
         when (routeForAncCardDetail(detail)) {
@@ -2441,7 +2892,7 @@ object MiLinkServiceHook : HookContext() {
             if (Looper.myLooper() == Looper.getMainLooper()) {
                 syncMiLinkVolumeLabel(detail, route, volumePercent)
             } else {
-                detail.post { syncMiLinkVolumeLabel(detail, route, volumePercent) }
+                postTracked(detail) { syncMiLinkVolumeLabel(detail, route, volumePercent) }
             }
         }
     }
@@ -2635,7 +3086,7 @@ object MiLinkServiceHook : HookContext() {
             // legacy 的 B() 不会统计后来插入的音效 View。保留原 ANC 固定配额，ANC 按钮行仍由
             // configureAncCardViews() 隐藏，这样新增音效与音量区不会被父卡片裁掉。
             restoreHostAncSectionVisibility(detail, route)
-            detail.post {
+            postTracked(detail) {
                 runCatching { recomputeHostDetailHeight(detail) }
                     .onFailure {
                         Log.w(TAG, "MiLink legacy FreeClip2 height reserve failed", it)
@@ -2646,7 +3097,7 @@ object MiLinkServiceHook : HookContext() {
         if (!hostSpec.recomputeHeightWhenHidden) {
             // View 若曾由可重算的旧模板复用，仍要恢复旧值；正常 OS4 路径不会进入此分支。
             if (restoreHostAncSectionVisibility(detail, route)) {
-                detail.post {
+                postTracked(detail) {
                     runCatching { recomputeHostDetailHeight(detail) }
                         .onFailure {
                             Log.w(TAG, "MiLink host detail height restore failed route=$route", it)
@@ -2664,7 +3115,7 @@ object MiLinkServiceHook : HookContext() {
         } else {
             if (!restoreHostAncSectionVisibility(detail, route)) return
         }
-        detail.post {
+        postTracked(detail) {
             runCatching { recomputeHostDetailHeight(detail) }
                 .onFailure { Log.w(TAG, "MiLink host detail height recompute failed route=$route", it) }
         }
@@ -2826,9 +3277,15 @@ object MiLinkServiceHook : HookContext() {
         hostContext: Context,
         request: MiLinkHeadsetIconRequest,
     ) {
+        if (!acceptingViewCallbacks) return
         if (miLinkHeadsetIconBitmapCache?.key == request.key) return
         if (!miLinkHeadsetIconLoads.add(request.key)) return
-        miLinkHeadsetIconExecutor.execute {
+        val generation = runtimeGeneration.get()
+        runCatching { miLinkHeadsetIconExecutor.execute {
+            if (!isRuntimeGenerationActive(generation)) {
+                miLinkHeadsetIconLoads.remove(request.key)
+                return@execute
+            }
             val bitmap = try {
                 runCatching {
                     PodImageLoader.loadBoxBitmap(
@@ -2845,7 +3302,7 @@ object MiLinkServiceHook : HookContext() {
                 miLinkHeadsetIconLoads.remove(request.key)
             }
             // 加载失败时保留宿主默认图标，等待下一次真实状态变化再重试，避免空转循环。
-            if (bitmap == null) return@execute
+            if (bitmap == null || !isRuntimeGenerationActive(generation)) return@execute
             miLinkHeadsetIconBitmapCache = MiLinkHeadsetIconBitmapCache(
                 address = request.address,
                 route = request.route,
@@ -2855,9 +3312,14 @@ object MiLinkServiceHook : HookContext() {
             // 预加载可能早于详情页创建；完成后只刷新仍存活的详情 View。
             val roots = synchronized(headsetDetails) { headsetDetails.keys.toList() }
             roots.forEach { detail ->
-                detail.post {
+                postTracked(detail) {
                     syncMiLinkHeadsetIcon(detail, currentHuaweiRoute())
                 }
+            }
+        } }.onFailure {
+            miLinkHeadsetIconLoads.remove(request.key)
+            if (acceptingViewCallbacks) {
+                Log.w(TAG, "MiLink headset icon task rejected route=${request.route}", it)
             }
         }
     }
@@ -3015,8 +3477,10 @@ object MiLinkServiceHook : HookContext() {
 
         if (schedulePostRefresh) {
             // 两态机型会在下面摘除“通透”View，不能把二次初始化挂在将被摘除的子 View 上。
-            (detail ?: clearView)?.post {
-                safelyConfigureAncCard(card, "$reason-post", schedulePostRefresh = false)
+            (detail ?: clearView)?.let { target ->
+                postTracked(target) {
+                    safelyConfigureAncCard(card, "$reason-post", schedulePostRefresh = false)
+                }
             }
         }
 
@@ -3189,6 +3653,15 @@ object MiLinkServiceHook : HookContext() {
         collectTextViews(selectCard).forEach { label ->
             val status = miLinkTwoStateAncStatusForLabel(label.text?.toString()) ?: return@forEach
             val button = directChildUnder(selectCard, label) ?: return@forEach
+            synchronized(boundAncButtonListeners) {
+                boundAncButtonListeners.putIfAbsent(
+                    button,
+                    MiLinkBoundClickState(
+                        listener = currentOnClickListener(button),
+                        clickable = button.isClickable,
+                    ),
+                )
+            }
             button.setOnClickListener { clicked ->
                 val activeRoute = currentHuaweiRoute()
                 val activeStatus = miLinkBoundAncStatusForRoute(
@@ -3226,6 +3699,11 @@ object MiLinkServiceHook : HookContext() {
             )
         }
     }
+
+    private fun currentOnClickListener(view: View): View.OnClickListener? = runCatching {
+        val listenerInfo = getObjectField(view, "mListenerInfo") ?: return@runCatching null
+        getObjectField(listenerInfo, "mOnClickListener") as? View.OnClickListener
+    }.getOrNull()
 
     private fun selectorOptions(
         route: HuaweiDeviceRoute,
@@ -3283,12 +3761,8 @@ object MiLinkServiceHook : HookContext() {
     private fun moduleString(resId: Int, fallback: String): String {
         val hostContext = context ?: return fallback
         return runCatching {
-            val moduleContext = hostContext.createPackageContext(
-                BuildConfig.APPLICATION_ID,
-                Context.CONTEXT_IGNORE_SECURITY,
-            )
-            if (!ModuleResourceResolver.isCurrentModuleBuild(moduleContext)) return fallback
-            moduleContext.getString(resId)
+            if (!ModuleResourceResolver.isCurrentModuleBuild(hostContext)) return fallback
+            ModuleResourceResolver.resources(hostContext)?.getString(resId) ?: fallback
         }.getOrDefault(fallback)
     }
 
@@ -3948,7 +4422,7 @@ object MiLinkServiceHook : HookContext() {
             addHuaweiPodsAction(HuaweiPodsAction.ACTION_CONFIG_CHANGED)
             addAction(VOLUME_CHANGED_ACTION)
         }
-        context?.registerReceiver(object : BroadcastReceiver() {
+        val receiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context?, intent: Intent?) {
                 val receivedIntent = intent ?: return
                 when (HuaweiPodsAction.canonical(receivedIntent.action)) {
@@ -4186,7 +4660,9 @@ object MiLinkServiceHook : HookContext() {
                     }
                 }
             }
-        }, filter, Context.RECEIVER_EXPORTED)
+        }
+        context?.registerReceiver(receiver, filter, Context.RECEIVER_EXPORTED)
+        statusReceiver = receiver
         receiverRegistered = true
         context?.sendBroadcast(Intent(HuaweiPodsAction.ACTION_PODS_UI_INIT).apply {
             setPackage("com.android.bluetooth")
@@ -4453,11 +4929,11 @@ object MiLinkServiceHook : HookContext() {
             return
         }
         binding.pendingHostAncState = hostState
-        target.post {
+        postTracked(target) {
             if (binding.pendingHostAncState != hostState ||
                 miLinkAncDisplayState(binding.hostSpec) != hostState
             ) {
-                return@post
+                return@postTracked
             }
             val handled = withMiLinkAncUiSync(ancInternalUiSyncDepth) {
                 runCatching { target.callOnClick() }.getOrElse { error ->
@@ -5034,59 +5510,76 @@ object MiLinkServiceHook : HookContext() {
         playLocalReturnTone("schedule-local-clientConnect")
         startLocalBluetoothConnectBurst("schedule-local-clientConnect")
 
-        Thread {
+        startManagedWorker("HuaweiPods-MiLinkReturn") { generation ->
+            if (!isRuntimeGenerationActive(generation)) return@startManagedWorker
             val ret = runCatching { callMethod(client, "clientConnect", targetDevice, headsetDevice) as? Int }
                 .onFailure { Log.w(TAG, "MiLink circulate experiment async local clientConnect failed", it) }
                 .getOrNull()
+            if (!isRuntimeGenerationActive(generation)) return@startManagedWorker
             Log.w(TAG, "MiLink circulate experiment async local clientConnect ret=$ret")
             if (ret != null && isCirculateConnectAccepted(ret)) {
                 clearHeadsetCirculationLock(client, "after async local clientConnect")
                 updateHeadsetAttachedCard(headsetCard, targetCard, "after async local clientConnect")
             }
-        }.apply {
-            name = "HuaweiPods-MiLinkReturn"
-            isDaemon = true
-        }.start()
+        }
         return true
     }
 
     private fun playLocalReturnTone(reason: String) {
-        Thread {
+        startManagedWorker("HuaweiPods-MiLinkTone") { generation ->
+            if (!isRuntimeGenerationActive(generation)) return@startManagedWorker
             val tone = runCatching { ToneGenerator(AudioManager.STREAM_SYSTEM, 80) }
                 .onFailure { Log.w(TAG, "MiLink circulate experiment local return tone init failed reason=$reason", it) }
-                .getOrNull() ?: return@Thread
-            runCatching {
-                tone.startTone(ToneGenerator.TONE_PROP_ACK, 180)
-                Thread.sleep(240)
-            }.onFailure {
-                Log.w(TAG, "MiLink circulate experiment local return tone failed reason=$reason", it)
+                .getOrNull() ?: return@startManagedWorker
+            try {
+                if (isRuntimeGenerationActive(generation)) {
+                    runCatching {
+                        tone.startTone(ToneGenerator.TONE_PROP_ACK, 180)
+                        Thread.sleep(240)
+                    }.onFailure {
+                        if (it !is InterruptedException) {
+                            Log.w(TAG, "MiLink circulate experiment local return tone failed reason=$reason", it)
+                        }
+                    }
+                }
+            } finally {
+                runCatching { tone.release() }
             }
-            runCatching { tone.release() }
-        }.apply {
-            name = "HuaweiPods-MiLinkTone"
-            isDaemon = true
-        }.start()
+        }
     }
 
     private fun startLocalBluetoothConnectBurst(reason: String) {
         val token = localBluetoothConnectBurstToken.incrementAndGet()
-        Thread {
+        startManagedWorker("HuaweiPods-MiLinkBtConnect") { generation ->
             var lastAttemptAtMs = 0L
             listOf(0L, 650L, 1_800L).forEach { attemptAtMs ->
-                if (localBluetoothConnectBurstToken.get() != token) return@Thread
+                if (!isRuntimeGenerationActive(generation) ||
+                    localBluetoothConnectBurstToken.get() != token
+                ) {
+                    return@startManagedWorker
+                }
                 val sleepMs = attemptAtMs - lastAttemptAtMs
-                if (sleepMs > 0) Thread.sleep(sleepMs)
+                if (sleepMs > 0) {
+                    try {
+                        Thread.sleep(sleepMs)
+                    } catch (_: InterruptedException) {
+                        Thread.currentThread().interrupt()
+                        return@startManagedWorker
+                    }
+                }
                 lastAttemptAtMs = attemptAtMs
-                if (localBluetoothConnectBurstToken.get() != token) return@Thread
-                connectLocalBluetoothProfilesOnce(reason)
+                if (!isRuntimeGenerationActive(generation) ||
+                    localBluetoothConnectBurstToken.get() != token
+                ) {
+                    return@startManagedWorker
+                }
+                connectLocalBluetoothProfilesOnce(reason, generation)
             }
-        }.apply {
-            name = "HuaweiPods-MiLinkBtConnect"
-            isDaemon = true
-        }.start()
+        }
     }
 
-    private fun connectLocalBluetoothProfilesOnce(reason: String) {
+    private fun connectLocalBluetoothProfilesOnce(reason: String, generation: Int) {
+        if (!isRuntimeGenerationActive(generation)) return
         val ctx = context ?: return
         val address = currentAddress ?: return
         val adapter = runCatching { ctx.getSystemService(BluetoothManager::class.java).adapter }
@@ -5096,31 +5589,82 @@ object MiLinkServiceHook : HookContext() {
             .onFailure { Log.w(TAG, "MiLink circulate experiment local bt connect device failed reason=$reason address=$address", it) }
             .getOrNull() ?: return
         listOf(BluetoothProfile.HEADSET, BluetoothProfile.A2DP).forEach { profile ->
-            runCatching {
-                adapter.getProfileProxy(ctx, object : BluetoothProfile.ServiceListener {
-                    override fun onServiceConnected(connectedProfile: Int, proxy: BluetoothProfile) {
-                        if (connectedProfile != profile) return
+            if (!isRuntimeGenerationActive(generation)) return
+            val request = MiLinkProfileProxyRequest(adapter, profile, generation)
+            lateinit var listener: BluetoothProfile.ServiceListener
+            listener = object : BluetoothProfile.ServiceListener {
+                override fun onServiceConnected(connectedProfile: Int, proxy: BluetoothProfile) {
+                    synchronized(request.callbackLock) {
+                        request.proxy = proxy
                         try {
-                            val state = runCatching { proxy.getConnectionState(device) }.getOrDefault(BluetoothProfile.STATE_DISCONNECTED)
-                            if (state == BluetoothProfile.STATE_CONNECTED || state == BluetoothProfile.STATE_CONNECTING) {
-                                Log.w(TAG, "MiLink circulate experiment local bt connect skip profile=$profile state=$state reason=$reason device=${device.address}")
+                            if (connectedProfile != profile ||
+                                !request.active.get() ||
+                                !isRuntimeGenerationActive(request.generation)
+                            ) {
+                                return
+                            }
+                            val state = runCatching { proxy.getConnectionState(device) }
+                                .getOrDefault(BluetoothProfile.STATE_DISCONNECTED)
+                            if (state == BluetoothProfile.STATE_CONNECTED ||
+                                state == BluetoothProfile.STATE_CONNECTING
+                            ) {
+                                Log.w(
+                                    TAG,
+                                    "MiLink circulate experiment local bt connect skip " +
+                                        "profile=$profile state=$state reason=$reason " +
+                                        "device=${device.address}",
+                                )
                                 return
                             }
                             runCatching {
-                                proxy.javaClass.getMethod("connect", BluetoothDevice::class.java).invoke(proxy, device)
-                                Log.w(TAG, "MiLink circulate experiment local bt connect profile=$profile reason=$reason device=${device.address}")
+                                proxy.javaClass.getMethod("connect", BluetoothDevice::class.java)
+                                    .invoke(proxy, device)
+                                Log.w(
+                                    TAG,
+                                    "MiLink circulate experiment local bt connect " +
+                                        "profile=$profile reason=$reason device=${device.address}",
+                                )
                             }.onFailure {
-                                Log.w(TAG, "MiLink circulate experiment local bt connect profile failed profile=$profile reason=$reason", it)
+                                Log.w(
+                                    TAG,
+                                    "MiLink circulate experiment local bt connect profile failed " +
+                                        "profile=$profile reason=$reason",
+                                    it,
+                                )
                             }
                         } finally {
-                            runCatching { adapter.closeProfileProxy(profile, proxy) }
+                            completeProfileProxyRequest(request, proxy)
                         }
                     }
+                }
 
-                    override fun onServiceDisconnected(disconnectedProfile: Int) = Unit
-                }, profile)
+                override fun onServiceDisconnected(disconnectedProfile: Int) {
+                    completeProfileProxyRequest(request)
+                }
+            }
+            var accepted = false
+            runCatching {
+                synchronized(runtimeLifecycleLock) {
+                    if (!isRuntimeGenerationActive(generation)) return@synchronized
+                    profileProxyRequests.add(request)
+                    accepted = adapter.getProfileProxy(ctx, listener, profile)
+                }
             }.onFailure {
                 Log.w(TAG, "MiLink circulate experiment local bt profile proxy failed profile=$profile reason=$reason", it)
+            }
+            if (!accepted) {
+                completeProfileProxyRequest(request)
+                return@forEach
+            }
+            try {
+                request.completion.await(
+                    HOT_RELOAD_PROFILE_DRAIN_TIMEOUT_MS,
+                    TimeUnit.MILLISECONDS,
+                )
+            } catch (_: InterruptedException) {
+                Thread.currentThread().interrupt()
+                request.active.set(false)
+                return
             }
         }
     }

@@ -6,6 +6,8 @@ import android.bluetooth.BluetoothDevice
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicLong
 import moe.chenxy.huaweipods.config.ConfigManager
 import moe.chenxy.huaweipods.config.DeviceRoutePrefs
 
@@ -16,6 +18,11 @@ import moe.chenxy.huaweipods.config.DeviceRoutePrefs
  * route is added only after its capture confirms both the setter and the matching state query.
  */
 object HuaweiWearDetectionController {
+    private val mainHandler by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
+        Handler(Looper.getMainLooper())
+    }
+    private val generation = AtomicLong(0L)
+    private val pendingCallbacks = ConcurrentHashMap.newKeySet<Runnable>()
     private val supportedRoutes = setOf(
         HuaweiDeviceRoute.HUAWEI_FREEBUDS5,
         HuaweiDeviceRoute.HUAWEI_FREEBUDS5I,
@@ -31,6 +38,13 @@ object HuaweiWearDetectionController {
     private val enabledPacket = hex("5A0006002B10010101A956")
 
     fun supports(route: HuaweiDeviceRoute): Boolean = route in supportedRoutes
+
+    /** 取消旧代所有延迟回读，避免 Runnable 把旧 ClassLoader 留在主线程队列。 */
+    fun closeForHotReload() {
+        generation.incrementAndGet()
+        pendingCallbacks.toList().forEach(mainHandler::removeCallbacks)
+        pendingCallbacks.clear()
+    }
 
     fun stateQueryPacket(route: HuaweiDeviceRoute): ByteArray? =
         if (supports(route)) stateQuery.copyOf() else null
@@ -57,16 +71,16 @@ object HuaweiWearDetectionController {
             onComplete?.invoke(false)
             return
         }
-        val mainHandler = Handler(Looper.getMainLooper())
+        val operationGeneration = generation.get()
         fun verifyWrite(attempt: Int) {
             requestState(context, device, route) { actual ->
+                if (generation.get() != operationGeneration) return@requestState
                 when {
                     actual == enabled -> onComplete?.invoke(true)
                     attempt >= WRITE_READBACK_ATTEMPTS -> onComplete?.invoke(false)
-                    else -> mainHandler.postDelayed(
-                        { verifyWrite(attempt + 1) },
-                        WRITE_READBACK_RETRY_DELAY_MS,
-                    )
+                    else -> postTracked(operationGeneration, WRITE_READBACK_RETRY_DELAY_MS) {
+                        verifyWrite(attempt + 1)
+                    }
                 }
             }
         }
@@ -77,6 +91,7 @@ object HuaweiWearDetectionController {
             packet = packet,
             description = "wear-detection enabled=$enabled",
             onComplete = { writeSucceeded ->
+                if (generation.get() != operationGeneration) return@sendRawPacketOnce
                 if (!writeSucceeded) {
                     onComplete?.invoke(false)
                     return@sendRawPacketOnce
@@ -84,10 +99,9 @@ object HuaweiWearDetectionController {
                 if (onComplete == null) return@sendRawPacketOnce
                 // 2B10 的通用 ACK 只能证明写入完成，不能证明耳机已经应用。
                 // 稍等耳机落盘后用抓包确认的 2B11 回读做最终结果，避免 UI 假成功。
-                mainHandler.postDelayed(
-                    { verifyWrite(attempt = 1) },
-                    WRITE_READBACK_DELAY_MS,
-                )
+                postTracked(operationGeneration, WRITE_READBACK_DELAY_MS) {
+                    verifyWrite(attempt = 1)
+                }
             },
         )
     }
@@ -103,6 +117,7 @@ object HuaweiWearDetectionController {
             onState(null)
             return
         }
+        val operationGeneration = generation.get()
         HuaweiL2capAncController.requestRawPacketOnce(
             context = context,
             device = device,
@@ -110,8 +125,22 @@ object HuaweiWearDetectionController {
             packet = packet,
             description = "wear-detection-state",
             responseWindowMs = 1_000L,
-            onResponse = { onState(parseState(it)) },
+            onResponse = {
+                if (generation.get() == operationGeneration) onState(parseState(it))
+            },
         )
+    }
+
+    private fun postTracked(expectedGeneration: Long, delayMs: Long, block: () -> Unit) {
+        lateinit var callback: Runnable
+        callback = Runnable {
+            pendingCallbacks.remove(callback)
+            if (generation.get() == expectedGeneration) block()
+        }
+        pendingCallbacks += callback
+        if (!mainHandler.postDelayed(callback, delayMs)) {
+            pendingCallbacks.remove(callback)
+        }
     }
 
     @SuppressLint("MissingPermission")
