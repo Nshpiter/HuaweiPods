@@ -1,30 +1,36 @@
 package moe.chenxy.huaweipods.ui.pages
 
+import android.content.Context
 import android.provider.Settings
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.LocalActivity
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
-import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
@@ -38,16 +44,22 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PagerState
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -55,7 +67,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -63,8 +77,11 @@ import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -74,13 +91,14 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.libxposed.service.XposedService
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import moe.chenxy.huaweipods.R
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.LifecycleOwner
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.theme.MiuixTheme
-
-private const val PAGE_TRANSITION_MS = 360L
 
 private val requiredCoreScopes = setOf(
     "com.android.bluetooth",
@@ -97,6 +115,14 @@ private fun colorWithWhiteTextContrast(source: Color): Color {
     return result
 }
 
+private fun readAnimatorScale(context: Context): Float = runCatching {
+    Settings.Global.getFloat(
+        context.contentResolver,
+        Settings.Global.ANIMATOR_DURATION_SCALE,
+        1f,
+    )
+}.getOrDefault(1f)
+
 @Composable
 fun OnboardingPage(
     xposedService: XposedService?,
@@ -104,29 +130,43 @@ fun OnboardingPage(
     onFinish: () -> Unit,
     onSkip: () -> Unit = onFinish,
 ) {
-    var currentPage by rememberSaveable { mutableIntStateOf(0) }
+    val pagerState = rememberPagerState(pageCount = { ONBOARDING_PAGE_COUNT })
+    val scope = rememberCoroutineScope()
     var navigationLocked by remember { mutableStateOf(false) }
     var terminalActionInvoked by rememberSaveable { mutableStateOf(false) }
     val configuration = LocalConfiguration.current
     val context = LocalContext.current
+    val lifecycleOwner = LocalActivity.current as? LifecycleOwner
     val layoutPolicy = onboardingLayoutPolicy(
         widthDp = configuration.screenWidthDp,
         heightDp = configuration.screenHeightDp,
     )
-    val animatorScale = remember(context) {
-        runCatching {
-            Settings.Global.getFloat(
-                context.contentResolver,
-                Settings.Global.ANIMATOR_DURATION_SCALE,
-                1f,
-            )
-        }.getOrDefault(1f)
+    var animatorScale by remember(context) {
+        mutableFloatStateOf(readAnimatorScale(context))
+    }
+    DisposableEffect(lifecycleOwner, context) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                animatorScale = readAnimatorScale(context)
+            }
+        }
+        lifecycleOwner?.lifecycle?.addObserver(observer)
+        onDispose { lifecycleOwner?.lifecycle?.removeObserver(observer) }
     }
     val motionEnabled = onboardingMotionEnabled(animatorScale)
     val surface = MiuixTheme.colorScheme.surface
     val accent = MiuixTheme.colorScheme.primary
     val actionColor = remember(accent) { colorWithWhiteTextContrast(accent) }
     val successColor = if (surface.luminance() < 0.5f) Color(0xFF63D6A0) else Color(0xFF25865B)
+    val backgroundBrush = remember(surface, accent) {
+        Brush.verticalGradient(
+            colors = listOf(
+                accent.copy(alpha = 0.12f).compositeOver(surface),
+                surface,
+                Color(0xFF6E9FE8).copy(alpha = 0.07f).compositeOver(surface),
+            ),
+        )
+    }
 
     fun invokeTerminalOnce(action: () -> Unit) {
         if (terminalActionInvoked) return
@@ -135,32 +175,47 @@ fun OnboardingPage(
     }
 
     fun navigate(action: OnboardingNavigationAction) {
-        if (navigationLocked || terminalActionInvoked) return
-        val result = reduceOnboardingNavigation(currentPage, action)
+        if (navigationLocked || pagerState.isScrollInProgress || terminalActionInvoked) return
+        val result = reduceOnboardingNavigation(pagerState.currentPage, action)
         if (result.finish) {
             invokeTerminalOnce(onFinish)
             return
         }
-        if (result.page == currentPage) return
-        navigationLocked = motionEnabled
-        currentPage = result.page
+        if (result.page == pagerState.currentPage) return
+        navigationLocked = true
+        scope.launch {
+            try {
+                if (motionEnabled) {
+                    pagerState.animateScrollToPage(result.page)
+                } else {
+                    pagerState.scrollToPage(result.page)
+                }
+            } finally {
+                navigationLocked = false
+            }
+        }
     }
 
-    LaunchedEffect(currentPage, navigationLocked, motionEnabled, animatorScale) {
-        if (!navigationLocked) return@LaunchedEffect
-        val scaledDuration = (PAGE_TRANSITION_MS * animatorScale.coerceIn(0.1f, 10f)).toLong()
-        delay(scaledDuration)
-        navigationLocked = false
+    LaunchedEffect(pagerState) {
+        if (pagerState.currentPageOffsetFraction != 0f) {
+            pagerState.scrollToPage(pagerState.currentPage)
+        }
     }
 
-    BackHandler(enabled = currentPage > 0 && !terminalActionInvoked) {
-        navigate(OnboardingNavigationAction.PREVIOUS)
+    BackHandler(
+        enabled = !terminalActionInvoked && (
+            pagerState.currentPage > 0 || navigationLocked || pagerState.isScrollInProgress
+        ),
+    ) {
+        if (!navigationLocked && !pagerState.isScrollInProgress) {
+            navigate(OnboardingNavigationAction.PREVIOUS)
+        }
     }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(surface)
+            .background(backgroundBrush)
             .statusBarsPadding()
             .navigationBarsPadding(),
     ) {
@@ -176,7 +231,7 @@ fun OnboardingPage(
                 .fillMaxWidth(),
         ) {
             SetupScene(
-                currentPage = currentPage,
+                pagerState = pagerState,
                 xposedService = xposedService,
                 accent = accent,
                 successColor = successColor,
@@ -188,10 +243,10 @@ fun OnboardingPage(
         }
 
         SetupFooter(
-            currentPage = currentPage,
+            currentPage = pagerState.currentPage,
             accent = accent,
             actionColor = actionColor,
-            navigationEnabled = !navigationLocked && !terminalActionInvoked,
+            navigationEnabled = !navigationLocked && !pagerState.isScrollInProgress && !terminalActionInvoked,
             motionEnabled = motionEnabled,
             onPrevious = { navigate(OnboardingNavigationAction.PREVIOUS) },
             onNext = { navigate(OnboardingNavigationAction.NEXT) },
@@ -212,6 +267,8 @@ private fun SetupTopBar(
             .padding(horizontal = 20.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        HuaweiPodsAppIcon(size = 30.dp)
+        Spacer(Modifier.width(10.dp))
         Text(
             text = stringResource(R.string.app_name),
             color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.58f),
@@ -232,7 +289,7 @@ private fun SetupTopBar(
 
 @Composable
 private fun SetupScene(
-    currentPage: Int,
+    pagerState: PagerState,
     xposedService: XposedService?,
     accent: Color,
     successColor: Color,
@@ -241,12 +298,11 @@ private fun SetupScene(
     compact: Boolean,
     viewportHeight: Dp,
 ) {
-    AnimatedContent(
-        targetState = currentPage,
+    HorizontalPager(
+        state = pagerState,
         modifier = Modifier.fillMaxSize(),
-        transitionSpec = { setupPageTransition(targetState > initialState, motionEnabled) },
-        contentAlignment = Alignment.Center,
-        label = "setup_page",
+        userScrollEnabled = false,
+        beyondViewportPageCount = 0,
     ) { page ->
         when (page) {
             0 -> WelcomeSetupPage(
@@ -285,36 +341,18 @@ private fun setupPageEnter(
 ): EnterTransition {
     if (!motionEnabled) return fadeIn(snap())
     var transition: EnterTransition = fadeIn(
-        animationSpec = tween(420, delayMillis = delayMillis),
+        animationSpec = tween(240, delayMillis = delayMillis),
     ) + slideInVertically(
-        animationSpec = tween(560, delayMillis = delayMillis, easing = FastOutSlowInEasing),
-        initialOffsetY = { height -> height.coerceAtLeast(48) / 5 },
+        animationSpec = tween(340, delayMillis = delayMillis, easing = FastOutSlowInEasing),
+        initialOffsetY = { height -> height.coerceAtLeast(48) / 12 },
     )
     if (withScale) {
         transition += scaleIn(
-            animationSpec = tween(560, delayMillis = delayMillis, easing = FastOutSlowInEasing),
-            initialScale = 0.84f,
+            animationSpec = tween(340, delayMillis = delayMillis, easing = FastOutSlowInEasing),
+            initialScale = 0.92f,
         )
     }
     return transition
-}
-
-private fun setupPageTransition(forward: Boolean, motionEnabled: Boolean): ContentTransform {
-    if (!motionEnabled) return fadeIn(snap()).togetherWith(fadeOut(snap()))
-    val direction = if (forward) 1 else -1
-    return (
-        fadeIn(tween(220)) +
-            slideInHorizontally(
-                animationSpec = tween(PAGE_TRANSITION_MS.toInt(), easing = FastOutSlowInEasing),
-                initialOffsetX = { direction * it / 8 },
-            )
-        ).togetherWith(
-        fadeOut(tween(140)) +
-            slideOutHorizontally(
-                animationSpec = tween(260, easing = FastOutSlowInEasing),
-                targetOffsetX = { -direction * it / 10 },
-            ),
-    )
 }
 
 @Composable
@@ -324,9 +362,8 @@ private fun WelcomeSetupPage(
     compact: Boolean,
     viewportHeight: Dp,
 ) {
-    var visible by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { visible = true }
-    val iconSize = if (compact || landscape) 104.dp else 132.dp
+    var visible by remember(motionEnabled) { mutableStateOf(!motionEnabled) }
+    LaunchedEffect(motionEnabled) { visible = true }
     val modifier = Modifier
         .fillMaxSize()
         .verticalScroll(rememberScrollState())
@@ -344,7 +381,12 @@ private fun WelcomeSetupPage(
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                HuaweiPodsAppIcon(size = iconSize)
+                OnboardingDevicePreview(
+                    motionEnabled = motionEnabled,
+                    compact = true,
+                    landscape = true,
+                    modifier = Modifier.width(270.dp),
+                )
                 Spacer(Modifier.width(42.dp))
                 WelcomeCopy(
                     modifier = Modifier.widthIn(max = 430.dp),
@@ -358,8 +400,14 @@ private fun WelcomeSetupPage(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
             ) {
-                HuaweiPodsAppIcon(size = iconSize)
-                Spacer(Modifier.height(if (compact) 26.dp else 36.dp))
+                OnboardingDevicePreview(
+                    motionEnabled = motionEnabled,
+                    compact = compact,
+                    modifier = Modifier
+                        .widthIn(max = 320.dp)
+                        .fillMaxWidth(),
+                )
+                Spacer(Modifier.height(if (compact) 22.dp else 28.dp))
                 WelcomeCopy(
                     modifier = Modifier.widthIn(max = 540.dp),
                     centered = true,
@@ -383,8 +431,8 @@ private fun WelcomeCopy(
             text = stringResource(R.string.app_name),
             modifier = Modifier.semantics { heading() },
             color = MiuixTheme.colorScheme.onSurface,
-            fontSize = if (compact) 38.sp else 44.sp,
-            lineHeight = if (compact) 44.sp else 52.sp,
+            fontSize = if (compact) 37.sp else 42.sp,
+            lineHeight = if (compact) 43.sp else 49.sp,
             fontWeight = FontWeight.Bold,
             textAlign = textAlign,
         )
@@ -399,6 +447,209 @@ private fun WelcomeCopy(
 }
 
 @Composable
+private fun OnboardingDevicePreview(
+    motionEnabled: Boolean,
+    compact: Boolean,
+    landscape: Boolean = false,
+    modifier: Modifier = Modifier,
+) {
+    var entered by remember(motionEnabled) { mutableStateOf(!motionEnabled) }
+    LaunchedEffect(motionEnabled) { entered = true }
+    val sceneProgress by animateFloatAsState(
+        targetValue = if (entered) 1f else 0f,
+        animationSpec = if (motionEnabled) {
+            tween(durationMillis = 420, easing = FastOutSlowInEasing)
+        } else {
+            snap()
+        },
+        label = "setup_preview_scene",
+    )
+    val railProgress by animateFloatAsState(
+        targetValue = if (entered) 1f else 0f,
+        animationSpec = if (motionEnabled) {
+            tween(durationMillis = 360, delayMillis = 90, easing = FastOutSlowInEasing)
+        } else {
+            snap()
+        },
+        label = "setup_preview_rail",
+    )
+    val accent = MiuixTheme.colorScheme.primary
+    val surface = MiuixTheme.colorScheme.surface
+    val onSurface = MiuixTheme.colorScheme.onSurface
+    val stageShape = RoundedCornerShape(if (compact) 30.dp else 36.dp)
+    val stageBrush = remember(surface, accent) {
+        Brush.linearGradient(
+            colors = listOf(
+                accent.copy(alpha = 0.16f).compositeOver(surface),
+                Color(0xFF8274D1).copy(alpha = 0.11f).compositeOver(surface),
+                Color(0xFF5C9BDA).copy(alpha = 0.15f).compositeOver(surface),
+            ),
+        )
+    }
+    val previewDescription = stringResource(R.string.onboarding_preview_description)
+    val previewHeight = when {
+        landscape -> 184.dp
+        compact -> 216.dp
+        else -> 244.dp
+    }
+    val heroSize = when {
+        landscape -> 88.dp
+        compact -> 102.dp
+        else -> 116.dp
+    }
+
+    Box(
+        modifier = modifier
+            .height(previewHeight)
+            .graphicsLayer {
+                alpha = sceneProgress
+                val scale = 0.94f + sceneProgress * 0.06f
+                scaleX = scale
+                scaleY = scale
+            }
+            .clip(stageShape)
+            .background(stageBrush)
+            .border(1.dp, Color.White.copy(alpha = 0.34f), stageShape)
+            .clearAndSetSemantics { contentDescription = previewDescription },
+    ) {
+        Box(
+            modifier = Modifier
+                .align(Alignment.Center)
+                .size(heroSize * 1.18f)
+                .graphicsLayer {
+                    translationX = -heroSize.toPx() * 0.46f
+                    translationY = -heroSize.toPx() * 0.06f
+                    rotationZ = -12f + sceneProgress * 5f
+                    alpha = 0.28f + sceneProgress * 0.44f
+                }
+                .background(accent.copy(alpha = 0.12f), RoundedCornerShape(heroSize * 0.30f)),
+        )
+        Box(
+            modifier = Modifier
+                .align(Alignment.Center)
+                .size(heroSize * 1.08f)
+                .graphicsLayer {
+                    translationX = heroSize.toPx() * 0.48f
+                    translationY = heroSize.toPx() * 0.04f
+                    rotationZ = 11f - sceneProgress * 5f
+                    alpha = 0.22f + sceneProgress * 0.38f
+                }
+                .background(
+                    Color(0xFF5C9BDA).copy(alpha = 0.12f),
+                    RoundedCornerShape(heroSize * 0.30f),
+                ),
+        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 18.dp, vertical = 15.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = stringResource(R.string.app_name),
+                color = onSurface,
+                style = MiuixTheme.textStyles.body2,
+                fontWeight = FontWeight.Bold,
+            )
+            Spacer(Modifier.weight(1f))
+            Box(
+                modifier = Modifier
+                    .clip(CircleShape)
+                    .background(surface.copy(alpha = 0.64f))
+                    .border(1.dp, Color.White.copy(alpha = 0.30f), CircleShape),
+            ) {
+                Text(
+                    text = stringResource(R.string.onboarding_preview_auto),
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                    color = accent,
+                    fontSize = 11.sp,
+                    lineHeight = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+        }
+        OnboardingHeroArtwork(
+            size = heroSize,
+            animateEntry = motionEnabled,
+            modifier = Modifier
+                .align(Alignment.Center)
+                .graphicsLayer { translationY = -10.dp.toPx() },
+        )
+        Row(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .padding(start = 13.dp, end = 13.dp, bottom = 13.dp)
+                .graphicsLayer {
+                    alpha = railProgress
+                    translationY = (1f - railProgress) * 12.dp.toPx()
+                }
+                .clip(RoundedCornerShape(20.dp))
+                .background(surface.copy(alpha = 0.82f))
+                .border(
+                    width = 1.dp,
+                    color = onSurface.copy(alpha = 0.05f),
+                    shape = RoundedCornerShape(20.dp),
+                )
+                .padding(horizontal = 8.dp, vertical = 9.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            PreviewFeature(
+                value = "100%",
+                label = stringResource(R.string.onboarding_preview_battery),
+                color = Color(0xFF3BA872),
+                modifier = Modifier.weight(1f),
+            )
+            PreviewFeature(
+                value = "ANC",
+                label = stringResource(R.string.onboarding_preview_noise),
+                color = accent,
+                modifier = Modifier.weight(1f),
+            )
+            PreviewFeature(
+                value = "OS",
+                label = stringResource(R.string.onboarding_preview_center),
+                color = Color(0xFF4B8FD6),
+                modifier = Modifier.weight(1f),
+            )
+        }
+    }
+}
+
+@Composable
+private fun PreviewFeature(
+    value: String,
+    label: String,
+    color: Color,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(6.dp).background(color, CircleShape))
+            Spacer(Modifier.width(5.dp))
+            Text(
+                text = value,
+                color = MiuixTheme.colorScheme.onSurface,
+                fontSize = 12.sp,
+                lineHeight = 14.sp,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+        Spacer(Modifier.height(3.dp))
+        Text(
+            text = label,
+            color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.58f),
+            fontSize = 10.sp,
+            lineHeight = 12.sp,
+            maxLines = 1,
+        )
+    }
+}
+
+@Composable
 private fun EnvironmentSetupPage(
     xposedService: XposedService?,
     accent: Color,
@@ -408,8 +659,13 @@ private fun EnvironmentSetupPage(
     compact: Boolean,
     viewportHeight: Dp,
 ) {
-    var visible by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { visible = true }
+    var visible by remember(motionEnabled) { mutableStateOf(!motionEnabled) }
+    LaunchedEffect(motionEnabled) { visible = true }
+    val environmentReady = remember(xposedService) {
+        xposedService != null && runCatching {
+            xposedService.scope.containsAll(requiredCoreScopes)
+        }.getOrDefault(false)
+    }
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -431,27 +687,20 @@ private fun EnvironmentSetupPage(
                 visible = visible,
                 enter = setupPageEnter(motionEnabled = motionEnabled, withScale = true),
             ) {
-                CompactBrandHeader()
-            }
-            Spacer(Modifier.height(if (compact || landscape) 18.dp else 26.dp))
-            AnimatedVisibility(
-                visible = visible,
-                enter = setupPageEnter(motionEnabled = motionEnabled, delayMillis = 90),
-            ) {
-                Column {
-                    SetupHeading(
-                        eyebrow = stringResource(R.string.onboarding_environment_label),
-                        title = stringResource(R.string.onboarding_environment_title),
-                        summary = stringResource(R.string.onboarding_environment_summary),
-                        accent = accent,
-                        compact = compact || landscape,
-                    )
-                }
+                SetupSectionHeader(
+                    eyebrow = stringResource(R.string.onboarding_environment_label),
+                    title = stringResource(R.string.onboarding_environment_title),
+                    summary = stringResource(R.string.onboarding_environment_summary),
+                    accent = accent,
+                    badgeColor = if (environmentReady) successColor else Color(0xFFE69A37),
+                    badgeText = if (environmentReady) "✓" else "!",
+                    compact = compact || landscape,
+                )
             }
             Spacer(Modifier.height(if (compact || landscape) 16.dp else 24.dp))
             AnimatedVisibility(
                 visible = visible,
-                enter = setupPageEnter(motionEnabled = motionEnabled, delayMillis = 190),
+                enter = setupPageEnter(motionEnabled = motionEnabled, delayMillis = 60),
             ) {
                 EnvironmentDetails(
                     xposedService = xposedService,
@@ -465,48 +714,86 @@ private fun EnvironmentSetupPage(
 }
 
 @Composable
-private fun CompactBrandHeader() {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        HuaweiPodsAppIcon(size = 48.dp)
-        Spacer(Modifier.width(14.dp))
+private fun SetupSectionHeader(
+    eyebrow: String,
+    title: String,
+    summary: String,
+    accent: Color,
+    badgeColor: Color,
+    badgeText: String,
+    compact: Boolean,
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            SetupPageGlyph(
+                badgeColor = badgeColor,
+                badgeText = badgeText,
+            )
+            Spacer(Modifier.width(16.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Box(
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(accent.copy(alpha = 0.11f)),
+                ) {
+                    Text(
+                        text = eyebrow,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                        color = accent,
+                        fontSize = 13.sp,
+                        lineHeight = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+                Spacer(Modifier.height(7.dp))
+                Text(
+                    text = title,
+                    modifier = Modifier.semantics { heading() },
+                    color = MiuixTheme.colorScheme.onSurface,
+                    fontSize = if (compact) 29.sp else 32.sp,
+                    lineHeight = if (compact) 34.sp else 38.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+        }
+        Spacer(Modifier.height(14.dp))
         Text(
-            text = stringResource(R.string.app_name),
-            color = MiuixTheme.colorScheme.onSurface,
+            text = summary,
+            modifier = Modifier.fillMaxWidth(),
+            color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.64f),
             style = MiuixTheme.textStyles.headline1,
-            fontWeight = FontWeight.Bold,
         )
     }
 }
 
 @Composable
-private fun SetupHeading(
-    eyebrow: String,
-    title: String,
-    summary: String,
-    accent: Color,
-    compact: Boolean,
+private fun SetupPageGlyph(
+    badgeColor: Color,
+    badgeText: String,
 ) {
-    Text(
-        text = eyebrow,
-        color = accent,
-        style = MiuixTheme.textStyles.body2,
-        fontWeight = FontWeight.Bold,
-    )
-    Spacer(Modifier.height(7.dp))
-    Text(
-        text = title,
-        modifier = Modifier.semantics { heading() },
-        color = MiuixTheme.colorScheme.onSurface,
-        fontSize = if (compact) 29.sp else 34.sp,
-        lineHeight = if (compact) 35.sp else 41.sp,
-        fontWeight = FontWeight.Bold,
-    )
-    Spacer(Modifier.height(9.dp))
-    Text(
-        text = summary,
-        color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.64f),
-        style = MiuixTheme.textStyles.headline1,
-    )
+    Box(modifier = Modifier.size(66.dp)) {
+        HuaweiPodsAppIcon(size = 62.dp)
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .size(24.dp)
+                .background(MiuixTheme.colorScheme.surface, CircleShape)
+                .padding(3.dp)
+                .background(badgeColor, CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = badgeText,
+                color = Color.White,
+                fontSize = 12.sp,
+                lineHeight = 12.sp,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+    }
 }
 
 @Composable
@@ -524,21 +811,23 @@ private fun EnvironmentDetails(
     }
 
     Column(modifier = Modifier.fillMaxWidth()) {
-        SetupStatusRow(
-            title = stringResource(R.string.onboarding_environment_lsposed),
-            ready = serviceConnected,
-            accent = accent,
-            successColor = successColor,
-            motionEnabled = motionEnabled,
-        )
-        SetupDivider()
-        SetupStatusRow(
-            title = stringResource(R.string.onboarding_environment_scopes),
-            ready = coreScopesReady,
-            accent = accent,
-            successColor = successColor,
-            motionEnabled = motionEnabled,
-        )
+        SetupPanel {
+            SetupStatusRow(
+                title = stringResource(R.string.onboarding_environment_lsposed),
+                ready = serviceConnected,
+                accent = accent,
+                successColor = successColor,
+                motionEnabled = motionEnabled,
+            )
+            SetupDivider()
+            SetupStatusRow(
+                title = stringResource(R.string.onboarding_environment_scopes),
+                ready = coreScopesReady,
+                accent = accent,
+                successColor = successColor,
+                motionEnabled = motionEnabled,
+            )
+        }
         Spacer(Modifier.height(4.dp))
         TextButton(
             text = stringResource(R.string.onboarding_refresh),
@@ -571,7 +860,10 @@ private fun SetupStatusRow(
         modifier = Modifier
             .fillMaxWidth()
             .defaultMinSize(minHeight = 62.dp)
-            .semantics(mergeDescendants = true) { stateDescription = statusText },
+            .semantics(mergeDescendants = true) {
+                stateDescription = statusText
+                liveRegion = LiveRegionMode.Polite
+            },
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
@@ -581,12 +873,25 @@ private fun SetupStatusRow(
                 .clearAndSetSemantics { },
             contentAlignment = Alignment.Center,
         ) {
-            Text(
-                text = if (ready) "✓" else "!",
-                color = statusColor,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold,
-            )
+            AnimatedContent(
+                targetState = ready,
+                transitionSpec = {
+                    if (motionEnabled) {
+                        (fadeIn(tween(160)) + scaleIn(tween(180), initialScale = 0.78f))
+                            .togetherWith(fadeOut(tween(100)) + scaleOut(tween(120), targetScale = 1.12f))
+                    } else {
+                        fadeIn(snap()).togetherWith(fadeOut(snap()))
+                    }
+                },
+                label = "setup_status_icon",
+            ) { isReady ->
+                Text(
+                    text = if (isReady) "✓" else "!",
+                    color = statusColor,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
         }
         Spacer(Modifier.width(14.dp))
         Text(
@@ -615,148 +920,53 @@ private fun ReadySetupPage(
     compact: Boolean,
     viewportHeight: Dp,
 ) {
-    var visible by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { visible = true }
-    val outerModifier = Modifier
-        .fillMaxSize()
-        .verticalScroll(rememberScrollState())
-        .heightIn(min = viewportHeight)
-        .padding(
-            horizontal = if (compact) 24.dp else 36.dp,
-            vertical = if (landscape || compact) 10.dp else 20.dp,
-        )
-
-    if (landscape) {
-        Row(
-            modifier = outerModifier,
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(
-                modifier = Modifier.widthIn(max = 220.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                AnimatedVisibility(
-                    visible = visible,
-                    enter = setupPageEnter(motionEnabled = motionEnabled, withScale = true),
-                ) {
-                    HuaweiPodsAppIcon(size = 88.dp)
-                }
-                Spacer(Modifier.height(18.dp))
-                AnimatedVisibility(
-                    visible = visible,
-                    enter = setupPageEnter(motionEnabled = motionEnabled, delayMillis = 120),
-                ) {
-                    CompletionState(successColor = successColor)
-                }
-            }
-            Spacer(Modifier.width(44.dp))
-            AnimatedVisibility(
-                visible = visible,
-                enter = setupPageEnter(motionEnabled = motionEnabled, delayMillis = 210),
-            ) {
-                ReadyCopy(
-                    accent = accent,
-                    compact = true,
-                    modifier = Modifier.widthIn(max = 470.dp),
-                )
-            }
-        }
-    } else {
+    var visible by remember(motionEnabled) { mutableStateOf(!motionEnabled) }
+    LaunchedEffect(motionEnabled) { visible = true }
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .heightIn(min = viewportHeight)
+            .padding(
+                horizontal = if (compact) 24.dp else 36.dp,
+                vertical = if (landscape || compact) 10.dp else 22.dp,
+            ),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
         Column(
-            modifier = outerModifier,
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
+            modifier = Modifier
+                .widthIn(max = if (landscape) 680.dp else 620.dp)
+                .fillMaxWidth(),
         ) {
             AnimatedVisibility(
                 visible = visible,
                 enter = setupPageEnter(motionEnabled = motionEnabled, withScale = true),
             ) {
-                HuaweiPodsAppIcon(size = if (compact) 78.dp else 92.dp)
-            }
-            Spacer(Modifier.height(if (compact) 14.dp else 20.dp))
-            AnimatedVisibility(
-                visible = visible,
-                enter = setupPageEnter(motionEnabled = motionEnabled, delayMillis = 120),
-            ) {
-                CompletionState(successColor = successColor)
-            }
-            Spacer(Modifier.height(if (compact) 18.dp else 26.dp))
-            AnimatedVisibility(
-                visible = visible,
-                enter = setupPageEnter(motionEnabled = motionEnabled, delayMillis = 210),
-            ) {
-                ReadyCopy(
+                SetupSectionHeader(
+                    eyebrow = stringResource(R.string.onboarding_ready_label),
+                    title = stringResource(R.string.onboarding_ready_title),
+                    summary = stringResource(R.string.onboarding_ready_summary),
                     accent = accent,
-                    compact = compact,
-                    modifier = Modifier
-                        .widthIn(max = 600.dp)
-                        .fillMaxWidth(),
+                    badgeColor = successColor,
+                    badgeText = "✓",
+                    compact = compact || landscape,
                 )
             }
+            Spacer(Modifier.height(if (compact || landscape) 16.dp else 24.dp))
+            AnimatedVisibility(
+                visible = visible,
+                enter = setupPageEnter(motionEnabled = motionEnabled, delayMillis = 60),
+            ) {
+                ReadyDetails(accent = accent)
+            }
         }
-    }
-}
-
-@Composable
-private fun CompletionState(successColor: Color) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(
-            modifier = Modifier
-                .size(28.dp)
-                .background(successColor, CircleShape)
-                .clearAndSetSemantics { },
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = "✓",
-                color = Color.White,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
-            )
-        }
-        Spacer(Modifier.width(10.dp))
-        Text(
-            text = stringResource(R.string.onboarding_ready_label),
-            color = successColor,
-            style = MiuixTheme.textStyles.headline1,
-            fontWeight = FontWeight.Bold,
-        )
-    }
-}
-
-@Composable
-private fun ReadyCopy(
-    accent: Color,
-    compact: Boolean,
-    modifier: Modifier = Modifier,
-) {
-    Column(modifier = modifier) {
-        Text(
-            text = stringResource(R.string.onboarding_ready_title),
-            modifier = Modifier.semantics { heading() },
-            color = MiuixTheme.colorScheme.onSurface,
-            fontSize = if (compact) 29.sp else 34.sp,
-            lineHeight = if (compact) 35.sp else 41.sp,
-            fontWeight = FontWeight.Bold,
-            textAlign = TextAlign.Center,
-        )
-        Spacer(Modifier.height(8.dp))
-        Text(
-            text = stringResource(R.string.onboarding_ready_summary),
-            modifier = Modifier.fillMaxWidth(),
-            color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.64f),
-            style = MiuixTheme.textStyles.headline1,
-            textAlign = TextAlign.Center,
-        )
-        Spacer(Modifier.height(if (compact) 14.dp else 20.dp))
-        ReadyDetails(accent = accent)
     }
 }
 
 @Composable
 private fun ReadyDetails(accent: Color) {
-    Column(modifier = Modifier.fillMaxWidth()) {
+    SetupPanel {
         ReadyItem("1", stringResource(R.string.onboarding_ready_pair), accent)
         SetupDivider()
         ReadyItem("2", stringResource(R.string.onboarding_ready_model), accent)
@@ -770,6 +980,28 @@ private fun ReadyDetails(accent: Color) {
             accent,
         )
     }
+}
+
+@Composable
+private fun SetupPanel(
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    val shape = RoundedCornerShape(28.dp)
+    val surface = MiuixTheme.colorScheme.surface
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(surface.copy(alpha = 0.88f))
+            .border(
+                width = 1.dp,
+                color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.06f),
+                shape = shape,
+            )
+            .padding(horizontal = 20.dp, vertical = 8.dp),
+        content = content,
+    )
 }
 
 @Composable
@@ -827,8 +1059,16 @@ private fun HuaweiPodsAppIcon(
     size: Dp,
     modifier: Modifier = Modifier,
 ) {
-    val launcherBackground = colorResource(android.R.color.system_accent1_300)
     val launcherForeground = colorResource(android.R.color.system_accent1_10)
+    val launcherBrush = remember {
+        Brush.linearGradient(
+            colors = listOf(
+                Color(0xFF9865C2),
+                Color(0xFF7775D4),
+                Color(0xFF5A91D6),
+            ),
+        )
+    }
     val corner = when {
         size >= 120.dp -> 32.dp
         size >= 80.dp -> 24.dp
@@ -838,7 +1078,8 @@ private fun HuaweiPodsAppIcon(
         modifier = modifier
             .size(size)
             .clip(RoundedCornerShape(corner))
-            .background(launcherBackground),
+            .background(launcherBrush)
+            .border(1.dp, Color.White.copy(alpha = 0.22f), RoundedCornerShape(corner)),
         contentAlignment = Alignment.Center,
     ) {
         Image(
@@ -847,6 +1088,116 @@ private fun HuaweiPodsAppIcon(
             colorFilter = ColorFilter.tint(launcherForeground),
             modifier = Modifier.fillMaxSize(),
         )
+    }
+}
+
+@Composable
+private fun OnboardingHeroArtwork(
+    size: Dp,
+    animateEntry: Boolean = false,
+    modifier: Modifier = Modifier,
+) {
+    var entered by remember(animateEntry) { mutableStateOf(!animateEntry) }
+    LaunchedEffect(animateEntry) { entered = true }
+    val entryProgress by animateFloatAsState(
+        targetValue = if (entered) 1f else 0f,
+        animationSpec = if (animateEntry) {
+            tween(durationMillis = 420, easing = FastOutSlowInEasing)
+        } else {
+            snap()
+        },
+        label = "setup_hero_entry",
+    )
+    val shape = RoundedCornerShape(size * 0.27f)
+    val artworkBrush = remember {
+        Brush.linearGradient(
+            colors = listOf(
+                Color(0xFF9865C2),
+                Color(0xFF7775D4),
+                Color(0xFF5A91D6),
+            ),
+        )
+    }
+    val haloBrush = remember {
+        Brush.radialGradient(
+            colors = listOf(
+                Color(0xFF8470CC).copy(alpha = 0.22f),
+                Color.Transparent,
+            ),
+        )
+    }
+    Box(
+        modifier = modifier
+            .size(size),
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(size * 1.12f)
+                .graphicsLayer {
+                    alpha = 0.30f + entryProgress * 0.40f
+                    val haloScale = 0.90f + entryProgress * 0.10f
+                    scaleX = haloScale
+                    scaleY = haloScale
+                }
+                .background(haloBrush, shape),
+        )
+        Box(
+            modifier = Modifier
+                .size(size)
+                .clip(shape)
+                .background(artworkBrush)
+                .border(1.dp, Color.White.copy(alpha = 0.24f), shape),
+            contentAlignment = Alignment.Center,
+        ) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = size * 0.11f, end = size * 0.11f)
+                    .size(size * 0.25f)
+                    .graphicsLayer {
+                        translationX = size.toPx() * 0.035f * entryProgress
+                        translationY = -size.toPx() * 0.025f * entryProgress
+                    }
+                    .background(Color.White.copy(alpha = 0.10f), CircleShape),
+            )
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(bottom = size * 0.13f, start = size * 0.13f)
+                    .size(size * 0.15f)
+                    .graphicsLayer {
+                        translationX = -size.toPx() * 0.028f * entryProgress
+                        translationY = size.toPx() * 0.032f * entryProgress
+                    }
+                    .background(Color.White.copy(alpha = 0.12f), CircleShape),
+            )
+            Box(
+                modifier = Modifier
+                    .size(size * 0.72f)
+                    .graphicsLayer {
+                        alpha = 0.08f + entryProgress * 0.08f
+                        val ringScale = 0.92f + entryProgress * 0.08f
+                        scaleX = ringScale
+                        scaleY = ringScale
+                    }
+                    .border(1.dp, Color.White.copy(alpha = 0.52f), CircleShape),
+            )
+            Image(
+                painter = painterResource(R.drawable.about_logo_mark),
+                contentDescription = null,
+                colorFilter = ColorFilter.tint(Color.White),
+                modifier = Modifier
+                    .size(size * 0.57f)
+                    .graphicsLayer {
+                        alpha = entryProgress
+                        translationY = size.toPx() * 0.05f * (1f - entryProgress)
+                        val logoScale = 0.86f + entryProgress * 0.14f
+                        scaleX = logoScale
+                        scaleY = logoScale
+                    },
+            )
+        }
     }
 }
 
@@ -874,31 +1225,37 @@ private fun SetupFooter(
         Row(
             modifier = Modifier.semantics(mergeDescendants = true) {
                 stateDescription = pageState
+                liveRegion = LiveRegionMode.Polite
             },
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically,
         ) {
             repeat(ONBOARDING_PAGE_COUNT) { index ->
-                val dotSize by animateDpAsState(
-                    targetValue = if (index == currentPage) 10.dp else 7.dp,
+                val dotWidth by animateDpAsState(
+                    targetValue = if (index == currentPage) 22.dp else 7.dp,
                     animationSpec = if (motionEnabled) tween(240, easing = FastOutSlowInEasing) else snap(),
-                    label = "setup_step_dot",
+                    label = "setup_step_width",
+                )
+                val dotColor by animateColorAsState(
+                    targetValue = if (index == currentPage) {
+                        accent
+                    } else {
+                        MiuixTheme.colorScheme.onSurface.copy(alpha = 0.18f)
+                    },
+                    animationSpec = if (motionEnabled) tween(180) else snap(),
+                    label = "setup_step_color_$index",
                 )
                 Box(
-                    modifier = Modifier.size(20.dp),
+                    modifier = Modifier
+                        .width(32.dp)
+                        .height(20.dp),
                     contentAlignment = Alignment.Center,
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(dotSize)
-                            .background(
-                                if (index == currentPage) {
-                                    accent
-                                } else {
-                                    MiuixTheme.colorScheme.onSurface.copy(alpha = 0.18f)
-                                },
-                                CircleShape,
-                            ),
+                            .width(dotWidth)
+                            .height(7.dp)
+                            .background(dotColor, CircleShape),
                     )
                 }
             }
@@ -920,10 +1277,25 @@ private fun SetupFooter(
                     .heightIn(min = 54.dp),
             )
             val primaryEnabled = navigationEnabled
+            val primaryInteractionSource = remember { MutableInteractionSource() }
+            val primaryPressed by primaryInteractionSource.collectIsPressedAsState()
+            val primaryScale by animateFloatAsState(
+                targetValue = if (primaryEnabled && primaryPressed) 0.975f else 1f,
+                animationSpec = if (motionEnabled) {
+                    tween(if (primaryPressed) 90 else 160, easing = FastOutSlowInEasing)
+                } else {
+                    snap()
+                },
+                label = "setup_primary_press",
+            )
             Box(
                 modifier = Modifier
                     .weight(0.62f)
                     .heightIn(min = 54.dp)
+                    .graphicsLayer {
+                        scaleX = primaryScale
+                        scaleY = primaryScale
+                    }
                     .clip(CircleShape)
                     .background(
                         if (primaryEnabled) {
@@ -932,7 +1304,13 @@ private fun SetupFooter(
                             MiuixTheme.colorScheme.onSurface.copy(alpha = 0.12f)
                         },
                     )
-                    .clickable(enabled = primaryEnabled, role = Role.Button, onClick = onNext)
+                    .clickable(
+                        interactionSource = primaryInteractionSource,
+                        indication = LocalIndication.current,
+                        enabled = primaryEnabled,
+                        role = Role.Button,
+                        onClick = onNext,
+                    )
                     .semantics { role = Role.Button },
                 contentAlignment = Alignment.Center,
             ) {

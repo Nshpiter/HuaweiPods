@@ -8,30 +8,35 @@ export default defineConfig({
   description: '为小米 HyperOS 适配华为耳机',
   base: '/',
   cleanUrls: true,
-  srcExclude: ['DEBUG_CAPTURE_GUIDE.md'],
+  srcExclude: ['DEBUG_CAPTURE_GUIDE.md', 'CODEX_HANDOFF.md'],
   lastUpdated: true,
   head: [
-    ['link', { rel: 'icon', type: 'image/png', href: '/freebuds3.png' }],
+    ['link', { rel: 'icon', type: 'image/png', href: '/huaweipods-logo.png' }],
     ['meta', { name: 'theme-color', content: '#5968f2' }],
     ['meta', { name: 'color-scheme', content: 'light dark' }]
   ],
   themeConfig: {
     logo: {
-      src: '/freebuds3.png',
+      src: '/huaweipods-logo.png',
       alt: 'HuaweiPods'
     },
     nav: [
       { text: '快速开始', link: '/guide/getting-started' },
-      { text: '支持状态', link: '/support/' },
-      { text: '赞助支持', link: '/sponsor/' },
-      { text: 'GitHub', link: repositoryUrl }
+      { text: '支持机型', link: '/support/' },
+      {
+        text: '更多',
+        items: [
+          { text: '交流与反馈', link: '/guide/getting-started#没有生效时' },
+          { text: '赞助支持', link: '/sponsor/' }
+        ]
+      }
     ],
     sidebar: [
       {
         text: 'HuaweiPods',
         items: [
           { text: '快速开始', link: '/guide/getting-started' },
-          { text: '支持状态', link: '/support/' },
+          { text: '支持机型', link: '/support/' },
           { text: '赞助支持', link: '/sponsor/' }
         ]
       }

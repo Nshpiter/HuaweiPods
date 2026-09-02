@@ -43,6 +43,7 @@ fun App(
         else -> ColorSchemeMode.System
     }
     val backStack = remember { mutableStateListOf<Screen>(Screen.Main) }
+    var selectedTab by remember { mutableStateOf(MainTab.Module) }
     var showOnboarding by remember { mutableStateOf(initialLaunchDecision.showOnboarding) }
     var onboardingIsReplay by remember { mutableStateOf(false) }
     var showUpdatedDialog by remember { mutableStateOf(initialLaunchDecision.showUpdated) }
@@ -95,6 +96,8 @@ fun App(
             } else {
                 MainUI(
                     backStack = backStack,
+                    selectedTab = selectedTab,
+                    onSelectedTabChange = { selectedTab = it },
                     showUpdatedDialogOnLaunch = showUpdatedDialog,
                     onUpdatedDialogHandled = ::acknowledgeUpdatedVersion,
                     onOpenOnboarding = {

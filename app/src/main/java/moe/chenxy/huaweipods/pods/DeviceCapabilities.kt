@@ -155,7 +155,7 @@ private val routeCapabilities = linkedMapOf(
     ),
     HuaweiDeviceRoute.HUAWEI_EYEWEAR to HuaweiDeviceCapabilities(
         displayName = "HUAWEI Eyewear",
-        aliases = setOf("huaweieyewear"),
+        aliases = setOf("huaweieyewear", "huaweieyewear3", "eyewear3"),
         supportsRfcommBattery = true,
     ),
     HuaweiDeviceRoute.HUAWEI_EYEWEAR2 to HuaweiDeviceCapabilities(

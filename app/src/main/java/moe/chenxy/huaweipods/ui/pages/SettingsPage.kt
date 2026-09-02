@@ -16,8 +16,12 @@ import moe.chenxy.huaweipods.config.ConfigManager
 import moe.chenxy.huaweipods.ui.AppLocale
 import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.ChevronForward
 import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
+import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 @Composable
 fun SettingsPage(
@@ -46,7 +50,6 @@ fun SettingsPage(
     fakeDeviceId: MutableState<String> = mutableStateOf(ConfigManager.DEFAULT_FAKE_DEVICE_ID),
     onFakeDeviceIdChange: (String) -> Unit = {},
     onOpenTheme: () -> Unit = {},
-    onOpenAbout: () -> Unit = {}
 ) {
     val languageOptions = listOf(
         stringResource(R.string.language_system),
@@ -103,6 +106,13 @@ fun SettingsPage(
                 BasicComponent(
                     title = stringResource(R.string.theme_title),
                     summary = stringResource(R.string.theme_color_summary),
+                    endActions = {
+                        Icon(
+                            imageVector = MiuixIcons.ChevronForward,
+                            contentDescription = null,
+                            tint = MiuixTheme.colorScheme.onSurfaceVariantActions,
+                        )
+                    },
                     onClick = onOpenTheme,
                 )
             }
@@ -183,16 +193,6 @@ fun SettingsPage(
                     )
                 }
 
-            }
-        }
-
-        item {
-            Card(modifier = Modifier.padding(top = 12.dp)) {
-                BasicComponent(
-                    title = stringResource(R.string.about),
-                    summary = stringResource(R.string.app_subtitle),
-                    onClick = onOpenAbout
-                )
             }
         }
     }

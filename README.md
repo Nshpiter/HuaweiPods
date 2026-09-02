@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://github.com/user-attachments/assets/e8a3df6b-6e67-485a-ae1c-018ac24e87d4" width="120" height="120" alt="HuaweiPods Icon"/>
+<img src="docs/public/huaweipods-logo.png" width="120" height="120" alt="HuaweiPods Icon"/>
 
 # HuaweiPods
 
@@ -23,7 +23,7 @@ QQ群 `1022359908`
 
 HuaweiPods 是一个面向小米 / Redmi HyperOS 设备的 Xposed 模块，将华为耳机接入系统蓝牙详情页、连接弹窗、超级岛与融合设备中心。
 
-> 当前统一版已集成下列 14 个型号，所有型号使用同一个 APK，不再按型号单独分发测试包。
+> 当前统一版已集成下列 15 个型号，所有型号使用同一个 APK，不再按型号单独分发测试包。
 
 ## 支持型号
 
@@ -43,6 +43,7 @@ HuaweiPods 是一个面向小米 / Redmi HyperOS 设备的 Xposed 模块，将�
 | HUAWEI FreeArc | 扩展支持 | 左右耳与充电盒电量、双击 / 三击 / 按住 / 滑动手势、5 种官方音效、10 段自定义均衡器与官方配色图片；不支持传统主动降噪 |
 | 华为智能眼镜（第一代） | 基础支持 | 左右镜腿电量与系统界面集成；不提供主动降噪 |
 | HUAWEI Eyewear 2 | 基础支持 | 左右镜腿电量、双击 / 滑动手势与低时延自动保持；不提供主动降噪 |
+| HUAWEI Eyewear 3 | 基础支持 | 协议型号识别、左右镜腿电量、系统眼镜分类与官方配色图片；不提供主动降噪 |
 
 “稳定”表示已完成较充分的实机验证；“扩展支持”表示已接入更多协议控制；“基础支持”表示已接入识别、电量或核心控制。除稳定型号外，其余型号仍建议继续进行真机回归。表中未列出的官方功能不代表已经支持。
 
@@ -60,13 +61,14 @@ HuaweiPods 是一个面向小米 / Redmi HyperOS 设备的 Xposed 模块，将�
 - 直接从蓝牙协议读取现代型号的精确资源身份，并从华为官方 CDN 校验、缓存对应机型与配色图片
 - 耳机名称被修改或无法自动识别时，可按蓝牙地址手动选择型号
 - 首次启动提供设置引导，并可在应用内检查 GitHub 更新
-- 支持 LSPosed API 102 自动热重载；无法安全恢复时才提示重启作用域
+- 独立的关于页面集中展示版本、更新、反馈与社区入口，完整设置收进右上角入口
+- 覆盖安装新版本后提示重启作用域，无需直接重启手机
 
 ## 使用要求
 
 - 小米或 Redmi 设备
 - HyperOS，Android 15 及以上
-- LSPosed API 102 及以上
+- LSPosed API 102 及以上（协议采集 Debug 版使用 API 101）
 - 表中任一已集成型号
 
 ## 快速开始
@@ -81,7 +83,7 @@ HuaweiPods 是一个面向小米 / Redmi HyperOS 设备的 Xposed 模块，将�
    - `com.xiaomi.bluetooth`
    - `com.huawei.smartaudio`（已安装时，用于 FreeClip 2 空间音频与自定义音效同步）
 
-4. 首次启用模块，或从 API 101 版本升级后，按 LSPosed 提示重启一次作用域；之后同签名更新会优先自动热重载。
+4. 在 HuaweiPods 内重启相关作用域，或重启手机。
 5. 连接设备后，即可在 HuaweiPods、蓝牙详情页、超级岛或融合设备中心查看已接入能力。现代型号会直接读取设备标识；改名设备或旧协议型号识别失败时，再在 HuaweiPods 中选择一次真实型号。
 
 正式版不需要安装或运行华为智慧音频来获取图片：现代型号由蓝牙协议直接确认机型与配色，旧协议型号可在图片设置中检索华为官方配色并手动确认。下载失败时始终回退到已有缓存或内置图，不会猜测默认配色。
@@ -101,22 +103,24 @@ HuaweiPods 是一个面向小米 / Redmi HyperOS 设备的 Xposed 模块，将�
 ## 构建
 
 ```bash
-# 正式版
+# 正式版（LSPosed API 102）
 ./gradlew :app:assembleRelease
 
-# 协议采集与调试版
+# 协议采集与调试版（LSPosed API 101，包含采集界面）
 ./gradlew :app:assembleDebug
 ```
 
-`release` 的图片识别不依赖华为智慧音频；仅在智慧音频本来就在运行时，注入一个 FreeClip 2 空间音频同步桥，不会主动启动或保活它。`debug` 另外包含面向适配工作的智慧音频协议采集功能。两者使用相同应用 ID，无法同时安装。
+`release` 的图片识别不依赖华为智慧音频；仅在智慧音频本来就在运行时，注入一个 FreeClip 2 空间音频同步桥，不会主动启动或保活它，并使用 LSPosed API 102（含自动热重载元数据）。`debug` 仍固定使用 API 101，另外包含面向适配工作的智慧音频协议采集功能。两者使用相同应用 ID，无法同时安装。
 
 ## 致谢
 
-- [OppoPods](https://github.com/1812z/OppoPods) by 1812z（HuaweiPods 直接基于）
+- [OppoPods](https://github.com/1812z/OppoPods) by 1812z（HuaweiPods 初始适配来源）
 - [OppoPods](https://github.com/Leaf-lsgtky/OppoPods) by Leaf-lsgtky（上游原始项目）
-- [HyperPods](https://github.com/Art-Chen/HyperPods) by Art_Chen
-- [HyperIsland](https://github.com/1812z/HyperIsland) by 1812z（更新与首次引导交互参考）
-- [Miuix](https://github.com/YuKongA/miuix)
+- [HyperPods](https://github.com/Art-Chen/HyperPods) by Art_Chen（HyperOS 耳机接入参考）
+- [OpenFreebuds](https://github.com/melianmiko/OpenFreebuds) by melianmiko（华为耳机协议参考）
+- [HyperIsland](https://github.com/1812z/HyperIsland) by 1812z（关于页、更新与首次引导交互参考）
+- [HyperLight](https://github.com/KiminonawaResa/HyperLight) by KiminonawaResa（HyperOS 材质层次与动效参考）
+- [Miuix](https://github.com/compose-miuix-ui/miuix) by YuKongA（HyperOS 风格 Compose 界面组件）
 
 ## 许可证
 

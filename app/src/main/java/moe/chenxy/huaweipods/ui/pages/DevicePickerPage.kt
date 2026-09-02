@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -42,6 +43,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
@@ -426,29 +429,14 @@ fun DevicePickerPage(
         }
     }
 
-    WindowDialog(
-        title = stringResource(R.string.select_device_model),
-        show = pendingRouteDevice != null,
+    DeviceModelPickerDialog(
+        device = pendingRouteDevice,
         onDismissRequest = { pendingRouteDevice = null },
-    ) {
-        Text(
-            text = stringResource(R.string.select_device_model_hint),
-            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-            modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
-        )
-        enabledHuaweiDeviceRoutes().forEach { route ->
-            TextButton(
-                text = route.displayName,
-                onClick = {
-                    val device = pendingRouteDevice ?: return@TextButton
-                    pendingRouteDevice = null
-                    onDeviceSelected(device, route)
-                },
-                modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
-                colors = ButtonDefaults.textButtonColorsPrimary(),
-            )
-        }
-    }
+        onSelect = { device, route ->
+            pendingRouteDevice = null
+            onDeviceSelected(device, route)
+        },
+    )
 
     WindowDialog(
         title = stringResource(R.string.connect_failed),
@@ -464,6 +452,85 @@ fun DevicePickerPage(
         )
     }
 
+}
+
+@Composable
+private fun DeviceModelPickerDialog(
+    device: BluetoothDevice?,
+    onDismissRequest: () -> Unit,
+    onSelect: (BluetoothDevice, HuaweiDeviceRoute) -> Unit,
+) {
+    var query by remember(device?.address) { mutableStateOf("") }
+    val allRoutes = remember { enabledHuaweiDeviceRoutes() }
+    val filteredRoutes = remember(allRoutes, query) {
+        filterDeviceModelRoutes(allRoutes, query)
+    }
+    val rows = remember(filteredRoutes) { filteredRoutes.chunked(2) }
+
+    WindowDialog(
+        modifier = modelPickerDialogModifier(),
+        title = stringResource(R.string.select_device_model),
+        summary = stringResource(R.string.select_device_model_hint),
+        show = device != null,
+        onDismissRequest = onDismissRequest,
+    ) {
+        TextField(
+            value = query,
+            onValueChange = { query = it },
+            label = stringResource(R.string.select_device_model_search),
+            useLabelAsPlaceholder = true,
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+        )
+        if (filteredRoutes.isEmpty()) {
+            Text(
+                text = stringResource(R.string.select_device_model_empty),
+                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                modifier = Modifier.fillMaxWidth().padding(vertical = 28.dp),
+            )
+        } else {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 64.dp, max = 360.dp)
+                    .padding(top = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                items(
+                    items = rows,
+                    key = { row -> row.first().name },
+                ) { row ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        row.forEach { route ->
+                            TextButton(
+                                text = compactDeviceModelName(route),
+                                onClick = {
+                                    val selectedDevice = device ?: return@TextButton
+                                    onSelect(selectedDevice, route)
+                                },
+                                modifier = Modifier.weight(1f).heightIn(min = 48.dp),
+                                colors = ButtonDefaults.textButtonColorsPrimary(),
+                            )
+                        }
+                        if (row.size == 1) {
+                            Spacer(Modifier.weight(1f))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun modelPickerDialogModifier(): Modifier {
+    val maxHeight = with(LocalDensity.current) {
+        (LocalWindowInfo.current.containerSize.height.toDp() - 48.dp).coerceAtLeast(280.dp)
+    }
+    return Modifier.heightIn(max = maxHeight)
 }
 
 @SuppressLint("MissingPermission")

@@ -13,7 +13,6 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -39,9 +38,10 @@ import moe.chenxy.huaweipods.ui.dialogs.RestartScope
 import moe.chenxy.huaweipods.ui.dialogs.RestartScopeDialog
 import moe.chenxy.huaweipods.ui.dialogs.PodImageConfigDialog
 import moe.chenxy.huaweipods.ui.dialogs.processLegacyOfficialImagePromptGate
+import moe.chenxy.huaweipods.ui.pages.AboutPageActions
+import moe.chenxy.huaweipods.ui.pages.AboutTabPage
 import moe.chenxy.huaweipods.ui.pages.EarphonesTabPage
 import moe.chenxy.huaweipods.ui.pages.HomePage
-import moe.chenxy.huaweipods.ui.pages.SettingsPage
 import moe.chenxy.huaweipods.ui.components.AppIcons
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.BatteryParams
 import top.yukonga.miuix.kmp.basic.Icon
@@ -94,30 +94,7 @@ internal fun MainTabsScaffold(
     onDeviceSelected: (BluetoothDevice, HuaweiDeviceRoute) -> Unit,
     onConnectedDeviceClick: () -> Unit,
     onDismissConnectError: () -> Unit,
-    desktopIconHidden: MutableState<Boolean>,
-    onDesktopIconHiddenChange: (Boolean) -> Unit,
-    checkUpdatesOnLaunch: MutableState<Boolean>,
-    onCheckUpdatesOnLaunchChange: (Boolean) -> Unit,
-    logLevel: MutableState<Int>,
-    onLogLevelChange: (Int) -> Unit,
-    islandMode: MutableState<Int>,
-    onIslandModeChange: (Int) -> Unit,
-    persistentNotificationEnabled: MutableState<Boolean>,
-    onPersistentNotificationEnabledChange: (Boolean) -> Unit,
-    lockscreenNotificationEnabled: MutableState<Boolean>,
-    onLockscreenNotificationEnabledChange: (Boolean) -> Unit,
-    appLanguage: MutableState<Int>,
-    onAppLanguageChange: (Int) -> Unit,
-    milinkLowLatencyCardEnabled: MutableState<Boolean>,
-    onMilinkLowLatencyCardEnabledChange: (Boolean) -> Unit,
-    notificationClickAction: MutableState<Int>,
-    onNotificationClickActionChange: (Int) -> Unit,
-    moreClickAction: MutableState<Int>,
-    onMoreClickActionChange: (Int) -> Unit,
-    fakeDeviceId: MutableState<String>,
-    onFakeDeviceIdChange: (String) -> Unit,
-    onOpenTheme: () -> Unit,
-    onOpenAbout: () -> Unit,
+    aboutActions: AboutPageActions,
     onOpenDocumentation: () -> Unit,
     onOpenSponsor: () -> Unit,
     showRestartScopeDialog: Boolean,
@@ -262,32 +239,9 @@ internal fun MainTabsScaffold(
                         onOpenSystemHeadsetSettings = onOpenSystemHeadsetSettings,
                     )
 
-                    MainTab.Settings -> SettingsTabPage(
+                    MainTab.About -> AboutTabPage(
+                        actions = aboutActions,
                         pageBottomContentPadding = pageBottomContentPadding,
-                        desktopIconHidden = desktopIconHidden,
-                        onDesktopIconHiddenChange = onDesktopIconHiddenChange,
-                        checkUpdatesOnLaunch = checkUpdatesOnLaunch,
-                        onCheckUpdatesOnLaunchChange = onCheckUpdatesOnLaunchChange,
-                        logLevel = logLevel,
-                        onLogLevelChange = onLogLevelChange,
-                        islandMode = islandMode,
-                        onIslandModeChange = onIslandModeChange,
-                        persistentNotificationEnabled = persistentNotificationEnabled,
-                        onPersistentNotificationEnabledChange = onPersistentNotificationEnabledChange,
-                        lockscreenNotificationEnabled = lockscreenNotificationEnabled,
-                        onLockscreenNotificationEnabledChange = onLockscreenNotificationEnabledChange,
-                        appLanguage = appLanguage,
-                        onAppLanguageChange = onAppLanguageChange,
-                        milinkLowLatencyCardEnabled = milinkLowLatencyCardEnabled,
-                        onMilinkLowLatencyCardEnabledChange = onMilinkLowLatencyCardEnabledChange,
-                        notificationClickAction = notificationClickAction,
-                        onNotificationClickActionChange = onNotificationClickActionChange,
-                        moreClickAction = moreClickAction,
-                        onMoreClickActionChange = onMoreClickActionChange,
-                        fakeDeviceId = fakeDeviceId,
-                        onFakeDeviceIdChange = onFakeDeviceIdChange,
-                        onOpenTheme = onOpenTheme,
-                        onOpenAbout = onOpenAbout,
                     )
                 }
             }
@@ -428,7 +382,10 @@ private fun EarphonesTabShell(
                     navigationIcon = {
                         if (showEarphoneDetail) {
                             IconButton(onClick = onBackToDevicePicker) {
-                                Icon(imageVector = MiuixIcons.Back, contentDescription = "Back")
+                                Icon(
+                                    imageVector = MiuixIcons.Back,
+                                    contentDescription = stringResource(R.string.back),
+                                )
                             }
                         }
                     },
@@ -467,80 +424,6 @@ private fun EarphonesTabShell(
 }
 
 @Composable
-private fun SettingsTabPage(
-    pageBottomContentPadding: Dp,
-    desktopIconHidden: MutableState<Boolean>,
-    onDesktopIconHiddenChange: (Boolean) -> Unit,
-    checkUpdatesOnLaunch: MutableState<Boolean>,
-    onCheckUpdatesOnLaunchChange: (Boolean) -> Unit,
-    logLevel: MutableState<Int>,
-    onLogLevelChange: (Int) -> Unit,
-    islandMode: MutableState<Int>,
-    onIslandModeChange: (Int) -> Unit,
-    persistentNotificationEnabled: MutableState<Boolean>,
-    onPersistentNotificationEnabledChange: (Boolean) -> Unit,
-    lockscreenNotificationEnabled: MutableState<Boolean>,
-    onLockscreenNotificationEnabledChange: (Boolean) -> Unit,
-    appLanguage: MutableState<Int>,
-    onAppLanguageChange: (Int) -> Unit,
-    milinkLowLatencyCardEnabled: MutableState<Boolean>,
-    onMilinkLowLatencyCardEnabledChange: (Boolean) -> Unit,
-    notificationClickAction: MutableState<Int>,
-    onNotificationClickActionChange: (Int) -> Unit,
-    moreClickAction: MutableState<Int>,
-    onMoreClickActionChange: (Int) -> Unit,
-    fakeDeviceId: MutableState<String>,
-    onFakeDeviceIdChange: (String) -> Unit,
-    onOpenTheme: () -> Unit,
-    onOpenAbout: () -> Unit,
-) {
-    val scrollBehavior = MiuixScrollBehavior(rememberTopAppBarState())
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = stringResource(R.string.settings),
-                largeTitle = stringResource(R.string.settings),
-                scrollBehavior = scrollBehavior,
-            )
-        },
-    ) { pagePadding ->
-        SettingsPage(
-            modifier = Modifier
-                .overScrollVertical()
-                .nestedScroll(scrollBehavior.nestedScrollConnection),
-            contentPadding = PaddingValues(
-                top = pagePadding.calculateTopPadding(),
-                bottom = pageBottomContentPadding,
-            ),
-            desktopIconHidden = desktopIconHidden,
-            onDesktopIconHiddenChange = onDesktopIconHiddenChange,
-            checkUpdatesOnLaunch = checkUpdatesOnLaunch,
-            onCheckUpdatesOnLaunchChange = onCheckUpdatesOnLaunchChange,
-            logLevel = logLevel,
-            onLogLevelChange = onLogLevelChange,
-            islandMode = islandMode,
-            onIslandModeChange = onIslandModeChange,
-            persistentNotificationEnabled = persistentNotificationEnabled,
-            onPersistentNotificationEnabledChange = onPersistentNotificationEnabledChange,
-            lockscreenNotificationEnabled = lockscreenNotificationEnabled,
-            onLockscreenNotificationEnabledChange = onLockscreenNotificationEnabledChange,
-            appLanguage = appLanguage,
-            onAppLanguageChange = onAppLanguageChange,
-            milinkLowLatencyCardEnabled = milinkLowLatencyCardEnabled,
-            onMilinkLowLatencyCardEnabledChange = onMilinkLowLatencyCardEnabledChange,
-            notificationClickAction = notificationClickAction,
-            onNotificationClickActionChange = onNotificationClickActionChange,
-            moreClickAction = moreClickAction,
-            onMoreClickActionChange = onMoreClickActionChange,
-            fakeDeviceId = fakeDeviceId,
-            onFakeDeviceIdChange = onFakeDeviceIdChange,
-            onOpenTheme = onOpenTheme,
-            onOpenAbout = onOpenAbout,
-        )
-    }
-}
-
-@Composable
 private fun LandscapeDetailActions(
     onBackToDevicePicker: () -> Unit,
     onOpenPodImageConfig: () -> Unit,
@@ -552,7 +435,10 @@ private fun LandscapeDetailActions(
             .zIndex(1f),
         onClick = onBackToDevicePicker,
     ) {
-        Icon(imageVector = MiuixIcons.Back, contentDescription = "Back")
+        Icon(
+            imageVector = MiuixIcons.Back,
+            contentDescription = stringResource(R.string.back),
+        )
     }
     Box(Modifier.fillMaxSize()) {
         IconButton(

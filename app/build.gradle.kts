@@ -18,8 +18,8 @@ android {
         applicationId = "moe.chenxy.huaweipods"
         minSdk = 35
         targetSdk = 36
-        versionCode = 16
-        versionName = "1.8.0"
+        versionCode = 17
+        versionName = "1.8.1"
         buildConfigField("long", "BUILD_TIMESTAMP", moduleBuildTimestamp.toString())
     }
 

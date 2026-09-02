@@ -107,9 +107,14 @@ body {
 }
 
 .VPHero .image-src {
-  width: min(430px, 100%);
+  width: auto;
+  max-width: min(330px, 100%);
+  max-height: min(68vh, 620px);
   height: auto;
-  filter: drop-shadow(0 28px 30px rgba(38, 46, 71, 0.17));
+  border: 1px solid rgba(255, 255, 255, 0.48);
+  border-radius: 30px;
+  box-shadow: 0 28px 60px rgba(38, 46, 71, 0.2);
+  object-fit: contain;
 }
 
 .vp-doc h1 {
@@ -148,6 +153,10 @@ body {
 }
 
 @media (max-width: 767px) {
+  body {
+    background-attachment: scroll;
+  }
+
   .VPHome .VPHero {
     padding-top: 72px;
     padding-bottom: 80px;
@@ -160,7 +169,9 @@ body {
 
 @media (max-width: 559px) {
   .VPHero .image-src {
-    width: 290px;
+    max-width: 260px;
+    max-height: 560px;
+    border-radius: 24px;
   }
 }
 

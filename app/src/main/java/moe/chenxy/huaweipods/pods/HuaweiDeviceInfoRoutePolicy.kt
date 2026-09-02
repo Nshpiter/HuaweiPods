@@ -12,6 +12,8 @@ internal object HuaweiDeviceInfoRoutePolicy {
         "000163" to HuaweiDeviceRoute.HUAWEI_FREEBUDS7I,
         "000167" to HuaweiDeviceRoute.HUAWEI_FREECLIP2,
         "00015D" to HuaweiDeviceRoute.HUAWEI_FREEARC,
+        // HUAWEI Eyewear 3（Evian，协议产品名仍上报为 HUAWEI Eyewear）。
+        "000139" to HuaweiDeviceRoute.HUAWEI_EYEWEAR,
         "00014F" to HuaweiDeviceRoute.HUAWEI_EYEWEAR2,
     )
     private val modelIdByRoute = routeByModelId.entries.associate { (modelId, route) ->

@@ -19,6 +19,7 @@ class HuaweiDeviceInfoRoutePolicyTest {
             "000163" to HuaweiDeviceRoute.HUAWEI_FREEBUDS7I,
             "000167" to HuaweiDeviceRoute.HUAWEI_FREECLIP2,
             "00015D" to HuaweiDeviceRoute.HUAWEI_FREEARC,
+            "000139" to HuaweiDeviceRoute.HUAWEI_EYEWEAR,
             "00014F" to HuaweiDeviceRoute.HUAWEI_EYEWEAR2,
         )
 

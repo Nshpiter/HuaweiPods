@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://github.com/user-attachments/assets/e8a3df6b-6e67-485a-ae1c-018ac24e87d4" width="120" height="120" style="border-radius: 24px;" alt="HuaweiPods Icon"/>
+<img src="docs/public/huaweipods-logo.png" width="120" height="120" style="border-radius: 24px;" alt="HuaweiPods Icon"/>
 
 # HuaweiPods
 
@@ -18,7 +18,7 @@
 
 HuaweiPods is an Xposed module for Xiaomi HyperOS. It integrates supported Huawei audio devices with the system headset popup, Super Island, Fusion Device Center, and Bluetooth detail page.
 
-The unified build supports the 14 models below in one APK. Model-specific test APKs are no longer distributed.
+The unified build supports the 15 models below in one APK. Model-specific test APKs are no longer distributed.
 
 ## Supported models
 
@@ -38,6 +38,7 @@ The unified build supports the 14 models below in one APK. Model-specific test A
 | HUAWEI FreeArc | Extended support | Left/right/case battery, double/triple-tap, press-and-hold and swipe gestures, five official sound presets, a 10-band custom EQ, and official color images; no traditional ANC |
 | HUAWEI Eyewear (1st generation) | Basic support | Left/right temple battery and system UI integration; no ANC |
 | HUAWEI Eyewear 2 | Basic support | Left/right temple battery, double-tap/swipe gestures, and low-latency auto-apply; no ANC |
+| HUAWEI Eyewear 3 | Basic support | Protocol-model identification, left/right temple battery, system eyewear classification, and official color images; no ANC |
 
 “Stable” means the model has received substantial device testing. “Extended support” includes additional protocol controls, while “Basic support” covers identification, battery, or core controls. Models not marked stable still benefit from real-device regression testing, and unlisted official features should not be assumed to work.
 
@@ -53,14 +54,15 @@ The unified build supports the 14 models below in one APK. Model-specific test A
 - **Fusion Device Center** headset display and transfer between paired devices, with an optional low-latency quick card on verified legacy hosts.
 - **Manual model binding** by Bluetooth address when a device has been renamed or cannot be identified automatically.
 - **First-run setup guide** and in-app GitHub release checks.
-- **LSPosed API 102 hot reload** for same-signature updates, with a scope-restart fallback when the running process cannot be restored safely.
+- **Standalone About page** for version details, updates, feedback, and community access, with full settings available from its top-right action.
+- **Post-update scope restart prompt** after installing a newer APK.
 - **Official model images** downloaded from Huawei's CDN after modern devices report an exact model and color identity over Bluetooth; manual and built-in images remain available as fallbacks.
 
 ## Requirements
 
 - Xiaomi / Redmi device running HyperOS.
 - Android 15+.
-- LSPosed API version >= 102.
+- LSPosed API version >= 102 (the protocol-capture Debug build uses API 101).
 - A paired device listed in the support table above.
 
 ## Usage
@@ -73,7 +75,7 @@ The unified build supports the 14 models below in one APK. Model-specific test A
    - `com.milink.service`
    - `com.xiaomi.bluetooth`
    - `com.huawei.smartaudio` (when installed, for FreeClip 2 spatial-audio and custom-EQ synchronization)
-4. On first activation, or after upgrading from an API 101 build, restart the scoped apps once if LSPosed asks. Later same-signature updates will prefer automatic hot reload.
+4. Reboot the phone, or restart the scoped apps from HuaweiPods.
 5. Connect a supported device and view its integrated capabilities in HuaweiPods, Super Island, Fusion Device Center, or the system Bluetooth detail page. Modern models are identified from their protocol identity; if a renamed or legacy device is not identified, select its actual model once in HuaweiPods.
 
 The release build no longer needs to install, run, or hook HUAWEI AI Life Audio for official images. Modern models provide the model and color identity over Bluetooth; legacy models can browse the verified Huawei color catalog in the image settings and ask the user to confirm once. Failures always fall back to cached or bundled images and never guess the default color.
@@ -88,11 +90,13 @@ Internal package names, broadcast actions, configuration names, and the public a
 
 ## Credits
 
-- [OppoPods](https://github.com/1812z/OppoPods) by 1812z — the fork HuaweiPods was directly adapted from.
+- [OppoPods](https://github.com/1812z/OppoPods) by 1812z — the initial adaptation source for HuaweiPods.
 - [OppoPods](https://github.com/Leaf-lsgtky/OppoPods) by Leaf-lsgtky — the original upstream OppoPods project.
 - [HyperPods](https://github.com/Art-Chen/HyperPods) by Art_Chen — original HyperOS headset integration ideas.
-- [HyperIsland](https://github.com/1812z/HyperIsland) by 1812z — interaction reference for update checks and onboarding.
-- [Miuix](https://github.com/YuKongA/miuix) — HyperOS-style Compose UI components.
+- [OpenFreebuds](https://github.com/melianmiko/OpenFreebuds) by melianmiko — Huawei earphone protocol reference.
+- [HyperIsland](https://github.com/1812z/HyperIsland) by 1812z — interaction reference for the About page, update checks, and onboarding.
+- [HyperLight](https://github.com/KiminonawaResa/HyperLight) by KiminonawaResa — HyperOS material hierarchy and motion reference.
+- [Miuix](https://github.com/compose-miuix-ui/miuix) by YuKongA — HyperOS-style Compose UI components.
 
 ## License
 
