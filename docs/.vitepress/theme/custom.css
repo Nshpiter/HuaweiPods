@@ -84,10 +84,16 @@ body {
 .VPHero .name,
 .VPHero .text {
   letter-spacing: -0.04em;
+  max-width: min(690px, 100%);
+  overflow-wrap: anywhere;
 }
 
-.VPHero .text {
-  max-width: 690px;
+.VPHero .image-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: min(100%, 320px);
+  height: auto;
 }
 
 .VPHero .image-container::before {
@@ -107,14 +113,19 @@ body {
 }
 
 .VPHero .image-src {
+  position: relative;
+  top: auto;
+  left: auto;
+  display: block;
   width: auto;
-  max-width: min(330px, 100%);
-  max-height: min(68vh, 620px);
+  max-width: min(240px, 100%);
+  max-height: min(50vh, 430px);
   height: auto;
   border: 1px solid rgba(255, 255, 255, 0.48);
   border-radius: 30px;
   box-shadow: 0 28px 60px rgba(38, 46, 71, 0.2);
   object-fit: contain;
+  transform: none;
 }
 
 .vp-doc h1 {
@@ -144,11 +155,41 @@ body {
   }
 
   .VPHero.has-image .image {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 0;
     margin: 0 -30px 0 30px;
   }
 
   .VPHero.has-image .image-container {
     transform: translate(-32px, 0);
+  }
+
+  .VPHero .image-src {
+    max-width: min(300px, 100%);
+    max-height: min(56vh, 560px);
+  }
+}
+
+@media (max-width: 959px) {
+  .VPHero.has-image .image {
+    margin: 0;
+  }
+
+  .VPHero.has-image .main {
+    width: 100%;
+    min-width: 0;
+    padding-top: 32px;
+  }
+
+  .VPHero.has-image .actions {
+    gap: 8px;
+    margin: 0;
+  }
+
+  .VPHero.has-image .action {
+    padding: 0;
   }
 }
 
@@ -169,8 +210,8 @@ body {
 
 @media (max-width: 559px) {
   .VPHero .image-src {
-    max-width: 260px;
-    max-height: 560px;
+    max-width: min(220px, 100%);
+    max-height: min(48vh, 400px);
     border-radius: 24px;
   }
 }
