@@ -57,6 +57,32 @@ class HuaweiDeviceRouteProbePolicyTest {
     }
 
     @Test
+    fun `unknown model id may reuse only an exact known device name template`() {
+        assertEquals(
+            HuaweiDeviceRoute.HUAWEI_FREEBUDS6I,
+            HuaweiDeviceRouteProbePolicy.resolveVerifiedRoute(
+                modelId = "FFFFFF",
+                subModelId = "02",
+                deviceName = "HUAWEI FreeBuds 6i",
+            ),
+        )
+        assertNull(
+            HuaweiDeviceRouteProbePolicy.resolveVerifiedRoute(
+                modelId = "FFFFFF",
+                subModelId = "02",
+                deviceName = "HUAWEI Unknown Buds",
+            ),
+        )
+        assertNull(
+            HuaweiDeviceRouteProbePolicy.resolveVerifiedRoute(
+                modelId = "FFFFFF",
+                subModelId = "02",
+                deviceName = "HUAWEI FreeClip 2",
+            ),
+        )
+    }
+
+    @Test
     fun `per address cooldown rejects rapid repeat`() {
         assertTrue(HuaweiDeviceRouteProbePolicy.cooldownAllows(null, 100L))
         assertFalse(HuaweiDeviceRouteProbePolicy.cooldownAllows(100L, 101L))

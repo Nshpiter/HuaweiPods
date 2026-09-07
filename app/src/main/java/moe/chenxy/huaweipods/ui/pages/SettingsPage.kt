@@ -13,6 +13,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import moe.chenxy.huaweipods.R
 import moe.chenxy.huaweipods.config.ConfigManager
+import moe.chenxy.huaweipods.debug.DebugReproductionSession
 import moe.chenxy.huaweipods.ui.AppLocale
 import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.Card
@@ -50,6 +51,8 @@ fun SettingsPage(
     fakeDeviceId: MutableState<String> = mutableStateOf(ConfigManager.DEFAULT_FAKE_DEVICE_ID),
     onFakeDeviceIdChange: (String) -> Unit = {},
     onOpenTheme: () -> Unit = {},
+    onStartReproduction: () -> Unit = {},
+    onStopReproduction: () -> Unit = {},
 ) {
     val languageOptions = listOf(
         stringResource(R.string.language_system),
@@ -115,6 +118,25 @@ fun SettingsPage(
                     },
                     onClick = onOpenTheme,
                 )
+            }
+        }
+
+        item {
+            Card(modifier = Modifier.padding(top = 12.dp)) {
+                BasicComponent(
+                    title = stringResource(
+                        if (DebugReproductionSession.active) R.string.debug_log_recording else R.string.debug_log_start,
+                    ),
+                    summary = stringResource(R.string.debug_log_summary),
+                    onClick = onStartReproduction,
+                )
+                if (DebugReproductionSession.active) {
+                    BasicComponent(
+                        title = stringResource(R.string.debug_log_stop),
+                        summary = stringResource(R.string.debug_log_stop_summary),
+                        onClick = onStopReproduction,
+                    )
+                }
             }
         }
 

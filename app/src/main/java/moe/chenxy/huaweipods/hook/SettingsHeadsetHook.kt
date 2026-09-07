@@ -735,6 +735,10 @@ object SettingsHeadsetHook : HookContext() {
                 fragmentRootView(instance)?.let { root ->
                     runCatching { pruneFreeBudsUnsupportedViews(root) }
                         .onFailure { Log.w(TAG, "Settings prune after updateAncUi failed", it) }
+                    root.post {
+                        runCatching { pruneFreeBudsUnsupportedViews(root) }
+                            .onFailure { Log.w(TAG, "Settings post-update ANC sync failed", it) }
+                    }
                     // 宿主会在 updateAncUi 返回后继续通过动画/绑定恢复原生档位条。
                     // 保留立即裁剪避免闪现，再在消息队列和动画稳定后重新应用一次。
                     if (requiresDeferredSettingsAncLevelPrune(currentHuaweiRoute())) {
@@ -851,6 +855,7 @@ object SettingsHeadsetHook : HookContext() {
                         }
                         saveState(context)
                         updateFragments()
+                        schedulePruneAllCurrentFragments()
                     }
                     HuaweiPodsAction.ACTION_HUAWEI_ANC_LEVEL_CHANGED -> {
                         if (!rememberSupportedDevice(receivedIntent)) return
@@ -1983,6 +1988,7 @@ object SettingsHeadsetHook : HookContext() {
         if (policy.showAnc) configureTransparencyModeView(root, modeContainer, route)
         replaceHuaweiAncLevelsWithHuaweiDial(root)
         syncHuaweiEqualizerSelector(root)
+        syncAncModeButtonSelection(root, modeContainer)
     }
 
     private fun setSettingsRowsVisible(
@@ -2244,6 +2250,52 @@ object SettingsHeadsetHook : HookContext() {
         }
     }
 
+    private fun syncAncModeButtonSelection(root: View, modeContainer: View?) {
+        val container = modeContainer ?: return
+        val resources = root.resources
+        val nativeButtons = listOf(
+            "transport" to "imageTransport",
+            "openAnc" to "imageopenAnc",
+            "closeAnc" to "imageCloseAnc",
+        )
+        nativeButtons.forEach { (buttonName, imageName) ->
+            val selected = when (buttonName) {
+                "transport" -> currentAnc == NoiseControlMode.TRANSPARENCY.broadcastStatus
+                "openAnc" -> currentAnc == NoiseControlMode.NOISE_CANCELLATION.broadcastStatus
+                else -> currentAnc == NoiseControlMode.OFF.broadcastStatus
+            }
+            val buttonId = resources.getIdentifier(buttonName, "id", root.context.packageName)
+            val imageId = resources.getIdentifier(imageName, "id", root.context.packageName)
+            val button = buttonId.takeIf { it != 0 }?.let { root.findViewById<View>(it) }
+            val image = imageId.takeIf { it != 0 }?.let { root.findViewById<View>(it) }
+            listOfNotNull(button, image).forEach { view ->
+                view.isSelected = selected
+                view.isActivated = selected
+                (view as? android.widget.Checkable)?.isChecked = selected
+                view.refreshDrawableState()
+                view.invalidate()
+                if (view === image) view.contentDescription = if (selected) "已选中" else "未选中"
+            }
+        }
+        val matches = mutableListOf<TextView>()
+        collectAncModeTextMatches(root, matches)
+        matches.forEach { label ->
+            val mode = when (label.text?.toString()?.trim()?.lowercase()) {
+                "降噪", "noise" -> NoiseControlMode.NOISE_CANCELLATION.broadcastStatus
+                "通透", "transparency" -> NoiseControlMode.TRANSPARENCY.broadcastStatus
+                "关闭", "off" -> NoiseControlMode.OFF.broadcastStatus
+                else -> return@forEach
+            }
+            val selected = currentAnc == mode
+            label.isSelected = selected
+            label.isActivated = selected
+            val button = directChildBelowAncestor(container, label) ?: label
+            button.isSelected = selected
+            button.isActivated = selected
+            (button as? android.widget.Checkable)?.isChecked = selected
+        }
+    }
+
     private fun directChildBelowAncestor(ancestor: View, descendant: View): View? {
         var current: View = descendant
         while (true) {
@@ -2348,6 +2400,13 @@ object SettingsHeadsetHook : HookContext() {
             ancLevelAnchorKeywords.any { text.contains(it, ignoreCase = true) }
         }
         val levelAnchor = levelContainer(root, anchorMatches.ifEmpty { matches })
+        if (route == HuaweiDeviceRoute.HUAWEI_FREELACE_PRO2) {
+            existingDial?.visibility = View.GONE
+            existingAncSelector?.visibility = View.GONE
+            existingTransparencySelector?.visibility = View.GONE
+            levelAnchor?.let { setSettingsCapabilityViewVisible(it, true) }
+            return
+        }
         if (!route.supportsAnc) {
             existingDial?.visibility = View.GONE
             existingAncSelector?.visibility = View.GONE

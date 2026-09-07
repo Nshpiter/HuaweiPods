@@ -221,6 +221,7 @@ fun DevicePickerPage(
                             subModelId = intent.getStringExtra(
                                 HuaweiPodsAction.EXTRA_ROUTE_PROBE_SUB_MODEL_ID,
                             ),
+                            deviceName = runCatching { pending.device.name ?: pending.device.alias }.getOrNull(),
                         )
                         pendingRouteProbe = null
                         val providerBoundRoute = DeviceRoutePrefs.find(

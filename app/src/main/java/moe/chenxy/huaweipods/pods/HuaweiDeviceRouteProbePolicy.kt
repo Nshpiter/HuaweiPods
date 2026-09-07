@@ -67,9 +67,26 @@ internal object HuaweiDeviceRouteProbePolicy {
     fun resolveVerifiedRoute(
         modelId: String?,
         subModelId: String?,
+        deviceName: String? = null,
     ): HuaweiDeviceRoute? {
         if (subModelId?.matches(subModelIdRegex) != true) return null
-        return modelId?.let { HuaweiDeviceInfoRoutePolicy.routeForModelId(it) }
+        return modelId
+            ?.let(HuaweiDeviceInfoRoutePolicy::routeForModelId)
+            ?: detectKnownHuaweiDeviceRoute(deviceName)
+                .takeIf { it.isSupported && it.supportsAnc }
+    }
+
+    /**
+     * DeviceInfo 尚未收录时，仅允许回退到设备名称已经精确命中的现有协议模板。
+     * 完全未知的型号仍返回 null，避免向未知耳机主动打开不兼容功能。
+     */
+    fun resolveVerifiedOrNamedRoute(
+        modelId: String?,
+        subModelId: String?,
+        deviceName: String?,
+    ): HuaweiDeviceRoute? {
+        if (subModelId?.matches(subModelIdRegex) != true) return null
+        return resolveVerifiedRoute(modelId, subModelId, deviceName)
     }
 
     fun cooldownAllows(lastStartedAtMs: Long?, nowMs: Long): Boolean =

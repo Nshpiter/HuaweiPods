@@ -9,6 +9,8 @@ import android.os.ParcelFileDescriptor
 import android.os.Bundle
 import moe.chenxy.huaweipods.HuaweiPodsApp
 import moe.chenxy.huaweipods.pods.HuaweiDeviceInfoRoutePolicy
+import moe.chenxy.huaweipods.pods.HuaweiDeviceRoute
+import moe.chenxy.huaweipods.pods.isSupported
 import moe.chenxy.huaweipods.smartaudio.OfficialImageIdentityBridge
 import moe.chenxy.huaweipods.smartaudio.SmartAudioImageCache
 import moe.chenxy.huaweipods.smartaudio.SmartAudioResourceIdentityPolicy
@@ -54,27 +56,31 @@ class PodImageProvider : ContentProvider() {
         )
         val prefs = context.getSharedPreferences(ConfigManager.PREFS_NAME, Context.MODE_PRIVATE)
         val verifiedRoute = identity?.modelId?.let(HuaweiDeviceInfoRoutePolicy::routeForModelId)
-        val identityVerified = identity != null && verifiedRoute != null
-        val routeBound = if (identity != null && verifiedRoute != null) {
+        val templateRoute = extras?.getString(SmartAudioImageCache.EXTRA_ROUTE_TEMPLATE)
+            ?.let { runCatching { HuaweiDeviceRoute.valueOf(it) }.getOrNull() }
+            ?.takeIf(HuaweiDeviceRoute::isSupported)
+        val boundRoute = verifiedRoute ?: templateRoute
+        val routeResolved = identity != null && boundRoute != null
+        val routeBound = if (identity != null && boundRoute != null) {
             runCatching {
                 DeviceRoutePrefs.bindIfAbsent(
                     prefs = prefs,
                     service = HuaweiPodsApp.xposedService,
                     address = identity.address,
-                    route = verifiedRoute,
-                ) && DeviceRoutePrefs.find(prefs, identity.address) == verifiedRoute
+                    route = boundRoute,
+                ) && DeviceRoutePrefs.find(prefs, identity.address) == boundRoute
             }.getOrDefault(false)
         } else {
             false
         }
-        val imageScheduled = identity?.let { confirmedIdentity ->
+        val imageScheduled = identity?.takeIf { verifiedRoute != null }?.let { confirmedIdentity ->
             runCatching { SmartAudioImageCache.request(context, confirmedIdentity) }
                 .getOrDefault(false)
         } == true
         return Bundle().apply {
             // 保留旧调用方语义：accepted 只表示图片任务已就绪或已调度。
             putBoolean("accepted", imageScheduled)
-            putBoolean(OfficialImageIdentityBridge.RESULT_IDENTITY_VERIFIED, identityVerified)
+            putBoolean(OfficialImageIdentityBridge.RESULT_IDENTITY_VERIFIED, routeResolved)
             putBoolean(OfficialImageIdentityBridge.RESULT_ROUTE_BOUND, routeBound)
             putBoolean(OfficialImageIdentityBridge.RESULT_IMAGE_SCHEDULED, imageScheduled)
         }

@@ -15,6 +15,7 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import moe.chenxy.huaweipods.config.ConfigManager
+import moe.chenxy.huaweipods.debug.DebugReproductionSession
 
 abstract class HookContext {
     lateinit var module: XposedModule
@@ -247,11 +248,13 @@ object Log {
     }
 
     fun i(tag: String, message: String) {
+        DebugReproductionSession.record(tag, message)
         if (ConfigManager.logLevel() < ConfigManager.LOG_LEVEL_BASIC) return
         module?.log(android.util.Log.INFO, tag, message)
     }
 
     fun d(tag: String, message: String) {
+        DebugReproductionSession.record(tag, message)
         if (ConfigManager.logLevel() < ConfigManager.LOG_LEVEL_DEBUG) return
         module?.log(android.util.Log.INFO, tag, message)
     }
@@ -262,6 +265,7 @@ object Log {
     }
 
     fun w(tag: String, message: String) {
+        DebugReproductionSession.record(tag, message)
         if (ConfigManager.logLevel() < ConfigManager.LOG_LEVEL_BASIC) return
         module?.log(android.util.Log.INFO, tag, message)
     }
@@ -272,6 +276,7 @@ object Log {
     }
 
     fun e(tag: String, message: String) {
+        DebugReproductionSession.record(tag, message)
         if (ConfigManager.logLevel() < ConfigManager.LOG_LEVEL_BASIC) return
         module?.log(android.util.Log.ERROR, tag, message)
     }

@@ -83,6 +83,7 @@ internal object OfficialImageIdentityBridge {
                         putString(SmartAudioImageCache.EXTRA_ADDRESS, address)
                         putString(SmartAudioImageCache.EXTRA_MODEL_ID, identity.modelId)
                         putString(SmartAudioImageCache.EXTRA_SUB_MODEL_ID, identity.subModelId)
+                        putString(SmartAudioImageCache.EXTRA_ROUTE_TEMPLATE, route.name)
                     }
                     runCatching {
                         appContext.contentResolver.call(

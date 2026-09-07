@@ -9,6 +9,7 @@ import android.graphics.Typeface
 import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewGroup
 import android.widget.LinearLayout
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -56,6 +57,13 @@ internal class HuaweiAncLevelSliderView @JvmOverloads constructor(
             trackView.setSelectedIndex(index)
             onLevelSelected?.invoke(levels[index].protocolValue)
         }
+        // HyperOS may rebind the native ANC row after this view is inserted. Keep the labels above that row.
+        (parent as? ViewGroup)?.apply {
+            clipChildren = false
+            clipToPadding = false
+        }
+        bringToFront()
+        elevation = dp(1).toFloat()
         trackView.invalidate()
         invalidate()
     }

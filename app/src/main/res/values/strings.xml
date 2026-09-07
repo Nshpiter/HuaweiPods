@@ -96,6 +96,13 @@
     <string name="log_level_off">Off</string>
     <string name="log_level_basic">Basic</string>
     <string name="log_level_debug">Debug</string>
+    <string name="debug_log_start">Start reproduction log</string>
+    <string name="debug_log_recording">Recording reproduction log</string>
+    <string name="debug_log_summary">Tap to start, reproduce the issue, then press Back to stop and share the log</string>
+    <string name="debug_log_started">Reproduction logging started. Press Back when finished.</string>
+    <string name="debug_log_share_title">Share HuaweiPods reproduction log</string>
+    <string name="debug_log_stop">Stop and export log file</string>
+    <string name="debug_log_stop_summary">Create a TXT file and open the system share panel</string>
     <string name="hide_desktop_icon">Hide Desktop Icon</string>
     <string name="hide_desktop_icon_summary">Hide the launcher icon; open from module manager after hiding</string>
     <string name="cycle_anc">Cycle ANC</string>

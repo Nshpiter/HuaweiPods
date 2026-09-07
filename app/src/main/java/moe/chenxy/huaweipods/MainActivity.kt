@@ -13,10 +13,28 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import moe.chenxy.huaweipods.config.AppLifecyclePrefs
 import moe.chenxy.huaweipods.config.ConfigManager
+import moe.chenxy.huaweipods.debug.DebugReproductionSession
 import moe.chenxy.huaweipods.ui.App
 import moe.chenxy.huaweipods.ui.AppLocale
 
 class MainActivity : ComponentActivity() {
+    private var leftActivityDuringReproduction = false
+
+    override fun onPause() {
+        super.onPause()
+        if (DebugReproductionSession.active) {
+            leftActivityDuringReproduction = true
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (leftActivityDuringReproduction && DebugReproductionSession.active) {
+            leftActivityDuringReproduction = false
+            DebugReproductionSession.stopAndShare(this)
+        }
+    }
+
     override fun attachBaseContext(newBase: Context) {
         AppLocale.rememberDeviceLocale(newBase)
         AppLocale.apply(newBase, newBase.getSharedPreferences(ConfigManager.PREFS_NAME, Context.MODE_PRIVATE).getInt("app_language", AppLocale.SYSTEM))

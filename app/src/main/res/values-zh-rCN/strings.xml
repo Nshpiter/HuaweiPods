@@ -97,6 +97,13 @@
     <string name="log_level_off">关闭</string>
     <string name="log_level_basic">基础</string>
     <string name="log_level_debug">调试</string>
+    <string name="debug_log_start">开始问题复现记录</string>
+    <string name="debug_log_recording">正在记录问题复现</string>
+    <string name="debug_log_summary">点击开始，复现问题后返回即可停止并分享日志</string>
+    <string name="debug_log_started">已开始记录，复现完成后请点击返回</string>
+    <string name="debug_log_share_title">分享 HuaweiPods 复现日志</string>
+    <string name="debug_log_stop">结束并导出日志文件</string>
+    <string name="debug_log_stop_summary">生成 TXT 文件并打开系统分享面板</string>
     <string name="hide_desktop_icon">隐藏桌面图标</string>
     <string name="hide_desktop_icon_summary">隐藏启动器图标；隐藏后请从模块管理器打开</string>
     <string name="cycle_anc">切换降噪</string>

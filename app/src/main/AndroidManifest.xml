@@ -66,6 +66,15 @@
             android:authorities="${applicationId}.podimages"
             android:exported="true"
             android:grantUriPermissions="false" />
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.debuglogs"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/debug_log_paths" />
+        </provider>
         <service
             android:name=".smartaudio.SmartAudioImageDownloadJobService"
             android:exported="false"

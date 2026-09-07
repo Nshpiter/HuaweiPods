@@ -33,6 +33,10 @@ import java.util.concurrent.atomic.AtomicReference
 
 object HeadsetStateDispatcher : HookContext() {
     private const val ROUTE_PROBE_WATCHDOG_MS = 5_500L
+    // 状态栏无线耳机 slot 会被系统在连接后固定几秒清掉（瞬时 slot）。
+    // 用低频看门狗在连接期间周期性地重新压实图标，间隔调小则恢复更快、
+    // 但频繁刷新可能重新引入闪烁；间隔调大则可能出现短暂空缺。默认 2.5s。
+    private const val HEADSET_ICON_WATCHDOG_MS = 2_500L
 
     private var appRequestReceiverRegistered = false
     private var appRequestReceiverContext: Context? = null
@@ -44,6 +48,26 @@ object HeadsetStateDispatcher : HookContext() {
     private val connectedA2dpAddresses = ConcurrentHashMap.newKeySet<String>()
     private val activeRouteProbe = AtomicReference<HuaweiDeviceRouteProbeSession?>(null)
     private val lastRouteProbeStartedAtMs = ConcurrentHashMap<String, Long>()
+
+    // 图标看门狗：连接期间周期性 re-assert setIconVisibility(true)，断开即停。
+    @Volatile
+    private var iconWatchdogContext: Context? = null
+    @Volatile
+    private var iconWatchdogRunning = false
+    private val iconWatchdogTick = object : Runnable {
+        override fun run() {
+            if (!iconWatchdogRunning) return
+            val ctx = iconWatchdogContext ?: return
+            runCatching {
+                (ctx.getSystemService("statusbar") as StatusBarManager)
+                    .setIconVisibility("wireless_headset", true)
+                Log.d("HuaweiPods", "headset icon watchdog re-assert -> visible")
+            }.onFailure {
+                Log.e("HuaweiPods", "headset icon watchdog failed", it)
+            }
+            mainHandler.postDelayed(this, HEADSET_ICON_WATCHDOG_MS)
+        }
+    }
 
     override fun onHook() {
         acceptingCallbacks = true
@@ -70,25 +94,29 @@ object HeadsetStateDispatcher : HookContext() {
             postTracked(handler) {
                 runCatching {
                     val normalizedAddress = device.address.uppercase()
-                    if (currState == BluetoothHeadset.STATE_CONNECTED) {
-                        connectedA2dpAddresses.add(normalizedAddress)
-                    } else if (
-                        currState == BluetoothHeadset.STATE_DISCONNECTING ||
+                    val disconnecting = currState == BluetoothHeadset.STATE_DISCONNECTING ||
                         currState == BluetoothHeadset.STATE_DISCONNECTED
-                    ) {
-                        connectedA2dpAddresses.remove(normalizedAddress)
-                    }
+                    // 只有“此前不在已连接集合”的 CONNECTED 才算真正的新连接并触发处理；
+                    // 系统周期性重发的 CONNECTED 一律忽略，避免状态栏图标被反复刷新而闪烁。
+                    val newConnect = !disconnecting &&
+                        connectedA2dpAddresses.add(normalizedAddress)
+                    if (disconnecting) connectedA2dpAddresses.remove(normalizedAddress)
                     val isHuawei = isHuaweiPod(device)
-                    Log.d("HuaweiPods", "A2DP Connection State: $currState, isHuaweiPod=$isHuawei")
+                    Log.d(
+                        "HuaweiPods",
+                        "A2DP Connection State: $currState (new=$newConnect), isHuaweiPod=$isHuawei",
+                    )
                     val context = instance as ContextWrapper
                     registerAppRequestReceiver(context)
                     if (!isHuawei) return@runCatching
 
                     val statusBarManager = context.getSystemService("statusbar") as StatusBarManager
-                    if (currState == BluetoothHeadset.STATE_CONNECTED) {
+                    if (newConnect) {
                         statusBarManager.setIconVisibility("wireless_headset", true)
+                        startIconWatchdog(context)
                         HuaweiHfpController.connectPod(context, device)
-                    } else if (currState == BluetoothHeadset.STATE_DISCONNECTING || currState == BluetoothHeadset.STATE_DISCONNECTED) {
+                    } else if (disconnecting) {
+                        stopIconWatchdog()
                         statusBarManager.setIconVisibility("wireless_headset", false)
                         HuaweiHfpController.disconnectedPod(context, device)
                     }
@@ -97,6 +125,21 @@ object HeadsetStateDispatcher : HookContext() {
                 }
             }
         }
+    }
+
+    private fun startIconWatchdog(context: Context) {
+        iconWatchdogContext = context
+        iconWatchdogRunning = true
+        mainHandler.removeCallbacks(iconWatchdogTick)
+        // 不立即 post，首个 CONNECTED 已在回调里直接 setIconVisibility(true)；
+        // 看门狗只在首个间隔到时才首次 re-assert。
+        mainHandler.postDelayed(iconWatchdogTick, HEADSET_ICON_WATCHDOG_MS)
+    }
+
+    private fun stopIconWatchdog() {
+        iconWatchdogRunning = false
+        iconWatchdogContext = null
+        mainHandler.removeCallbacks(iconWatchdogTick)
     }
 
     override fun onCanClose(): Boolean =
@@ -162,6 +205,7 @@ object HeadsetStateDispatcher : HookContext() {
         appRequestReceiver = null
         appRequestReceiverContext = null
         appRequestReceiverRegistered = false
+        stopIconWatchdog()
         connectedA2dpAddresses.clear()
         activeRouteProbe.set(null)
         lastRouteProbeStartedAtMs.clear()
@@ -309,7 +353,11 @@ object HeadsetStateDispatcher : HookContext() {
                 systemConnected = isActiveA2dpDevice(device),
             ) && !isHuaweiPod(device)
             val verifiedRoute = identity?.takeIf { stillEligible }?.let {
-                HuaweiDeviceRouteProbePolicy.resolveVerifiedRoute(it.modelId, it.subModelId)
+                HuaweiDeviceRouteProbePolicy.resolveVerifiedRoute(
+                    modelId = it.modelId,
+                    subModelId = it.subModelId,
+                    deviceName = runCatching { device.name ?: device.alias }.getOrNull(),
+                )
             }
             if (identity == null || verifiedRoute == null) {
                 completeDeviceRouteProbe(context, session, null)

@@ -9,6 +9,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.res.ColorStateList
 import android.media.AudioManager
 import android.media.ToneGenerator
 import android.graphics.Bitmap
@@ -2983,6 +2984,15 @@ object MiLinkServiceHook : HookContext() {
                 route = route,
             )
         }
+        if (selected is SeekBar) {
+            val darkSurface = isDarkSurface(selected)
+            val accent = Color.rgb(0x34, 0x82, 0xFF)
+            val track = if (darkSurface) Color.argb(75, 255, 255, 255) else Color.rgb(0xDE, 0xDE, 0xDE)
+            selected.progressTintList = ColorStateList.valueOf(accent)
+            selected.progressBackgroundTintList = ColorStateList.valueOf(track)
+            selected.thumbTintList = ColorStateList.valueOf(accent)
+            selected.backgroundTintList = ColorStateList.valueOf(track)
+        }
     }
 
     private fun unbindMiLinkVolumeProgress(root: View) {
@@ -3606,6 +3616,16 @@ object MiLinkServiceHook : HookContext() {
                 bindTwoStateAncButtons(selectCard, reason)
             }
         }
+        val appearanceModeRow = modeRow ?: hostSelectCard as? ViewGroup
+        val appearanceContainer = ancContainer ?: appearanceModeRow
+        if (appearanceModeRow != null && appearanceContainer != null) {
+            applyMiLinkMiuixAncAppearance(
+                container = appearanceContainer,
+                modeRow = appearanceModeRow,
+                buttonRoot = hostSelectCard as? ViewGroup ?: appearanceModeRow,
+                route = route,
+            )
+        }
         if (modeRow == null || ancContainer == null) return
 
         val selector = findTaggedView(ancContainer, ANC_SUBMODE_SELECTOR_TAG) as? HuaweiAncSubModeSelectorView
@@ -3647,6 +3667,74 @@ object MiLinkServiceHook : HookContext() {
         targetSelector.visibility = View.VISIBLE
         Log.d(TAG, "MiLink ANC submode configured route=$route mode=$currentAnc reason=$reason")
     }
+
+    private fun applyMiLinkMiuixAncAppearance(
+        container: ViewGroup,
+        modeRow: ViewGroup,
+        buttonRoot: ViewGroup,
+        route: HuaweiDeviceRoute,
+    ) {
+        val darkSurface = isDarkSurface(container)
+        val accent = Color.rgb(0x34, 0x82, 0xFF)
+        val normalText = if (darkSurface) Color.rgb(0xE2, 0xE2, 0xE2) else Color.rgb(0x30, 0x30, 0x30)
+        val mutedText = if (darkSurface) Color.rgb(0xA8, 0xA8, 0xA8) else Color.rgb(0x70, 0x70, 0x70)
+        container.background = roundedMiuixBackground(
+            if (darkSurface) Color.argb(150, 34, 34, 34) else Color.argb(210, 246, 246, 246),
+            20,
+            container.context,
+        )
+        collectTextViews(buttonRoot).forEach { label ->
+            val status = miLinkTwoStateAncStatusForLabel(label.text?.toString())
+                ?: when (label.text?.toString()?.trim()?.lowercase()) {
+                    "通透", "transparency", "环境声", "ambient sound" -> NoiseControlMode.TRANSPARENCY.broadcastStatus
+                    "降噪", "noise cancellation" -> NoiseControlMode.NOISE_CANCELLATION.broadcastStatus
+                    "关闭", "off" -> NoiseControlMode.OFF.broadcastStatus
+                    else -> null
+                }
+                ?: return@forEach
+            val selected = currentAnc == status
+            val button = directChildUnder(buttonRoot, label) ?: return@forEach
+            button.background = roundedMiuixBackground(
+                if (selected) accent else if (darkSurface) Color.argb(54, 255, 255, 255) else Color.argb(225, 238, 238, 238),
+                18,
+                button.context,
+            )
+            button.setPadding(dp(button.context, 8), dp(button.context, 8), dp(button.context, 8), dp(button.context, 8))
+            label.setTextColor(if (selected) Color.WHITE else normalText)
+            label.typeface = android.graphics.Typeface.create(
+                android.graphics.Typeface.DEFAULT,
+                if (selected) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL,
+            )
+            collectImageViews(button).forEach { image ->
+                image.setColorFilter(if (selected) Color.WHITE else mutedText)
+            }
+        }
+        if (route.supportsTransparency) {
+            modeRow.contentDescription = "噪声控制"
+        }
+    }
+
+    private fun collectImageViews(view: View): List<ImageView> {
+        val result = mutableListOf<ImageView>()
+        fun visit(candidate: View) {
+            if (candidate is ImageView) result += candidate
+            if (candidate is ViewGroup) {
+                for (index in 0 until candidate.childCount) visit(candidate.getChildAt(index))
+            }
+        }
+        visit(view)
+        return result
+    }
+
+    private fun roundedMiuixBackground(color: Int, radiusDp: Int, context: Context): GradientDrawable =
+        GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            setColor(color)
+            cornerRadius = dp(context, radiusDp).toFloat()
+        }
+
+    private fun dp(context: Context, value: Int): Int =
+        (value * context.resources.displayMetrics.density).roundToInt()
 
     private fun bindTwoStateAncButtons(selectCard: ViewGroup, reason: String) {
         val boundStatuses = linkedSetOf<Int>()
@@ -4839,6 +4927,8 @@ object MiLinkServiceHook : HookContext() {
                 val binding = ancCards[card]
                 if (binding == null || !renderHostAncCardState(card, binding, reason)) {
                     configureAncCard(card, reason)
+                } else {
+                    refreshMiLinkAncAppearance(card, binding, reason)
                 }
             }
                 .onFailure { Log.w(TAG, "MiLink ANC card refresh failed reason=$reason", it) }
@@ -4846,6 +4936,34 @@ object MiLinkServiceHook : HookContext() {
         if (refreshDetails) {
             val details = synchronized(headsetDetails) { headsetDetails.keys.toList() }
             details.forEach { detail -> rememberAndRefreshHeadsetDetail(detail, reason) }
+        }
+    }
+
+    private fun refreshMiLinkAncAppearance(
+        card: Any,
+        binding: AncCardBinding,
+        reason: String,
+    ) {
+        val detail = binding.detail.get() as? View ?: return
+        val route = resolvedAncCardRoute(binding, forceResolve = false)
+        if (!route.supportsAnc) return
+        val clearView = resolveAncTransparencyView(card, binding, detail)
+            ?: binding.clearView?.get()
+        val modeRow = capabilityParent(clearView)
+        val container = capabilityParent(modeRow)
+        val buttonRoot = binding.hostSpec.selectCardIdName
+            ?.let { detail.findHostViewByIdName(it) as? ViewGroup }
+            ?: modeRow
+        val appearanceModeRow = modeRow ?: buttonRoot
+        val appearanceContainer = container ?: appearanceModeRow
+        if (appearanceModeRow != null && appearanceContainer != null && buttonRoot != null) {
+            applyMiLinkMiuixAncAppearance(
+                container = appearanceContainer,
+                modeRow = appearanceModeRow,
+                buttonRoot = buttonRoot,
+                route = route,
+            )
+            Log.d(TAG, "MiLink ANC Miuix appearance reapplied reason=$reason route=$route")
         }
     }
 

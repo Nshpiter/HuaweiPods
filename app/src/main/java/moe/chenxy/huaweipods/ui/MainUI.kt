@@ -53,6 +53,7 @@ import moe.chenxy.huaweipods.config.DeviceRoutePrefs
 import moe.chenxy.huaweipods.config.PodImagePrefs
 import moe.chenxy.huaweipods.config.PodImageChangeNotifier
 import moe.chenxy.huaweipods.config.PodImageResource
+import moe.chenxy.huaweipods.debug.DebugReproductionSession
 import moe.chenxy.huaweipods.pods.HuaweiDeviceRoute
 import moe.chenxy.huaweipods.pods.NoiseControlMode
 import moe.chenxy.huaweipods.pods.UNKNOWN_HUAWEI_ANC_SUBMODE
@@ -1134,6 +1135,16 @@ internal fun MainUI(
                             if (backStack.lastOrNull() != Screen.Theme) {
                                 backStack.add(Screen.Theme)
                             }
+                        },
+                        onStartReproduction = {
+                            DebugReproductionSession.start(context)
+                            Toast.makeText(context, R.string.debug_log_started, Toast.LENGTH_SHORT).show()
+                            if (backStack.lastOrNull() == Screen.Settings) {
+                                backStack.removeLast()
+                            }
+                        },
+                        onStopReproduction = {
+                            DebugReproductionSession.stopAndShare(context)
                         },
                     )
                 }

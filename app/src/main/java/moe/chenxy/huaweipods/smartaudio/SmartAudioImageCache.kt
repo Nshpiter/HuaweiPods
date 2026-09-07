@@ -29,6 +29,7 @@ internal object SmartAudioImageCache {
     const val EXTRA_ADDRESS = "address"
     const val EXTRA_MODEL_ID = "model_id"
     const val EXTRA_SUB_MODEL_ID = "sub_model_id"
+    const val EXTRA_ROUTE_TEMPLATE = "route_template"
 
     val providerUri: Uri = Uri.parse("content://${PodImagePrefs.AUTHORITY}")
 
