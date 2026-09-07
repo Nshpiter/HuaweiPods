@@ -24,6 +24,7 @@ class DeviceCapabilitiesTest {
             "HUAWEI FreeArc" to HuaweiDeviceRoute.HUAWEI_FREEARC,
             "HUAWEI Eyewear" to HuaweiDeviceRoute.HUAWEI_EYEWEAR,
             "Eyewear 2" to HuaweiDeviceRoute.HUAWEI_EYEWEAR2,
+            "HUAWEI FreeLace Pro 2" to HuaweiDeviceRoute.HUAWEI_FREELACE_PRO2,
         )
 
         cases.forEach { (deviceName, expectedRoute) ->
@@ -62,6 +63,7 @@ class DeviceCapabilitiesTest {
             HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3,
             HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5,
             HuaweiDeviceRoute.HUAWEI_FREEBUDS7I,
+            HuaweiDeviceRoute.HUAWEI_FREELACE_PRO2,
         ).forEach { route ->
             assertTrue(route.displayName, route.supportsAncStateReadback)
             assertTrue(route.displayName, route.supportsDiscreteAncLevels)
@@ -73,6 +75,7 @@ class DeviceCapabilitiesTest {
             HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3,
             HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5,
             HuaweiDeviceRoute.HUAWEI_FREEBUDS7I,
+            HuaweiDeviceRoute.HUAWEI_FREELACE_PRO2,
         ).forEach { route -> assertTrue(route.displayName, route.supportsTransparency) }
 
         enabledHuaweiDeviceRoutes().forEach { route ->
@@ -101,10 +104,11 @@ class DeviceCapabilitiesTest {
     }
 
     @Test
-    fun `only eyewear models omit the charging case`() {
+    fun `eyewear and neckband models omit the charging case`() {
         val routesWithoutChargingCase = setOf(
             HuaweiDeviceRoute.HUAWEI_EYEWEAR,
             HuaweiDeviceRoute.HUAWEI_EYEWEAR2,
+            HuaweiDeviceRoute.HUAWEI_FREELACE_PRO2,
         )
 
         enabledHuaweiDeviceRoutes().forEach { route ->
@@ -157,6 +161,17 @@ class DeviceCapabilitiesTest {
     }
 
     @Test
+    fun `single battery cell is restricted to FreeLace Pro 2`() {
+        HuaweiDeviceRoute.entries.forEach { route ->
+            assertEquals(
+                route.name,
+                route == HuaweiDeviceRoute.HUAWEI_FREELACE_PRO2,
+                route.hasSingleBatteryCell,
+            )
+        }
+    }
+
+    @Test
     fun `broadcast route codec uses stable values and round trips every enabled route`() {
         val expectedValues = linkedMapOf(
             HuaweiDeviceRoute.HUAWEI_FREEBUDS3 to "HUAWEI_FREEBUDS3",
@@ -173,6 +188,7 @@ class DeviceCapabilitiesTest {
             HuaweiDeviceRoute.HUAWEI_FREEARC to "HUAWEI_FREEARC",
             HuaweiDeviceRoute.HUAWEI_EYEWEAR to "HUAWEI_EYEWEAR",
             HuaweiDeviceRoute.HUAWEI_EYEWEAR2 to "HUAWEI_EYEWEAR2",
+            HuaweiDeviceRoute.HUAWEI_FREELACE_PRO2 to "HUAWEI_FREELACE_PRO2",
         )
 
         assertEquals(enabledHuaweiDeviceRoutes(), expectedValues.keys.toList())

@@ -272,7 +272,7 @@ object HuaweiHfpController {
                     if (sessionRoute == HuaweiDeviceRoute.HUAWEI_FREECLIP2) {
                         requestFreeClip2AudioState()
                     }
-                    if (sessionRoute == HuaweiDeviceRoute.HUAWEI_FREEBUDS6I) {
+                    if (HuaweiEqualizerCodec.supportsStateRead(sessionRoute)) {
                         requestHuaweiEqualizerState()
                     }
                     if (sessionRoute.supportsLowLatencyControl) {
@@ -393,7 +393,7 @@ object HuaweiHfpController {
         if (route == HuaweiDeviceRoute.HUAWEI_FREECLIP2) {
             requestFreeClip2AudioState(force = true)
         }
-        if (route == HuaweiDeviceRoute.HUAWEI_FREEBUDS6I) {
+        if (HuaweiEqualizerCodec.supportsStateRead(route)) {
             requestHuaweiEqualizerState(force = true)
         }
     }
@@ -1791,7 +1791,7 @@ object HuaweiHfpController {
         val currentContext = context ?: return
         val currentDevice = device ?: return
         val requestedRoute = sessionRoute
-        if (requestedRoute != HuaweiDeviceRoute.HUAWEI_FREEBUDS6I) return
+        if (!HuaweiEqualizerCodec.supportsStateRead(requestedRoute)) return
         val presetId = intent.getIntExtra(
             HuaweiPodsAction.EXTRA_HUAWEI_EQUALIZER_SELECTED_ID,
             -1,
@@ -1833,7 +1833,7 @@ object HuaweiHfpController {
         val currentContext = context ?: return
         val currentDevice = device ?: return
         val requestedRoute = sessionRoute
-        if (requestedRoute != HuaweiDeviceRoute.HUAWEI_FREEBUDS6I) return
+        if (!HuaweiEqualizerCodec.supportsStateRead(requestedRoute)) return
         if (equalizerStateRequestInFlight) return
         val now = SystemClock.elapsedRealtime()
         if (!force && now - lastEqualizerStateRequestAt < EQUALIZER_REFRESH_MIN_INTERVAL_MS) return

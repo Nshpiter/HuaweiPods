@@ -64,7 +64,7 @@ internal fun shouldUpdateSettingsAncUi(route: HuaweiDeviceRoute): Boolean =
     settingsHeadsetUiPolicy(route).showAnc
 
 internal fun usesCustomSettingsAncSelector(route: HuaweiDeviceRoute): Boolean =
-    route.supportsDiscreteAncLevels && route.ancLevelOptions.size != 4
+    route.supportsDiscreteAncLevels
 
 /** 原生档位条被方向圆盘或自定义档位选择器取代时，需要在宿主异步重绘后再次隐藏。 */
 internal fun requiresDeferredSettingsAncLevelPrune(route: HuaweiDeviceRoute): Boolean =

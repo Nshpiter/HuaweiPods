@@ -435,6 +435,42 @@ class HuaweiRfcommResponseParserTest {
     }
 
     @Test
+    fun `parses FreeLace Pro 2 single cell battery and ignores the placeholder right slot`() {
+        // 颈挂整机 57%：TLV 02 = [57, 100(恒定占位), 0(无盒)]，右槽 100% 永不随电量变化。
+        val response = hex("5A0018000108010139020339640003030000000402140A0502010122EA")
+
+        val battery = HuaweiRfcommResponseParser.parseBattery(
+            response,
+            includeCase = false,
+            singleCellBattery = true,
+        )
+        assertNotNull(battery)
+
+        assertEquals(57, battery?.left?.battery)
+        assertEquals(57, battery?.right?.battery)
+        assertEquals(true, battery?.left?.isConnected)
+        assertEquals(true, battery?.right?.isConnected)
+        assertEquals(false, battery?.left?.isCharging)
+        assertEquals(null, battery?.case)
+    }
+
+    @Test
+    fun `FreeLace Pro 2 0x27 battery response mirrors the single cell as well`() {
+        val response = hex("5A0018000127010139020339640003030000000402140A0502010107CD")
+
+        val battery = HuaweiRfcommResponseParser.parseBattery(
+            response,
+            includeCase = false,
+            singleCellBattery = true,
+        )
+        assertNotNull(battery)
+
+        assertEquals(57, battery?.left?.battery)
+        assertEquals(57, battery?.right?.battery)
+        assertEquals(null, battery?.case)
+    }
+
+    @Test
     fun `parses FreeClip 2 double tap state captured from official app`() {
         val response = hex("5A001A000120010102020107030501020700FF040100050100060200FFDC02")
 

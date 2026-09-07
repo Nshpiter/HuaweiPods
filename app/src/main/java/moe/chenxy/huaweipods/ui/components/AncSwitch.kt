@@ -5,15 +5,16 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -21,8 +22,12 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -44,8 +49,6 @@ import moe.chenxy.huaweipods.pods.supportsTransparency
 import moe.chenxy.huaweipods.pods.defaultTransparencySubMode
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.theme.MiuixTheme
-import top.yukonga.miuix.kmp.utils.SinkFeedback
-import top.yukonga.miuix.kmp.utils.pressable
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.atan2
@@ -69,34 +72,19 @@ fun AncSwitch(
             .fillMaxWidth()
             .padding(vertical = verticalPadding)
     ) {
-        if (deviceRoute.supportsTransparency) {
-            HuaweiNoiseControlSelector(
-                selectedMode = ancStatus,
-                onModeChange = onAncModeChange,
-                compact = compact,
-            )
-        } else {
-            HuaweiAncSimpleHeader(
-                enabled = ancStatus.isNoiseCancellation(),
-                onToggle = {
-                    onAncModeChange(
-                        if (ancStatus.isNoiseCancellation()) {
-                            NoiseControlMode.OFF
-                        } else {
-                            NoiseControlMode.NOISE_CANCELLATION
-                        },
-                    )
-                },
-                compact = compact,
-            )
-        }
+        HyperOSNoiseModeSelector(
+            selectedMode = ancStatus,
+            onModeChange = onAncModeChange,
+            supportsTransparency = deviceRoute.supportsTransparency,
+            compact = compact,
+        )
 
         if (
             ancStatus.isNoiseCancellation() &&
             onHuaweiAncLevelChange != null &&
             deviceRoute.supportsDiscreteAncLevels
         ) {
-            HuaweiAncSubModeSelector(
+            HyperOSSubModeSelector(
                 title = stringResource(R.string.anc_level_title),
                 values = deviceRoute.ancLevelOptions.map { option ->
                     val label = when (option.level) {
@@ -116,7 +104,7 @@ fun AncSwitch(
                 selectedValue = huaweiAncLevel,
                 onValueChange = onHuaweiAncLevelChange,
                 compact = compact,
-                modifier = Modifier.padding(top = if (compact) 8.dp else 14.dp),
+                modifier = Modifier.padding(top = if (compact) 10.dp else 16.dp),
             )
         } else if (
             ancStatus == NoiseControlMode.TRANSPARENCY &&
@@ -135,13 +123,13 @@ fun AncSwitch(
             } else {
                 listOf(standard, voice)
             }
-            HuaweiAncSubModeSelector(
+            HyperOSSubModeSelector(
                 title = stringResource(R.string.transparency_level_title),
                 values = values,
                 selectedValue = huaweiAncLevel,
                 onValueChange = onHuaweiAncLevelChange,
                 compact = compact,
-                modifier = Modifier.padding(top = if (compact) 8.dp else 14.dp),
+                modifier = Modifier.padding(top = if (compact) 10.dp else 16.dp),
             )
         } else if (
             ancStatus.isNoiseCancellation() &&
@@ -152,55 +140,52 @@ fun AncSwitch(
                 level = huaweiAncLevel.coerceIn(0, 8),
                 onLevelChange = onHuaweiAncLevelChange,
                 compact = compact,
-                modifier = Modifier.padding(top = if (compact) 8.dp else 14.dp)
+                modifier = Modifier.padding(top = if (compact) 10.dp else 16.dp)
             )
         }
     }
 }
 
 @Composable
-private fun HuaweiNoiseControlSelector(
+private fun HyperOSNoiseModeSelector(
     selectedMode: NoiseControlMode,
     onModeChange: (NoiseControlMode) -> Unit,
+    supportsTransparency: Boolean,
     compact: Boolean,
 ) {
-    Text(
-        text = stringResource(R.string.noise_control_title),
-        fontSize = if (compact) 14.sp else 16.sp,
-        fontWeight = FontWeight.SemiBold,
-        color = MiuixTheme.colorScheme.onBackground,
-        modifier = Modifier.padding(
-            horizontal = if (compact) 10.dp else 14.dp,
-            vertical = if (compact) 2.dp else 4.dp,
-        ),
-    )
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(
-                horizontal = if (compact) 8.dp else 12.dp,
-                vertical = if (compact) 6.dp else 10.dp,
-            ),
-        horizontalArrangement = Arrangement.spacedBy(if (compact) 6.dp else 8.dp),
-    ) {
-        listOf(
-            NoiseControlMode.TRANSPARENCY to R.string.transparency_mode,
-            NoiseControlMode.NOISE_CANCELLATION to R.string.noise_cancellation_title,
-            NoiseControlMode.OFF to R.string.off,
-        ).forEach { (mode, labelRes) ->
-            HuaweiAncChoice(
-                label = stringResource(labelRes),
-                selected = selectedMode == mode,
-                onClick = { onModeChange(mode) },
-                compact = compact,
-                modifier = Modifier.weight(1f),
-            )
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = stringResource(R.string.noise_control_title),
+            fontSize = if (compact) 13.sp else 15.sp,
+            fontWeight = FontWeight.Medium,
+            color = MiuixTheme.colorScheme.onBackground,
+            modifier = Modifier.padding(horizontal = if (compact) 10.dp else 14.dp),
+        )
+        val modes = buildList {
+            if (supportsTransparency) {
+                add(NoiseControlMode.TRANSPARENCY to R.string.transparency_mode)
+            }
+            add(NoiseControlMode.NOISE_CANCELLATION to R.string.noise_cancellation_title)
+            add(NoiseControlMode.OFF to R.string.off)
         }
+        HyperOSSegmentedButton(
+            labels = modes.map { stringResource(it.second) },
+            selectedIndex = modes.indexOfFirst { it.first == selectedMode }.coerceAtLeast(0),
+            onIndexChange = { idx -> onModeChange(modes[idx].first) },
+            compact = compact,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(
+                    start = if (compact) 8.dp else 12.dp,
+                    end = if (compact) 8.dp else 12.dp,
+                    top = if (compact) 6.dp else 10.dp,
+                ),
+        )
     }
 }
 
 @Composable
-private fun HuaweiAncSubModeSelector(
+private fun HyperOSSubModeSelector(
     title: String,
     values: List<Pair<Int, String>>,
     selectedValue: Int,
@@ -217,23 +202,100 @@ private fun HuaweiAncSubModeSelector(
             modifier = Modifier.padding(horizontal = if (compact) 10.dp else 14.dp),
         )
         values.chunked(2).forEachIndexed { rowIndex, rowValues ->
-            Row(
+            HyperOSSegmentedButton(
+                labels = rowValues.map { it.second },
+                selectedIndex = rowValues.indexOfFirst { it.first == selectedValue },
+                onIndexChange = { idx -> onValueChange(rowValues[idx].first) },
+                compact = compact,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(
                         start = if (compact) 8.dp else 12.dp,
                         end = if (compact) 8.dp else 12.dp,
-                        top = if (rowIndex == 0) 4.dp else 6.dp,
+                        top = if (rowIndex == 0) 6.dp else 10.dp,
                     ),
-                horizontalArrangement = Arrangement.spacedBy(if (compact) 6.dp else 8.dp),
-            ) {
-                rowValues.forEach { (value, label) ->
-                    HuaweiAncChoice(
-                        label = label,
-                        selected = selectedValue == value,
-                        onClick = { onValueChange(value) },
-                        compact = compact,
-                        modifier = Modifier.weight(1f),
+            )
+        }
+    }
+}
+
+@Composable
+private fun HyperOSSegmentedButton(
+    labels: List<String>,
+    selectedIndex: Int,
+    onIndexChange: (Int) -> Unit,
+    compact: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val count = labels.size.coerceAtLeast(1)
+    val safeIdx = if (selectedIndex < 0) -1 else selectedIndex.coerceIn(0, count - 1)
+    val containerHeight = if (compact) 32.dp else 38.dp
+    val outerPad = if (compact) 4.dp else 5.dp
+    val innerCornerRadius = ((containerHeight - outerPad * 2) / 2).value
+    val primaryColor = MiuixTheme.colorScheme.primary
+    val containerBg = MiuixTheme.colorScheme.onBackground.copy(alpha = if (compact) 0.06f else 0.08f)
+    val borderColor = MiuixTheme.colorScheme.outline.copy(alpha = 0.12f)
+
+    val indicatorFraction by animateFloatAsState(
+        targetValue = if (safeIdx < 0) 0f else (safeIdx + 0.5f) / count,
+        animationSpec = spring(stiffness = 600f),
+    )
+
+    Box(
+        modifier = modifier
+            .height(containerHeight)
+            .clip(RoundedCornerShape(containerHeight / 2))
+            .background(containerBg)
+            .drawBehind {
+                // 外边线
+                drawRoundRect(
+                    color = borderColor,
+                    cornerRadius = CornerRadius((containerHeight / 2).value * density),
+                    style = Stroke(width = 0.5.dp.toPx()),
+                )
+                if (safeIdx >= 0) {
+                    // 指示器 + 伪阴影全部在绘制阶段完成，动画零重组
+                    val outerPadPx = outerPad.toPx()
+                    val totalW = size.width - outerPadPx * 2
+                    val indW = totalW / count
+                    val indCenterX = outerPadPx + totalW * indicatorFraction
+                    val indLeft = indCenterX - indW / 2
+                    val indTop = outerPadPx
+                    val indH = size.height - outerPadPx * 2
+                    val crPx = innerCornerRadius * density
+
+                    // 指示器伪阴影（两层偏移圆角色块）
+                    drawRoundRect(
+                        color = Color.Black.copy(alpha = 0.06f),
+                        topLeft = Offset(indLeft, indTop + 1.5.dp.toPx()),
+                        size = Size(indW, indH),
+                        cornerRadius = CornerRadius(crPx),
+                    )
+                    // 指示器主体
+                    drawRoundRect(
+                        color = primaryColor,
+                        topLeft = Offset(indLeft, indTop),
+                        size = Size(indW, indH),
+                        cornerRadius = CornerRadius(crPx),
+                    )
+                }
+            },
+    ) {
+        Row(Modifier.matchParentSize().padding(horizontal = outerPad)) {
+            labels.forEachIndexed { idx, label ->
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .clickable { onIndexChange(idx) },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = label,
+                        fontSize = if (compact) 12.sp else 14.sp,
+                        fontWeight = if (idx == safeIdx) FontWeight.SemiBold else FontWeight.Normal,
+                        color = if (idx == safeIdx) Color.White
+                            else MiuixTheme.colorScheme.onBackground.copy(alpha = 0.6f),
                     )
                 }
             }
@@ -241,85 +303,6 @@ private fun HuaweiAncSubModeSelector(
     }
 }
 
-@Composable
-private fun HuaweiAncChoice(
-    label: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-    compact: Boolean,
-    modifier: Modifier = Modifier,
-) {
-    val interactionSource = remember { MutableInteractionSource() }
-    val primary = MiuixTheme.colorScheme.primary
-    Box(
-        modifier = modifier
-            .background(
-                color = if (selected) {
-                    primary
-                } else {
-                    MiuixTheme.colorScheme.onBackground.copy(alpha = 0.07f)
-                },
-                shape = RoundedCornerShape(if (compact) 9.dp else 11.dp),
-            )
-            .pressable(interactionSource = interactionSource, indication = SinkFeedback())
-            .clickable(interactionSource = interactionSource, indication = null, onClick = onClick)
-            .padding(
-                horizontal = if (compact) 6.dp else 10.dp,
-                vertical = if (compact) 8.dp else 10.dp,
-            ),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            text = label,
-            fontSize = if (compact) 12.sp else 14.sp,
-            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-            color = if (selected) Color.White else MiuixTheme.colorScheme.onBackground,
-        )
-    }
-}
-
-@Composable
-private fun HuaweiAncSimpleHeader(
-    enabled: Boolean,
-    onToggle: () -> Unit,
-    compact: Boolean
-) {
-    val interactionSource = remember { MutableInteractionSource() }
-    val primary = MiuixTheme.colorScheme.primary
-    val trackColor = if (enabled) primary else MiuixTheme.colorScheme.onBackground.copy(alpha = 0.16f)
-    val thumbOffset = if (enabled) 22.dp else 2.dp
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = if (compact) 10.dp else 14.dp, vertical = if (compact) 2.dp else 4.dp)
-            .pressable(interactionSource = interactionSource, indication = SinkFeedback())
-            .clickable(interactionSource = interactionSource, indication = null, onClick = onToggle),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = stringResource(R.string.noise_cancellation_title),
-            fontSize = if (compact) 14.sp else 16.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = MiuixTheme.colorScheme.onBackground,
-            modifier = Modifier.weight(1f)
-        )
-        Box(
-            modifier = Modifier
-                .size(width = 46.dp, height = 26.dp)
-                .background(trackColor, RoundedCornerShape(13.dp))
-                .padding(2.dp),
-            contentAlignment = Alignment.CenterStart
-        ) {
-            Box(
-                modifier = Modifier
-                    .padding(start = thumbOffset)
-                    .size(22.dp)
-                    .background(Color.White, RoundedCornerShape(11.dp))
-            )
-        }
-    }
-}
 @Composable
 private fun HuaweiAncLevelDial(
     level: Int,
@@ -428,6 +411,7 @@ private fun HuaweiAncLevelDial(
         }
     }
 }
+
 private const val HUAWEI_ANC_LEVEL_LAST = 8
 private const val HUAWEI_ANC_DIAL_TICKS = 72
 private const val HUAWEI_ANC_TICKS_PER_LEVEL = 8
@@ -445,6 +429,7 @@ private fun Offset.toHuaweiAncLevel(width: Float, height: Float): Int {
     val normalized = (degrees - HUAWEI_ANC_DIAL_START_DEGREES + 360f) % 360f
     return ((normalized / (360f / (HUAWEI_ANC_LEVEL_LAST + 1))).roundToInt()) % (HUAWEI_ANC_LEVEL_LAST + 1)
 }
+
 private fun Offset.pointOnCircle(radius: Float, radians: Double): Offset {
     return Offset(
         x = x + cos(radians).toFloat() * radius,

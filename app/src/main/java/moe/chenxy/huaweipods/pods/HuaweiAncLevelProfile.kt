@@ -48,6 +48,7 @@ internal val HuaweiDeviceRoute.ancLevelOptions: List<HuaweiAncLevelOption>
         HuaweiDeviceRoute.HUAWEI_FREEBUDS4E -> freeBuds4eAncOptions
         HuaweiDeviceRoute.HUAWEI_FREEBUDS5I,
         HuaweiDeviceRoute.HUAWEI_FREEBUDS6I,
+        HuaweiDeviceRoute.HUAWEI_FREELACE_PRO2,
         -> freeBuds6iAncOptions
         HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3,
         HuaweiDeviceRoute.HUAWEI_FREEBUDS7I,
@@ -78,7 +79,9 @@ internal fun HuaweiDeviceRoute.supportsAncSubMode(value: Int): Boolean =
  */
 internal val HuaweiDeviceRoute.transparencySubModes: Set<Int>
     get() = when (this) {
-        HuaweiDeviceRoute.HUAWEI_FREEBUDS6I -> setOf(0x01, 0x02)
+        HuaweiDeviceRoute.HUAWEI_FREEBUDS6I,
+        HuaweiDeviceRoute.HUAWEI_FREELACE_PRO2,
+        -> setOf(0x01, 0x02)
         HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5 -> setOf(0x01, 0x02, 0x04)
         HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3 -> setOf(0xFF, 0x01)
         HuaweiDeviceRoute.HUAWEI_FREEBUDS7I -> setOf(0xFF)
@@ -89,6 +92,7 @@ internal val HuaweiDeviceRoute.defaultTransparencySubMode: Int?
     get() = when (this) {
         HuaweiDeviceRoute.HUAWEI_FREEBUDS6I,
         HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5,
+        HuaweiDeviceRoute.HUAWEI_FREELACE_PRO2,
         -> 0x02
         HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3,
         HuaweiDeviceRoute.HUAWEI_FREEBUDS7I,

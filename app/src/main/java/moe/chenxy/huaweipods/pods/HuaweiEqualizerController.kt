@@ -4,8 +4,6 @@ import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.content.Context
-import moe.chenxy.huaweipods.config.ConfigManager
-import moe.chenxy.huaweipods.config.DeviceRoutePrefs
 
 /** Direct equalizer transport for models whose 0x2B/0x49 write was captured and verified. */
 object HuaweiEqualizerController {
@@ -87,10 +85,9 @@ object HuaweiEqualizerController {
     ): Boolean {
         val address = runCatching { device.address }.getOrNull()
         if (address == null || !BluetoothAdapter.checkBluetoothAddress(address)) return false
-        val name = runCatching {
-            device.name?.takeIf(String::isNotBlank) ?: device.alias?.takeIf(String::isNotBlank)
-        }.getOrNull()
-        val prefs = context.getSharedPreferences(ConfigManager.PREFS_NAME, Context.MODE_PRIVATE)
-        return DeviceRoutePrefs.resolve(prefs, address, name) == route
+        // 不再强依赖 DeviceRoutePrefs 精确匹配（FreeLace Pro 2 等新模型未必写入 prefs），
+        // 与 ANC/电量读取同标准：route 已启用即可放行，真正的发送校验由
+        // HuaweiL2capAncController.enqueueWrite 的 isHuaweiDeviceRouteEnabled 兜底。
+        return isHuaweiDeviceRouteEnabled(route)
     }
 }

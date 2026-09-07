@@ -16,7 +16,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import kotlin.math.roundToInt
 
-/** 系统设置与融合设备中心共用的紧凑分段选择器。 */
+/** 系统设置与融合设备中心共用的选择器，支持多种外观模式。 */
 internal class HuaweiAncSubModeSelectorView(
     context: Context,
     private val onSelected: (Int) -> Unit,
@@ -24,8 +24,8 @@ internal class HuaweiAncSubModeSelectorView(
     internal var onSelectedWithAnchor: ((Int, View) -> Unit)? = null
 
     enum class Appearance {
+        /** 紧凑分段文字按钮（融合设备中心等） */
         MODULE,
-        HOST_GLASS,
     }
 
     data class Option(
@@ -38,6 +38,10 @@ internal class HuaweiAncSubModeSelectorView(
         orientation = VERTICAL
     }
 
+    /**
+     * 主渲染入口。
+     * 当 [appearance] 为 [Appearance.XIAOMI_ICON] 时渲染圆形图标风格。
+     */
     fun render(
         options: List<Option>,
         selectedValue: Int,
@@ -48,40 +52,42 @@ internal class HuaweiAncSubModeSelectorView(
     ) {
         removeAllViews()
         if (options.isEmpty()) return
+
+        // 分段文字按钮样式
         setPadding(context.dp(5), context.dp(3), context.dp(5), context.dp(3))
         val resolvedAccent = accentColor ?: resolveAccentColor()
         val optionRow = LinearLayout(context).apply {
-                orientation = HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-                setPadding(context.dp(3), context.dp(3), context.dp(3), context.dp(3))
-                background = roundedBackground(
-                    selectorBackgroundColor(darkSurface, appearance),
-                    if (appearance == Appearance.HOST_GLASS) 18 else 13,
-                )
+            orientation = HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(context.dp(3), context.dp(3), context.dp(3), context.dp(3))
+            background = roundedBackground(
+                selectorBackgroundColor(darkSurface, appearance),
+                16,
+            )
 
-                options.forEachIndexed { index, option ->
-                    addView(
-                        optionView(
-                            option = option,
-                            selected = option.value == selectedValue,
-                            darkSurface = darkSurface,
-                            appearance = appearance,
-                            accent = resolvedAccent,
-                            horizontallyScrollable = horizontallyScrollable,
-                        ),
-                        if (horizontallyScrollable) {
-                            LayoutParams(
-                                ViewGroup.LayoutParams.WRAP_CONTENT,
-                                ViewGroup.LayoutParams.MATCH_PARENT,
-                            )
-                        } else {
-                            LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f)
-                        }.apply {
-                            if (index > 0) marginStart = context.dp(3)
-                        },
-                    )
-                }
+            options.forEachIndexed { index, option ->
+                addView(
+                    optionView(
+                        option = option,
+                        selected = option.value == selectedValue,
+                        darkSurface = darkSurface,
+                        appearance = appearance,
+                        accent = resolvedAccent,
+                        horizontallyScrollable = horizontallyScrollable,
+                    ),
+                    if (horizontallyScrollable) {
+                        LayoutParams(
+                            ViewGroup.LayoutParams.WRAP_CONTENT,
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                        )
+                    } else {
+                        LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f)
+                    }.apply {
+                        if (index > 0) marginStart = context.dp(3)
+                    },
+                )
             }
+        }
         if (horizontallyScrollable) {
             addView(
                 HorizontalScrollView(context).apply {
@@ -105,6 +111,8 @@ internal class HuaweiAncSubModeSelectorView(
             )
         }
     }
+
+    // ── 分段文字按钮 ──────────────────────────────────────
 
     private fun optionView(
         option: Option,
@@ -157,23 +165,15 @@ internal class HuaweiAncSubModeSelectorView(
         appearance: Appearance,
         accent: Int,
     ): RippleDrawable {
-        val fill = when {
-            !selected && darkSurface -> Color.argb(6, 255, 255, 255)
-            !selected -> Color.TRANSPARENT
-            appearance == Appearance.HOST_GLASS && darkSurface ->
-                Color.argb(232, 248, 249, 252)
-            appearance == Appearance.HOST_GLASS ->
-                Color.argb(28, Color.red(accent), Color.green(accent), Color.blue(accent))
-            else -> accent
-        }
+        val fill = if (selected) accent else Color.TRANSPARENT
         val ripple = if (selected) {
             Color.argb(40, 255, 255, 255)
         } else {
-            Color.argb(34, Color.red(accent), Color.green(accent), Color.blue(accent))
+            Color.argb(30, 255, 255, 255)
         }
         return RippleDrawable(
             ColorStateList.valueOf(ripple),
-            roundedBackground(fill, if (appearance == Appearance.HOST_GLASS) 21 else 10),
+            roundedBackground(fill, 16),
             null,
         )
     }
@@ -181,11 +181,7 @@ internal class HuaweiAncSubModeSelectorView(
     private fun selectorBackgroundColor(
         darkSurface: Boolean,
         appearance: Appearance,
-    ): Int = when {
-        appearance == Appearance.HOST_GLASS -> Color.TRANSPARENT
-        darkSurface -> Color.argb(42, 255, 255, 255)
-        else -> Color.argb(18, 35, 49, 75)
-    }
+    ): Int = if (darkSurface) Color.argb(120, 51, 51, 51) else Color.argb(200, 240, 240, 240)
 
     private fun roundedBackground(color: Int, radiusDp: Int) = GradientDrawable().apply {
         shape = GradientDrawable.RECTANGLE
@@ -196,7 +192,7 @@ internal class HuaweiAncSubModeSelectorView(
     private fun resolveAccentColor(): Int {
         val attributes = context.obtainStyledAttributes(intArrayOf(android.R.attr.colorAccent))
         return try {
-            attributes.getColor(0, Color.rgb(33, 150, 243))
+            attributes.getColor(0, MIUIX_PRIMARY)
         } finally {
             attributes.recycle()
         }
@@ -208,11 +204,16 @@ internal class HuaweiAncSubModeSelectorView(
         appearance: Appearance,
         accent: Int,
     ): Int {
-        if (selected && appearance == Appearance.HOST_GLASS) return accent
         if (selected) return Color.WHITE
-        return if (darkSurface) Color.rgb(218, 221, 229) else Color.rgb(93, 101, 116)
+        return if (darkSurface) MIUIX_TEXT_DARK else MIUIX_TEXT_LIGHT
     }
 
     private fun Context.dp(value: Int): Int =
         (value * resources.displayMetrics.density).roundToInt()
+
+    private companion object {
+        val MIUIX_PRIMARY = Color.rgb(0x34, 0x82, 0xFF)
+        val MIUIX_TEXT_LIGHT = Color.rgb(0x30, 0x30, 0x30)
+        val MIUIX_TEXT_DARK = Color.rgb(0xE0, 0xE0, 0xE0)
+    }
 }

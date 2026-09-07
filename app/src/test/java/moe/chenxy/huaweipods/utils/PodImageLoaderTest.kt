@@ -182,6 +182,7 @@ class PodImageLoaderTest {
             HuaweiDeviceRoute.HUAWEI_FREEBUDS7I,
             HuaweiDeviceRoute.HUAWEI_FREECLIP,
             HuaweiDeviceRoute.HUAWEI_EYEWEAR,
+            HuaweiDeviceRoute.HUAWEI_FREELACE_PRO2,
         )
         val globalFallbacks = mapOf(
             PodImageResource.BOX to R.drawable.img_box,

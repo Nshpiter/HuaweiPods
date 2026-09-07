@@ -29,6 +29,7 @@ class HuaweiLowLatencyControllerTest {
             HuaweiDeviceRoute.HUAWEI_FREEBUDS7I,
             HuaweiDeviceRoute.HUAWEI_FREECLIP2,
             HuaweiDeviceRoute.HUAWEI_EYEWEAR2,
+            HuaweiDeviceRoute.HUAWEI_FREELACE_PRO2,
         )
         verified.forEach { route -> assertTrue(route.displayName, route.supportsLowLatencyControl) }
         HuaweiDeviceRoute.entries.filterNot(verified::contains).forEach { route ->

@@ -106,6 +106,7 @@ object HuaweiEqualizerCodec {
                 0x10,
                 0x11,
             )
+            HuaweiDeviceRoute.HUAWEI_FREELACE_PRO2 -> setOf(0x01, 0x02, 0x03, 0x09)
             else -> return null
         }
         if (presetId !in allowedIds) return null
@@ -125,6 +126,7 @@ object HuaweiEqualizerCodec {
         HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5 -> 0x01
         HuaweiDeviceRoute.HUAWEI_FREEBUDS7I -> 0x00
         HuaweiDeviceRoute.HUAWEI_FREEARC -> 0x01
+        HuaweiDeviceRoute.HUAWEI_FREELACE_PRO2 -> 0x01
         else -> null
     }
 
@@ -136,6 +138,7 @@ object HuaweiEqualizerCodec {
         HuaweiDeviceRoute.HUAWEI_FREEBUDS7I,
         HuaweiDeviceRoute.HUAWEI_FREECLIP2,
         HuaweiDeviceRoute.HUAWEI_FREEARC,
+        HuaweiDeviceRoute.HUAWEI_FREELACE_PRO2,
     )
 
     private fun parseCustomPresets(bytes: ByteArray?): List<HuaweiEqualizerPreset>? {

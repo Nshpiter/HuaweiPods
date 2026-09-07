@@ -151,4 +151,37 @@ class HuaweiAncLevelProfileTest {
         assertTrue(0x04 in route.transparencySubModes)
         assertFalse(0xFF in route.transparencySubModes)
     }
+
+    @Test
+    fun `FreeLace Pro 2 shares the FreeBuds 6i four level ANC mapping`() {
+        val route = HuaweiDeviceRoute.HUAWEI_FREELACE_PRO2
+        val expected = listOf(
+            HuaweiAncLevelOption(HuaweiAncLevel.ADAPTIVE, protocolValue = 0x03, miuiValue = 0x03),
+            HuaweiAncLevelOption(HuaweiAncLevel.LIGHT, protocolValue = 0x01, miuiValue = 0x01),
+            HuaweiAncLevelOption(HuaweiAncLevel.BALANCED, protocolValue = 0x00, miuiValue = 0x00),
+            HuaweiAncLevelOption(HuaweiAncLevel.DEEP, protocolValue = 0x02, miuiValue = 0x02),
+        )
+
+        assertEquals(expected, route.ancLevelOptions)
+        assertEquals(0x03, route.defaultAncSubMode)
+        expected.forEach { option ->
+            assertEquals(option.protocolValue, route.ancSubModeForMiuiLevel(option.miuiValue))
+            assertEquals(option.miuiValue, route.miuiLevelForAncSubMode(option.protocolValue))
+        }
+    }
+
+    @Test
+    fun `FreeLace Pro 2 exposes the two captured transparency submodes`() {
+        val route = HuaweiDeviceRoute.HUAWEI_FREELACE_PRO2
+
+        assertEquals(setOf(0x01, 0x02), route.transparencySubModes)
+        assertEquals(0x02, route.defaultTransparencySubMode)
+        assertTrue(0x01 in route.transparencySubModes)
+        assertTrue(0x02 in route.transparencySubModes)
+        assertFalse(0xFF in route.transparencySubModes)
+        assertEquals(
+            HuaweiAncState(NoiseControlMode.TRANSPARENCY, 0x02),
+            route.validateAncState(HuaweiAncState(NoiseControlMode.TRANSPARENCY, 0x02)),
+        )
+    }
 }

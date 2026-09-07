@@ -1,0 +1,16 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- 耳朵轮廓 -->
+    <path
+        android:fillColor="#000000"
+        android:pathData="M12,2C7.03,2 3,6.03 3,11v5c0,1.66 1.34,3 3,3h1v-8c0,-3.87 3.13,-7 7,-7s7,3.13 7,7v8h1c1.66,0 3,-1.34 3,-3v-5c0,-4.97 -4.03,-9 -9,-9z" />
+    <!-- 斜杠（关闭） -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:pathData="M5,5L19,19" />
+</vector>

@@ -17,6 +17,7 @@ object HuaweiFreeBuds5Controller {
     private val supportedRoutes = setOf(
         HuaweiDeviceRoute.HUAWEI_FREEBUDS5,
         HuaweiDeviceRoute.HUAWEI_FREEBUDS5I,
+        HuaweiDeviceRoute.HUAWEI_FREELACE_PRO2,
     )
     private val WEAR_DETECTION_STATE_QUERY = hex("5A0005002B110100772A")
     private val SOUND_EFFECT_STATE_QUERY = hex("5A0005002B4A02008C46")

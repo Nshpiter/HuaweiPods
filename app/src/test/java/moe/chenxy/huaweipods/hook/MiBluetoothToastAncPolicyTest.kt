@@ -25,6 +25,7 @@ class MiBluetoothToastAncPolicyTest {
             HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO4,
             HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5,
             HuaweiDeviceRoute.HUAWEI_FREEBUDS7I,
+            HuaweiDeviceRoute.HUAWEI_FREELACE_PRO2,
         ).forEach { route ->
             assertTrue(route.name, shouldOfferNotificationAncAction(route))
         }

@@ -139,7 +139,6 @@ internal class HuaweiFreeClip2AudioControlsView(
                 ),
                 selectedIndex = FreeClip2SpatialAudioMode.entries.indexOf(spatialMode),
                 darkSurface = darkSurface,
-                hostGlassStyle = compact,
             ) { index ->
                 FreeClip2SpatialAudioMode.entries.getOrNull(index)?.let(onSpatialModeSelected)
             }
@@ -156,7 +155,6 @@ internal class HuaweiFreeClip2AudioControlsView(
                 ),
                 selectedIndex = FreeClip2SpatialScene.entries.indexOf(spatialScene),
                 darkSurface = darkSurface,
-                hostGlassStyle = compact,
             ) { index ->
                 FreeClip2SpatialScene.entries.getOrNull(index)?.let(onSpatialSceneSelected)
             }
@@ -189,7 +187,6 @@ internal class HuaweiFreeClip2AudioControlsView(
                 selectedIndex = visibleSoundEffects.indexOf(soundEffect),
                 darkSurface = darkSurface,
                 showTitle = showSoundEffectTitle,
-                hostGlassStyle = compact,
                 horizontallyScrollable = visibleSoundEffects.size > 4,
                 reselectableIndices = setOf(
                     FreeClip2SoundEffect.entries.indexOf(FreeClip2SoundEffect.CUSTOM),
@@ -236,7 +233,6 @@ internal class HuaweiFreeClip2AudioControlsView(
             labels = options.map(BuiltInSoundEffectOption::label),
             selectedIndex = options.indexOfFirst { it.id == selectedId },
             darkSurface = darkSurface,
-            hostGlassStyle = compact,
         ) { index ->
             options.getOrNull(index)?.id?.let(onBuiltInSoundEffectSelected)
         }
@@ -248,7 +244,6 @@ internal class HuaweiFreeClip2AudioControlsView(
         selectedIndex: Int,
         darkSurface: Boolean,
         showTitle: Boolean = true,
-        hostGlassStyle: Boolean = false,
         horizontallyScrollable: Boolean = false,
         reselectableIndices: Set<Int> = emptySet(),
         onSelectedWithAnchor: ((Int, View) -> Unit)? = null,
@@ -284,11 +279,6 @@ internal class HuaweiFreeClip2AudioControlsView(
                     },
                     selectedValue = selectedIndex,
                     darkSurface = darkSurface,
-                    appearance = if (hostGlassStyle) {
-                        HuaweiAncSubModeSelectorView.Appearance.HOST_GLASS
-                    } else {
-                        HuaweiAncSubModeSelectorView.Appearance.MODULE
-                    },
                     accentColor = hostAccentColor,
                     horizontallyScrollable = horizontallyScrollable,
                 )
@@ -327,7 +317,7 @@ internal class HuaweiFreeClip2AudioControlsView(
     }
 
     private fun titleColor(darkSurface: Boolean): Int =
-        if (darkSurface) Color.rgb(225, 228, 235) else Color.rgb(46, 52, 64)
+        if (darkSurface) Color.rgb(0xE0, 0xE0, 0xE0) else Color.rgb(0x30, 0x30, 0x30)
 
     private fun Context.dp(value: Int): Int =
         (value * resources.displayMetrics.density).roundToInt()

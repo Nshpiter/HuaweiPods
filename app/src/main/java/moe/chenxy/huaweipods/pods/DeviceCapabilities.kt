@@ -15,6 +15,7 @@ enum class HuaweiDeviceRoute {
     HUAWEI_FREEARC,
     HUAWEI_EYEWEAR,
     HUAWEI_EYEWEAR2,
+    HUAWEI_FREELACE_PRO2,
     UNSUPPORTED,
 }
 
@@ -30,8 +31,11 @@ data class HuaweiDeviceCapabilities(
     val supportsBackgroundBatteryRefresh: Boolean = false,
     val supportsGestureConfiguration: Boolean = false,
     val supportsLowLatencyControl: Boolean = false,
+    val supportsHighQualityAudio: Boolean = false,
     val hasChargingCase: Boolean = false,
     val usesReportedEarbudAvailability: Boolean = false,
+    // 颈挂等单电池形态：协议在右耳槽位填充恒定占位值，整机电量以左耳槽位为准。
+    val hasSingleBatteryCell: Boolean = false,
 )
 
 private val routeCapabilities = linkedMapOf(
@@ -60,6 +64,7 @@ private val routeCapabilities = linkedMapOf(
         supportsAncStateReadback = true,
         supportsDiscreteAncLevels = true,
         supportsRfcommBattery = true,
+        supportsHighQualityAudio = true,
         supportsLowLatencyControl = true,
         hasChargingCase = true,
     ),
@@ -165,6 +170,20 @@ private val routeCapabilities = linkedMapOf(
         supportsGestureConfiguration = true,
         supportsLowLatencyControl = true,
     ),
+    // HUAWEI FreeLace Pro 2（颈挂式，单电池、无充电盒）。RFCOMM 协议与现代 FreeBuds 逐字节一致，
+    // 电量回包右耳槽位为恒定 100% 占位值，整机电量以左耳槽位为准；ANC 四档与通透子档编码同 FreeBuds 6i。
+    HuaweiDeviceRoute.HUAWEI_FREELACE_PRO2 to HuaweiDeviceCapabilities(
+        displayName = "HUAWEI FreeLace Pro 2",
+        aliases = setOf("huaweifreelacepro2", "freelacepro2"),
+        supportsAnc = true,
+        supportsTransparency = true,
+        supportsAncStateReadback = true,
+        supportsDiscreteAncLevels = true,
+        supportsRfcommBattery = true,
+        supportsHighQualityAudio = true,
+        supportsLowLatencyControl = true,
+        hasSingleBatteryCell = true,
+    ),
 )
 
 private val normalizedAliasRoutes: Map<String, HuaweiDeviceRoute> = buildMap {
@@ -188,6 +207,7 @@ private val broadcastValueByRoute = mapOf(
     HuaweiDeviceRoute.HUAWEI_FREEARC to "HUAWEI_FREEARC",
     HuaweiDeviceRoute.HUAWEI_EYEWEAR to "HUAWEI_EYEWEAR",
     HuaweiDeviceRoute.HUAWEI_EYEWEAR2 to "HUAWEI_EYEWEAR2",
+    HuaweiDeviceRoute.HUAWEI_FREELACE_PRO2 to "HUAWEI_FREELACE_PRO2",
 )
 
 private val routeByBroadcastValue = broadcastValueByRoute.entries.associate { (route, value) ->
@@ -235,6 +255,9 @@ val HuaweiDeviceRoute.hasChargingCase: Boolean
 
 val HuaweiDeviceRoute.usesReportedEarbudAvailability: Boolean
     get() = capabilities?.usesReportedEarbudAvailability == true
+
+val HuaweiDeviceRoute.hasSingleBatteryCell: Boolean
+    get() = capabilities?.hasSingleBatteryCell == true
 
 fun enabledHuaweiDeviceRoutes(): List<HuaweiDeviceRoute> = routeCapabilities.keys.toList()
 

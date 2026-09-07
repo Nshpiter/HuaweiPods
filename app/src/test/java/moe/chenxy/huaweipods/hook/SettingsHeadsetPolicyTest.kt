@@ -60,6 +60,7 @@ class SettingsHeadsetPolicyTest {
             HuaweiDeviceRoute.HUAWEI_FREEARC to expectedPolicy(false, false, true),
             HuaweiDeviceRoute.HUAWEI_EYEWEAR to expectedPolicy(false, false, false),
             HuaweiDeviceRoute.HUAWEI_EYEWEAR2 to expectedPolicy(false, false, true),
+            HuaweiDeviceRoute.HUAWEI_FREELACE_PRO2 to expectedPolicy(true, true, false),
         )
 
         assertEquals(enabledHuaweiDeviceRoutes(), expected.keys.toList())
@@ -127,10 +128,10 @@ class SettingsHeadsetPolicyTest {
     }
 
     @Test
-    fun `FreeBuds 5 replaces the native four-level row with a three-level selector`() {
+    fun `discrete ANC routes use module custom selector instead of native`() {
         assertTrue(usesCustomSettingsAncSelector(HuaweiDeviceRoute.HUAWEI_FREEBUDS5))
-        assertFalse(usesCustomSettingsAncSelector(HuaweiDeviceRoute.HUAWEI_FREEBUDS6I))
-        assertFalse(usesCustomSettingsAncSelector(HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3))
+        assertTrue(usesCustomSettingsAncSelector(HuaweiDeviceRoute.HUAWEI_FREEBUDS6I))
+        assertTrue(usesCustomSettingsAncSelector(HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3))
         assertFalse(usesCustomSettingsAncSelector(HuaweiDeviceRoute.HUAWEI_FREEBUDS3))
     }
 
@@ -138,8 +139,8 @@ class SettingsHeadsetPolicyTest {
     fun `only replaced native ANC level rows need a deferred prune`() {
         assertTrue(requiresDeferredSettingsAncLevelPrune(HuaweiDeviceRoute.HUAWEI_FREEBUDS3))
         assertTrue(requiresDeferredSettingsAncLevelPrune(HuaweiDeviceRoute.HUAWEI_FREEBUDS5))
-        assertFalse(requiresDeferredSettingsAncLevelPrune(HuaweiDeviceRoute.HUAWEI_FREEBUDS6I))
-        assertFalse(requiresDeferredSettingsAncLevelPrune(HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5))
+        assertTrue(requiresDeferredSettingsAncLevelPrune(HuaweiDeviceRoute.HUAWEI_FREEBUDS6I))
+        assertTrue(requiresDeferredSettingsAncLevelPrune(HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5))
     }
 
     @Test

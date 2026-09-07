@@ -20,6 +20,7 @@ class OfficialImageCatalogPolicyTest {
             HuaweiDeviceRoute.HUAWEI_FREEARC to "00015D",
             HuaweiDeviceRoute.HUAWEI_EYEWEAR to "000139",
             HuaweiDeviceRoute.HUAWEI_EYEWEAR2 to "00014F",
+            HuaweiDeviceRoute.HUAWEI_FREELACE_PRO2 to "00014D",
         )
 
         HuaweiDeviceRoute.entries.forEach { route ->

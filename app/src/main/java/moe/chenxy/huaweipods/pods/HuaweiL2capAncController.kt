@@ -153,6 +153,7 @@ object HuaweiL2capAncController {
                     response,
                     includeCase = route.hasChargingCase,
                     useReportedEarbudAvailability = route.usesReportedEarbudAvailability,
+                    singleCellBattery = route.hasSingleBatteryCell,
                 )
                 logInfo(
                     context.applicationContext ?: context,

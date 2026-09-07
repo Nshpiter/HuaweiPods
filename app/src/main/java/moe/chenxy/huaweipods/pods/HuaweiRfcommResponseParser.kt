@@ -29,6 +29,7 @@ internal object HuaweiRfcommResponseParser {
         stream: ByteArray,
         includeCase: Boolean = true,
         useReportedEarbudAvailability: Boolean = false,
+        singleCellBattery: Boolean = false,
     ): BatteryParams? {
         var latestBattery: BatteryParams? = null
         frames(stream).forEach { frame ->
@@ -39,17 +40,25 @@ internal object HuaweiRfcommResponseParser {
             val charging = fields[CHARGING_STATES] ?: byteArrayOf()
             val reportedStates = fields[EARBUD_CONNECTION_STATES]
                 .takeIf { useReportedEarbudAvailability }
-            val parsed = BatteryParams(
-                left = levels.podAt(
-                    index = 0,
-                    charging = charging,
-                    reportedConnected = reportedStates?.reportedConnectedAt(0),
-                ),
-                right = levels.podAt(
+            val leftPod = levels.podAt(
+                index = 0,
+                charging = charging,
+                reportedConnected = reportedStates?.reportedConnectedAt(0),
+            )
+            // 颈挂等单电池形态没有独立右耳电池，协议在该槽位填充恒定占位值，
+            // 直接沿用整机（左耳槽位）电量，避免界面显示永不掉电的假“右耳 100%”。
+            val rightPod = if (singleCellBattery) {
+                leftPod
+            } else {
+                levels.podAt(
                     index = 1,
                     charging = charging,
                     reportedConnected = reportedStates?.reportedConnectedAt(1),
-                ),
+                )
+            }
+            val parsed = BatteryParams(
+                left = leftPod,
+                right = rightPod,
                 case = levels.podAt(
                     index = 2,
                     charging = charging,

@@ -21,6 +21,7 @@ class HuaweiDeviceInfoRoutePolicyTest {
             "00015D" to HuaweiDeviceRoute.HUAWEI_FREEARC,
             "000139" to HuaweiDeviceRoute.HUAWEI_EYEWEAR,
             "00014F" to HuaweiDeviceRoute.HUAWEI_EYEWEAR2,
+            "00014D" to HuaweiDeviceRoute.HUAWEI_FREELACE_PRO2,
         )
 
         expected.forEach { (modelId, route) ->

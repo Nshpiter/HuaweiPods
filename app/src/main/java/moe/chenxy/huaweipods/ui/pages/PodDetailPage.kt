@@ -61,6 +61,7 @@ import moe.chenxy.huaweipods.ui.components.FreeBuds5Controls
 import moe.chenxy.huaweipods.ui.components.FreeBuds4eControls
 import moe.chenxy.huaweipods.ui.components.FreeBuds6iControls
 import moe.chenxy.huaweipods.ui.components.FreeBuds7iControls
+import moe.chenxy.huaweipods.ui.components.FreeLacePro2Controls
 import moe.chenxy.huaweipods.ui.components.FreeBudsPro5Controls
 import moe.chenxy.huaweipods.ui.components.FreeClip2Controls
 import moe.chenxy.huaweipods.ui.components.FreeArcControls
@@ -323,6 +324,16 @@ private fun LazyListScope.podControlItems(
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
             ) {
                 FreeClip2Controls(address = connectedDeviceAddress)
+            }
+        }
+    }
+
+    if (deviceRoute == HuaweiDeviceRoute.HUAWEI_FREELACE_PRO2) {
+        item {
+            Card(
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
+            ) {
+                FreeLacePro2Controls(address = connectedDeviceAddress)
             }
         }
     }
