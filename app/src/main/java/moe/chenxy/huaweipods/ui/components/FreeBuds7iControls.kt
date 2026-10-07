@@ -323,7 +323,12 @@ internal fun HuaweiEqualizerPreference(
         context.getSharedPreferences(ConfigManager.PREFS_NAME, Context.MODE_PRIVATE)
     }
     val prefix = remember(address) { "huawei_eq_${address.uppercase().ifBlank { "unknown" }}_" }
-    val stored = remember(address) { readEqualizerGains(prefs, prefix) }
+    // FreeBuds 7 uses 0.2 dB units; the captured official editor allows +/-6 dB.
+    val gainStep = if (route == HuaweiDeviceRoute.HUAWEI_FREEBUDS7) 5 else 10
+    val gainLimit = gainStep * 6
+    val stored = remember(address, route) {
+        readEqualizerGains(prefs, prefix).map { it.coerceIn(-gainLimit, gainLimit) }
+    }
     var gains by remember(address) { mutableStateOf(stored) }
     var editing by remember(address) { mutableStateOf(stored) }
     var currentState by remember(address) { mutableStateOf(readback) }
@@ -537,18 +542,18 @@ internal fun HuaweiEqualizerPreference(
                     )
                     TextButton(
                         text = "−",
-                        enabled = !pending && gain > -60,
-                        onClick = { editing = editing.withGain(index, gain - 10) },
+                        enabled = !pending && gain > -gainLimit,
+                        onClick = { editing = editing.withGain(index, (gain - gainStep).coerceIn(-gainLimit, gainLimit)) },
                     )
                     Text(
-                        text = stringResource(R.string.freebuds7i_eq_gain, gain / 10f),
+                        text = stringResource(R.string.freebuds7i_eq_gain, gain / gainStep.toFloat()),
                         modifier = Modifier.width(72.dp),
                         style = MiuixTheme.textStyles.body1,
                     )
                     TextButton(
                         text = "+",
-                        enabled = !pending && gain < 60,
-                        onClick = { editing = editing.withGain(index, gain + 10) },
+                        enabled = !pending && gain < gainLimit,
+                        onClick = { editing = editing.withGain(index, (gain + gainStep).coerceIn(-gainLimit, gainLimit)) },
                     )
                 }
             }

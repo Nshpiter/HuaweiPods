@@ -183,6 +183,7 @@ class DeviceCapabilitiesTest {
             HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO4 to "HUAWEI_FREEBUDS_PRO4",
             HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5 to "HUAWEI_FREEBUDS_PRO5",
             HuaweiDeviceRoute.HUAWEI_FREEBUDS7I to "HUAWEI_FREEBUDS7I",
+            HuaweiDeviceRoute.HUAWEI_FREEBUDS7 to "HUAWEI_FREEBUDS7",
             HuaweiDeviceRoute.HUAWEI_FREECLIP to "HUAWEI_FREECLIP",
             HuaweiDeviceRoute.HUAWEI_FREECLIP2 to "HUAWEI_FREECLIP2",
             HuaweiDeviceRoute.HUAWEI_FREEARC to "HUAWEI_FREEARC",

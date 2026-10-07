@@ -1267,7 +1267,9 @@ object SettingsHeadsetHook : HookContext() {
             }
             3 -> if (route.supportsTransparency) {
                 val protocolSubMode = transparencySubMode(route)
-                val settingsSubMode = if (route == HuaweiDeviceRoute.HUAWEI_FREEBUDS6I) {
+                val settingsSubMode = if (route == HuaweiDeviceRoute.HUAWEI_FREEBUDS7) {
+                    freeBuds7SettingsTransparencyLevel(protocolSubMode) ?: return "0000"
+                } else if (route == HuaweiDeviceRoute.HUAWEI_FREEBUDS6I) {
                     huaweiTransparencySubModeToMiuiLevel(route, protocolSubMode) ?: return "0000"
                 } else {
                     protocolSubMode
@@ -1328,7 +1330,9 @@ object SettingsHeadsetHook : HookContext() {
                     ?.let { SettingsAncSelection(2, it) }
                 else -> SettingsAncSelection(2)
             }
-            "02" -> (if (route == HuaweiDeviceRoute.HUAWEI_FREEBUDS6I) {
+            "02" -> (if (route == HuaweiDeviceRoute.HUAWEI_FREEBUDS7) {
+                if (miuiSubMode == 0) 2 else null
+            } else if (route == HuaweiDeviceRoute.HUAWEI_FREEBUDS6I) {
                 miuiTransparencyLevelToHuaweiSubMode(route, miuiSubMode)
             } else {
                 miuiSubMode
@@ -2144,6 +2148,58 @@ object SettingsHeadsetHook : HookContext() {
         return measuredLarge || declaredLarge
     }
 
+    /** Keep the host's own drawing, touch handling, haptics and accessibility. */
+    private fun configureFreeBuds7NativeAnc(root: View): Boolean {
+        fun find(view: View, name: String): View? {
+            if (view.resourceEntryNameOrNull() == name) return view
+            if (view is ViewGroup) for (i in 0 until view.childCount) {
+                find(view.getChildAt(i), name)?.let { return it }
+            }
+            return null
+        }
+        val region = find(root, "ancAdjust") ?: return false
+        val slider = find(root, "ancAdjustView") ?: return false
+        val labelRow = find(root, "ancAdjustText") ?: return false
+        val labels = listOf("ancAdapterText", "ancLowText", "ancMediumText").map { name ->
+            find(labelRow, name) as? TextView ?: return false
+        }
+        val high = find(labelRow, "ancHighText") ?: return false
+        return runCatching {
+            val show = currentAnc == NoiseControlMode.NOISE_CANCELLATION.broadcastStatus
+            setSettingsCapabilityViewVisible(region, show)
+            setSettingsCapabilityViewVisible(labelRow, show)
+            setSettingsCapabilityViewVisible(slider, show)
+            find(root, "ancAdjustView2")?.let { setSettingsCapabilityViewVisible(it, false) }
+            setSettingsCapabilityViewVisible(high, false)
+            find(root, "transparentAdjust")?.let { setSettingsCapabilityViewVisible(it, false) }
+            find(root, "transparentAdjustText")?.let { setSettingsCapabilityViewVisible(it, false) }
+            labels.forEachIndexed { index, label ->
+                setSettingsCapabilityViewVisible(label, show)
+                label.gravity = android.view.Gravity.CENTER_VERTICAL or when (index) {
+                    0 -> android.view.Gravity.START
+                    2 -> android.view.Gravity.END
+                    else -> android.view.Gravity.CENTER_HORIZONTAL
+                }
+                val params = label.layoutParams as? LinearLayout.LayoutParams
+                if (params != null && (params.width != 0 || params.weight != 1f)) {
+                    params.width = 0
+                    params.weight = 1f
+                    label.layoutParams = params
+                }
+            }
+            if ((getObjectField(slider, "mPointCount") as? Int) != 3) {
+                callMethod(slider, "setPointCount", 3)
+                slider.requestLayout()
+            }
+            val index = freeBuds7SettingsAncIndex(ancSubMode(HuaweiDeviceRoute.HUAWEI_FREEBUDS7))
+            if (show && index != null) withInternalSettingsAncRender {
+                callMethod(slider, "setCurrentPointIndex", index)
+                callMethod(slider, "setLastCurrentPointIndex", index)
+            }
+            true
+        }.onFailure { Log.w(TAG, "FreeBuds 7 native ANC adaptation unavailable", it) }.getOrDefault(false)
+    }
+
     private fun replaceHuaweiAncLevelsWithHuaweiDial(root: View) {
         loadState()
         val route = currentHuaweiRoute()
@@ -2160,6 +2216,12 @@ object SettingsHeadsetHook : HookContext() {
             ancLevelAnchorKeywords.any { text.contains(it, ignoreCase = true) }
         }
         val levelAnchor = levelContainer(root, anchorMatches.ifEmpty { matches })
+        if (route == HuaweiDeviceRoute.HUAWEI_FREEBUDS7 && configureFreeBuds7NativeAnc(root)) {
+            existingDial?.visibility = View.GONE
+            existingAncSelector?.visibility = View.GONE
+            existingTransparencySelector?.visibility = View.GONE
+            return
+        }
         if (!route.supportsAnc) {
             existingDial?.visibility = View.GONE
             existingAncSelector?.visibility = View.GONE

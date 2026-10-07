@@ -1,0 +1,5 @@
+<resources>
+    <string name="freebuds7_single_ear_anc">佩戴一只耳机时启用降噪</string>
+    <string name="freebuds7_auto_switch">音频连接自动切换</string>
+    <string name="freebuds7_double_tap">双击任一耳机：播放/暂停</string>
+</resources>

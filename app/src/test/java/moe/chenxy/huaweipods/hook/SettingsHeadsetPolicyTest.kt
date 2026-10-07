@@ -9,6 +9,17 @@ import org.junit.Test
 
 class SettingsHeadsetPolicyTest {
     @Test
+    fun `FreeBuds 7 native points match protocol and reject unsupported deep`() {
+        assertEquals(0, freeBuds7SettingsAncIndex(3))
+        assertEquals(1, freeBuds7SettingsAncIndex(1))
+        assertEquals(2, freeBuds7SettingsAncIndex(0))
+        assertEquals(null, freeBuds7SettingsAncIndex(2))
+        assertEquals(null, freeBuds7SettingsAncIndex(-1))
+        assertEquals(0, freeBuds7SettingsTransparencyLevel(2))
+        assertEquals(null, freeBuds7SettingsTransparencyLevel(1))
+    }
+
+    @Test
     fun `settings ANC renderer is skipped for clip and eyewear routes`() {
         listOf(
             HuaweiDeviceRoute.HUAWEI_FREECLIP,
@@ -56,6 +67,7 @@ class SettingsHeadsetPolicyTest {
             HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO4 to expectedPolicy(true, false, false),
             HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5 to expectedPolicy(true, true, true),
             HuaweiDeviceRoute.HUAWEI_FREEBUDS7I to expectedPolicy(true, true, true),
+            HuaweiDeviceRoute.HUAWEI_FREEBUDS7 to expectedPolicy(true, true, true),
             HuaweiDeviceRoute.HUAWEI_FREECLIP to expectedPolicy(false, false, false),
             HuaweiDeviceRoute.HUAWEI_FREECLIP2 to expectedPolicy(false, false, true),
             HuaweiDeviceRoute.HUAWEI_FREEARC to expectedPolicy(false, false, true),

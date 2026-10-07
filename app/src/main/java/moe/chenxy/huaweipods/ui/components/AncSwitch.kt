@@ -120,6 +120,7 @@ fun AncSwitch(
             )
         } else if (
             ancStatus == NoiseControlMode.TRANSPARENCY &&
+            deviceRoute != HuaweiDeviceRoute.HUAWEI_FREEBUDS7 &&
             onHuaweiAncLevelChange != null &&
             deviceRoute.supportsTransparency
         ) {

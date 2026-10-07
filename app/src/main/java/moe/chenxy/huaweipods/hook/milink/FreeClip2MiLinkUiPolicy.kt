@@ -13,6 +13,7 @@ internal object FreeClip2MiLinkUiPolicy {
     private val fixedTitles = setOf("沉浸声", "沉浸音", "Immersive sound", "Immersive audio", "固定", "Fixed")
     private val headTrackingTitles = setOf("头部追踪", "头部跟踪", "Head tracking")
     private val spatialAudioTitles = setOf("空间音频", "Spatial audio")
+    private val volumePercentagePattern = Regex("^[\\s|｜·:]*\\d{1,3}\\s*%\\s*$")
     private val volumeHeadingPattern = Regex(
         pattern = "^(?:音量|volume)(?:\\s*(?:[|｜·:]\\s*.*|\\d{1,3}%))?$",
         option = RegexOption.IGNORE_CASE,
@@ -42,6 +43,10 @@ internal object FreeClip2MiLinkUiPolicy {
     fun isSpatialAudioHeading(text: CharSequence?): Boolean {
         val normalized = text?.toString()?.trim()?.takeIf(String::isNotEmpty) ?: return false
         return spatialAudioTitles.any { it.equals(normalized, ignoreCase = true) }
+    }
+
+    fun hasNativeVolumePercentage(siblingLabels: List<String>): Boolean = siblingLabels.any {
+        volumePercentagePattern.matches(it)
     }
 
     /** 三个选项必须正好占据同一容器的连续位置，才允许移动宿主 View。 */

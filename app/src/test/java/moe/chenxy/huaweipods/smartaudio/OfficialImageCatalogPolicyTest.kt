@@ -17,6 +17,7 @@ class OfficialImageCatalogPolicyTest {
             HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3 to "000149",
             HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5 to "00016D",
             HuaweiDeviceRoute.HUAWEI_FREEBUDS7I to "000163",
+            HuaweiDeviceRoute.HUAWEI_FREEBUDS7 to "000174",
             HuaweiDeviceRoute.HUAWEI_FREECLIP2 to "000167",
             HuaweiDeviceRoute.HUAWEI_FREEARC to "00015D",
             HuaweiDeviceRoute.HUAWEI_EYEWEAR to "000139",

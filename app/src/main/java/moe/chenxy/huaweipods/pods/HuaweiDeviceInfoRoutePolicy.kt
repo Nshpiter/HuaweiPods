@@ -11,6 +11,7 @@ internal object HuaweiDeviceInfoRoutePolicy {
         "000149" to HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3,
         "00016D" to HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5,
         "000163" to HuaweiDeviceRoute.HUAWEI_FREEBUDS7I,
+        "000174" to HuaweiDeviceRoute.HUAWEI_FREEBUDS7,
         "000167" to HuaweiDeviceRoute.HUAWEI_FREECLIP2,
         "00015D" to HuaweiDeviceRoute.HUAWEI_FREEARC,
         // HUAWEI Eyewear 3（Evian，协议产品名仍上报为 HUAWEI Eyewear）。

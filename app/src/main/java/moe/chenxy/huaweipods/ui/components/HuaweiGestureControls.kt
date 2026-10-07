@@ -909,6 +909,8 @@ internal data class HuaweiGestureControlLayout(
 }
 
 internal fun huaweiGestureControlLayout(route: HuaweiDeviceRoute): HuaweiGestureControlLayout {
+    // FreeBuds 7 uses its own verified readback controls in FreeBuds7Controls.
+    if (route == HuaweiDeviceRoute.HUAWEI_FREEBUDS7) return HuaweiGestureControlLayout()
     if (route == HuaweiDeviceRoute.HUAWEI_FREEBUDS3) return HuaweiGestureControlLayout()
     val tapKinds = listOf(HuaweiGestureKind.DOUBLE_TAP, HuaweiGestureKind.TRIPLE_TAP)
         .filter { HuaweiTapAction.availableFor(route, it).isNotEmpty() }

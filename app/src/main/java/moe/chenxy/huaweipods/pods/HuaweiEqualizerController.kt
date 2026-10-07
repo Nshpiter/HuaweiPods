@@ -40,6 +40,10 @@ object HuaweiEqualizerController {
         onComplete: (Boolean) -> Unit,
     ) {
         val operation = HuaweiEqualizerCodec.customWriteOperation(route)
+        if (route == HuaweiDeviceRoute.HUAWEI_FREEBUDS7) {
+            HuaweiFreeBuds7Controller.setCustomEqualizer(context, device, gains, presetName, onComplete)
+            return
+        }
         val packet = operation?.let {
             HuaweiEqualizerCodec.buildCustomPacket(gains, presetName, operationValue = it)
         }

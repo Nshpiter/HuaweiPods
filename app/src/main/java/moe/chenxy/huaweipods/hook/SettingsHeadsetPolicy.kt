@@ -127,3 +127,15 @@ internal fun SettingsRowLayoutState.collapsed(): SettingsRowLayoutState = copy(
     bottomMargin = bottomMargin?.let { 0 },
     minimumHeight = 0,
 )
+
+/** Settings native points: adaptive, light, balanced; no unsupported deep slot. */
+internal fun freeBuds7SettingsAncIndex(protocolSubMode: Int): Int? = when (protocolSubMode) {
+    3 -> 0
+    1 -> 1
+    0 -> 2
+    else -> null
+}
+
+/** The Settings template recognizes ordinary transparency as 0200, Huawei reports 0202. */
+internal fun freeBuds7SettingsTransparencyLevel(protocolSubMode: Int): Int? =
+    0.takeIf { protocolSubMode == 2 }

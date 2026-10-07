@@ -51,7 +51,9 @@ private val freeBudsSe4AncOptions = listOf(
 
 internal val HuaweiDeviceRoute.ancLevelOptions: List<HuaweiAncLevelOption>
     get() = when (this) {
-        HuaweiDeviceRoute.HUAWEI_FREEBUDS5 -> freeBuds5AncOptions
+        HuaweiDeviceRoute.HUAWEI_FREEBUDS5,
+        HuaweiDeviceRoute.HUAWEI_FREEBUDS7,
+        -> freeBuds5AncOptions
         HuaweiDeviceRoute.HUAWEI_FREEBUDS4E -> freeBuds4eAncOptions
         HuaweiDeviceRoute.HUAWEI_FREEBUDS_SE4_ANC -> freeBudsSe4AncOptions
         HuaweiDeviceRoute.HUAWEI_FREEBUDS5I,
@@ -90,6 +92,7 @@ internal val HuaweiDeviceRoute.transparencySubModes: Set<Int>
         HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5 -> setOf(0x01, 0x02, 0x04)
         HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3 -> setOf(0xFF, 0x01)
         HuaweiDeviceRoute.HUAWEI_FREEBUDS7I -> setOf(0xFF)
+        HuaweiDeviceRoute.HUAWEI_FREEBUDS7 -> setOf(0x02)
         else -> emptySet()
     }
 

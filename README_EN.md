@@ -18,7 +18,7 @@
 
 HuaweiPods is an Xposed module for Xiaomi HyperOS. It integrates supported Huawei audio devices with the system headset popup, Super Island, Fusion Device Center, and Bluetooth detail page.
 
-The unified build supports the 16 models below in one APK. Model-specific test APKs are no longer distributed.
+The unified build supports the 17 models below in one APK. Model-specific test APKs are no longer distributed.
 
 ## Supported models
 
@@ -33,6 +33,7 @@ The unified build supports the 16 models below in one APK. Model-specific test A
 | HUAWEI FreeBuds Pro 3 | Battery, three-mode control and readback, four ANC levels, voice transparency, long-press/pinch/swipe gestures, and low-latency auto-apply |
 | HUAWEI FreeBuds Pro 4 | Battery and ANC/off; no verified ANC state readback or gesture settings |
 | HUAWEI FreeBuds Pro 5 | Battery, three-mode readback, four ANC levels, standard/voice/adaptive transparency, triple-tap/pinch/swipe-volume gestures, wear detection, adaptive volume, head-motion and voice controls, spatial audio, nine Yuezhang/scene/AI sound presets, a 10-band custom EQ, high-quality audio, low-latency auto-apply, dual-device connection, case-open sound, and ear-tip material |
+| HUAWEI FreeBuds 7 | Battery and official images, three ANC levels with readback, spatial audio, double/triple-tap, pinch and swipe settings, wear detection, eight sound effects, a 10-band EQ, high-quality audio, low latency, and selected smart settings; native Settings and fusion-center controls ([validation scope](docs/FREEBUDS7_ADAPTATION.md), Chinese) |
 | HUAWEI FreeBuds 7i | Battery, transparency/ANC/off readback, four ANC levels, double/triple-tap, long-press and swipe-volume gestures, wear detection, head-motion control, spatial audio, four sound presets, a 10-band custom EQ, high-quality audio, low-latency auto-apply, dual-device list management, and official color images |
 | HUAWEI FreeClip | Left/right/case battery; no traditional ANC |
 | HUAWEI FreeClip 2 | Battery, double/triple-tap and swipe gestures, spatial audio, four official sound presets, saved custom presets, low-latency auto-apply, and selected wearing/audio settings; no traditional ANC |

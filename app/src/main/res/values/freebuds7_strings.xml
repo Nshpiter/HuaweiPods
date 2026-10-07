@@ -1,0 +1,5 @@
+<resources>
+    <string name="freebuds7_single_ear_anc">Noise cancellation with one earbud</string>
+    <string name="freebuds7_auto_switch">Automatic audio connection switching</string>
+    <string name="freebuds7_double_tap">Double tap either earbud: play/pause</string>
+</resources>

@@ -341,6 +341,12 @@ object HuaweiHfpController {
                     if (!targetsCurrentFreeClip2Session(receivedIntent)) return
                     setFreeClip2Audio(receivedIntent)
                 }
+                HuaweiPodsAction.ACTION_HUAWEI_SPATIAL_SET,
+                HuaweiPodsAction.ACTION_HUAWEI_SPATIAL_REFRESH -> {
+                    if (!targetsCurrentSession(receivedIntent, requireAddress = true)) return
+                    if (sessionRoute != HuaweiDeviceRoute.HUAWEI_FREEBUDS7) return
+                    handleFreeBuds7Spatial(receivedIntent)
+                }
                 HuaweiPodsAction.ACTION_FREECLIP2_AUDIO_REFRESH -> {
                     if (!targetsCurrentFreeClip2Session(receivedIntent)) return
                     requestFreeClip2AudioState(
@@ -640,6 +646,36 @@ object HuaweiHfpController {
             return false
         }
         return true
+    }
+
+    private fun handleFreeBuds7Spatial(intent: Intent) {
+        val ctx = context ?: return
+        val target = device ?: return
+        val generation = sessionGeneration
+        val address = target.address
+        val route = HuaweiDeviceRoute.HUAWEI_FREEBUDS7
+        val publish: (FreeClip2SpatialAudioMode?) -> Unit = { mode ->
+            if (mode != null && isCurrentSession(generation, address, route)) {
+                val fill: Intent.() -> Unit = {
+                    putExtra(HuaweiPodsAction.EXTRA_HUAWEI_SPATIAL_MODE, mode.extraValue)
+                }
+                sendAppBroadcast(HuaweiPodsAction.ACTION_HUAWEI_SPATIAL_CHANGED, fill)
+                sendExternalBroadcast(HuaweiPodsAction.ACTION_HUAWEI_SPATIAL_CHANGED, fill)
+                Log.i(TAG, "FreeBuds 7 spatial confirmed mode=$mode")
+            }
+        }
+        if (intent.action == HuaweiPodsAction.ACTION_HUAWEI_SPATIAL_SET) {
+            val mode = FreeClip2SpatialAudioMode.fromExtraValue(
+                intent.getStringExtra(HuaweiPodsAction.EXTRA_HUAWEI_SPATIAL_MODE),
+            ) ?: return
+            HuaweiFreeBuds7Controller.setSpatial(ctx, target, mode) { success ->
+                if (!isCurrentSession(generation, address, route)) return@setSpatial
+                if (success) publish(mode)
+                else HuaweiFreeBuds7Controller.requestSpatial(ctx, target, publish)
+            }
+        } else {
+            HuaweiFreeBuds7Controller.requestSpatial(ctx, target, publish)
+        }
     }
 
     private fun targetsCurrentFreeClip2Session(intent: Intent): Boolean {
@@ -2078,6 +2114,8 @@ object HuaweiHfpController {
             addHuaweiPodsAction(HuaweiPodsAction.ACTION_HUAWEI_GESTURE_SET)
             addHuaweiPodsAction(HuaweiPodsAction.ACTION_HUAWEI_GESTURE_REFRESH)
             addHuaweiPodsAction(HuaweiPodsAction.ACTION_FREECLIP2_AUDIO_SET)
+            addHuaweiPodsAction(HuaweiPodsAction.ACTION_HUAWEI_SPATIAL_SET)
+            addHuaweiPodsAction(HuaweiPodsAction.ACTION_HUAWEI_SPATIAL_REFRESH)
             addHuaweiPodsAction(HuaweiPodsAction.ACTION_FREECLIP2_AUDIO_REFRESH)
             addHuaweiPodsAction(HuaweiPodsAction.ACTION_HUAWEI_EQUALIZER_PRESET_SET)
             addHuaweiPodsAction(HuaweiPodsAction.ACTION_HUAWEI_EQUALIZER_REFRESH)
