@@ -12,6 +12,30 @@ import org.junit.Test
 
 class MiLinkAncRoutingTest {
     @Test
+    fun `OS2 v16 adapter preserves legacy layout and uses captured display order`() {
+        val legacy = miLinkAncHostSpecs.first { it.adapterName == "legacy" }
+        val os2 = resolveMiLinkAncHostSpec(legacy, false, true, true)
+        assertEquals("hyperos2-v16", os2.adapterName)
+        assertEquals("u", os2.heightMethodName)
+        assertEquals(setOf("x"), os2.refreshMethodNames)
+        assertEquals(MiLinkAncValueOrder.NOISE_TRANSPARENCY_OFF, os2.displayValueOrder)
+        assertTrue(os2.usesLegacyLayout)
+        assertTrue(shouldReserveLegacyMiLinkAncHeight(HuaweiDeviceRoute.HUAWEI_FREECLIP2, os2))
+        assertEquals(0, miLinkHostAncStateFor(HuaweiDeviceRoute.HUAWEI_FREEBUDS6I, 2, os2))
+        assertEquals(1, miLinkHostAncStateFor(HuaweiDeviceRoute.HUAWEI_FREEBUDS6I, 3, os2))
+        assertEquals(2, miLinkHostAncStateFor(HuaweiDeviceRoute.HUAWEI_FREEBUDS6I, 1, os2))
+        // 模块控制接口的默认顺序独立于卡片显示顺序。
+        assertEquals(1, huaweiAncStatusForMiLink(HuaweiDeviceRoute.HUAWEI_FREEBUDS6I, 0))
+        assertEquals(2, huaweiAncStatusForMiLink(HuaweiDeviceRoute.HUAWEI_FREEBUDS6I, 1))
+        assertEquals(3, huaweiAncStatusForMiLink(HuaweiDeviceRoute.HUAWEI_FREEBUDS6I, 2))
+        assertEquals(legacy, resolveMiLinkAncHostSpec(legacy, true, true, true))
+        assertEquals(legacy, resolveMiLinkAncHostSpec(legacy, false, true, false))
+        val os4 = miLinkAncHostSpecs.first { it.adapterName == "hyperos4-v18" }
+        assertFalse(os4.usesLegacyLayout)
+        assertEquals(os4, resolveMiLinkAncHostSpec(os4, false, true, true))
+    }
+
+    @Test
     fun `two-state ANC buttons route by their own labels instead of compressed host indexes`() {
         assertEquals(2, miLinkTwoStateAncStatusForLabel("降噪"))
         assertEquals(2, miLinkTwoStateAncStatusForLabel(" Noise cancellation "))

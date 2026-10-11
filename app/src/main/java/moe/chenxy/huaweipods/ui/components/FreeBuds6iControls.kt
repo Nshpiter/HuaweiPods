@@ -18,6 +18,7 @@ import moe.chenxy.huaweipods.R
 import moe.chenxy.huaweipods.pods.HuaweiDeviceRoute
 import moe.chenxy.huaweipods.pods.HuaweiEqualizerController
 import moe.chenxy.huaweipods.pods.HuaweiEqualizerState
+import top.yukonga.miuix.kmp.basic.TextButton
 
 private data class FreeBuds6iPreset(val id: Int, val labelRes: Int)
 
@@ -36,20 +37,16 @@ fun FreeBuds6iControls(
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     var equalizerState by remember(address, route) { mutableStateOf<HuaweiEqualizerState?>(null) }
+    var reading by remember(address, route) { mutableStateOf(true) }
+    var refreshGeneration by remember(address, route) { mutableStateOf(0) }
 
     fun refreshState() {
-        val device = context.freeBuds6iBluetoothDevice(address) ?: return
-        HuaweiEqualizerController.requestState(
-            context = context,
-            device = device,
-            route = route,
-        ) { state ->
-            if (state != null) equalizerState = state
-        }
+        refreshGeneration++
     }
 
-    DisposableEffect(address, route, context) {
+    DisposableEffect(address, route, context, refreshGeneration) {
         var disposed = false
+        reading = true
         val device = context.freeBuds6iBluetoothDevice(address)
         if (device != null) {
             HuaweiEqualizerController.requestState(
@@ -57,17 +54,25 @@ fun FreeBuds6iControls(
                 device = device,
                 route = route,
             ) { state ->
-                if (!disposed && state != null) equalizerState = state
+                if (!disposed) {
+                    equalizerState = state?.takeIf { it.supported }
+                    reading = false
+                }
             }
+        } else {
+            reading = false
         }
         onDispose { disposed = true }
     }
 
     val selectedPreset = freeBuds6iPresets.firstOrNull { it.id == equalizerState?.selectedId }
-    val customSummary = if (equalizerState?.isCustom == true) {
-        stringResource(R.string.freebuds7i_custom_equalizer)
-    } else {
-        null
+    val customSummary = when {
+        reading -> stringResource(R.string.freebuds7i_state_unknown)
+        equalizerState == null -> stringResource(R.string.huawei_equalizer_read_failed)
+        equalizerState?.isCustom == true -> equalizerState?.selectedName
+            ?: stringResource(R.string.freebuds7i_custom_equalizer)
+        selectedPreset == null -> stringResource(R.string.huawei_equalizer_other_preset)
+        else -> null
     }
     Column(modifier = Modifier.fillMaxWidth()) {
         FreeBuds7iChoicePreference(
@@ -88,17 +93,16 @@ fun FreeBuds6iControls(
                         presetId = preset.id,
                     ) { success ->
                         if (success) {
-                            equalizerState = equalizerState?.copy(
-                                selectedId = preset.id,
-                                selectedName = null,
-                                selectedGains = null,
-                            )
+                            refreshState()
                         }
                         complete(success)
                     }
                 }
             },
         )
+        if (!reading && equalizerState == null) {
+            TextButton(text = stringResource(R.string.huawei_equalizer_retry), onClick = ::refreshState)
+        }
         HuaweiEqualizerPreference(
             address = address,
             route = route,

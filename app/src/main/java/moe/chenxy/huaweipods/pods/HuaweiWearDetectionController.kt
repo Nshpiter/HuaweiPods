@@ -28,6 +28,7 @@ object HuaweiWearDetectionController {
         HuaweiDeviceRoute.HUAWEI_FREEBUDS5I,
         HuaweiDeviceRoute.HUAWEI_FREEBUDS4E,
         HuaweiDeviceRoute.HUAWEI_FREEBUDS6I,
+        HuaweiDeviceRoute.HUAWEI_FREEBUDS6,
         HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3,
         HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5,
         HuaweiDeviceRoute.HUAWEI_FREEBUDS7I,

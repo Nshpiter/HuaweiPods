@@ -363,6 +363,19 @@ object HuaweiHfpController {
                         force = receivedIntent.getBooleanExtra("force", false),
                     )
                 }
+                HuaweiPodsAction.ACTION_SHARED_CONTROL_REQUEST -> {
+                    if (sentFromPackage != BuildConfig.APPLICATION_ID ||
+                        !targetsCurrentSession(receivedIntent, requireAddress = true)
+                    ) return
+                    val currentContext = context ?: return
+                    val currentDevice = device ?: return
+                    val route = sessionRoute
+                    val generation = sessionGeneration
+                    val address = currentDevice.address
+                    HuaweiSharedControlHost.handle(currentContext, currentDevice, route, receivedIntent) {
+                        isCurrentSession(generation, address, route)
+                    }
+                }
                 HuaweiPodsAction.ACTION_SMART_AUDIO_FREECLIP2_RESULT -> {
                     handleSmartAudioFreeClip2Result(receivedIntent, sentFromPackage)
                 }
@@ -2119,6 +2132,7 @@ object HuaweiHfpController {
             addHuaweiPodsAction(HuaweiPodsAction.ACTION_FREECLIP2_AUDIO_REFRESH)
             addHuaweiPodsAction(HuaweiPodsAction.ACTION_HUAWEI_EQUALIZER_PRESET_SET)
             addHuaweiPodsAction(HuaweiPodsAction.ACTION_HUAWEI_EQUALIZER_REFRESH)
+            addHuaweiPodsAction(HuaweiPodsAction.ACTION_SHARED_CONTROL_REQUEST)
             addHuaweiPodsAction(HuaweiPodsAction.ACTION_SMART_AUDIO_FREECLIP2_RESULT)
             addHuaweiPodsAction(HuaweiPodsAction.ACTION_SMART_AUDIO_FREECLIP2_QUERY_RESULT)
             addHuaweiPodsAction(HuaweiPodsAction.ACTION_SMART_AUDIO_FREECLIP2_STATE)

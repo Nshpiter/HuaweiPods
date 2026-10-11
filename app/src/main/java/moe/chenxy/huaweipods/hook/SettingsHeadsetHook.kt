@@ -173,6 +173,7 @@ object SettingsHeadsetHook : HookContext() {
 
     override fun onHook() {
         hookActivityEntry()
+        hookHeadsetMoreSettings()
         hookSupportChecks()
         hookServiceProxy()
         hookBatteryView()
@@ -340,6 +341,39 @@ object SettingsHeadsetHook : HookContext() {
         }.onFailure { Log.w(TAG, "hook MiuiHeadsetActivity.$methodName skipped", it) }
     }
 
+    private fun hookHeadsetMoreSettings() {
+        val fragmentClass = "com.android.settings.bluetooth.MiuiHeadsetFragment"
+        runCatching {
+            hookBefore(findMethod(fragmentClass, "checkAISupport")) {
+                // 原入口依赖小爱同学版本；华为设备使用模块详情页，不依赖小米耳机服务。
+                if (isHuaweiFragment(instance)) result = true
+            }
+        }.onFailure { Log.w(TAG, "hook headset more settings visibility skipped", it) }
+        runCatching {
+            hookBefore(findMethod(fragmentClass, "startAssist")) {
+                if (!isHuaweiFragment(instance)) return@hookBefore
+                val device = fragmentBluetoothDevice(instance) ?: return@hookBefore
+                val activity = callMethod(instance, "getActivity") as? Context
+                    ?: return@hookBefore
+                result = null
+                runCatching {
+                    activity.startActivity(Intent(HuaweiPodsAction.ACTION_OPEN_DEVICE_SETTINGS).apply {
+                        setClassName(BuildConfig.APPLICATION_ID, "${BuildConfig.APPLICATION_ID}.MainActivity")
+                        putExtra("address", device.address)
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                    })
+                }.onFailure {
+                    Log.w(TAG, "Unable to open Huawei device settings", it)
+                    android.widget.Toast.makeText(
+                        activity,
+                        moduleString(activity, R.string.connect_failed, "打开失败"),
+                        android.widget.Toast.LENGTH_SHORT,
+                    ).show()
+                }
+            }
+        }.onFailure { Log.w(TAG, "hook headset more settings click skipped", it) }
+    }
+
     private fun hookSupportChecks() {
         hookStringStaticResult("com.android.settings.bluetooth.HeadsetIDConstants", "checkSupport") { support ->
             support.startsWith(fakeDeviceId()) || support.contains(fakeDeviceId())
@@ -395,7 +429,14 @@ object SettingsHeadsetHook : HookContext() {
     private fun hookServiceProxy() {
         val proxyClass = "com.android.bluetooth.ble.app.IMiuiHeadsetService\$Stub\$Proxy"
         hookProxyStringResult(proxyClass, "checkSupport", BluetoothDevice::class.java) { settingsSupport() }
-        hookProxyStringArgResult(proxyClass, "getDeviceInfo") { settingsSupport() }
+        if (runCatching {
+                findClass(proxyClass).getDeclaredMethod("getDeviceInfo", String::class.java)
+            }.isSuccess
+        ) {
+            hookProxyStringArgResult(proxyClass, "getDeviceInfo", String::class.java) { settingsSupport() }
+        } else {
+            hookProxyStringArgResult(proxyClass, "getDeviceInfo") { settingsSupport() }
+        }
         hookProxyStringArgResult(proxyClass, "isSupportAudioSwitch") { "1" }
         hookProxyStringArgResult(proxyClass, "setCommonCommand", Int::class.java, String::class.java, BluetoothDevice::class.java) { commandArgs ->
             val command = commandArgs[0] as? Int

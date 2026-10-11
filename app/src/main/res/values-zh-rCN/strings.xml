@@ -114,6 +114,8 @@
     <string name="transparency_voice">人声增强</string>
     <string name="island_mode">超级岛</string>
     <string name="island_mode_summary">选择要显示的电量超级岛</string>
+    <string name="persistent_island">电量超级岛常驻</string>
+    <string name="persistent_island_summary">连接期间持续显示电量岛，断开后消失；系统样式需同时开启耳机常驻通知</string>
     <string name="lockscreen_notification">锁屏通知</string>
     <string name="lockscreen_notification_summary">允许已启用的耳机常驻通知显示在锁屏和息屏界面</string>
     <string name="persistent_notification">耳机常驻通知</string>

@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.content.SharedPreferences
 import android.graphics.drawable.Icon
@@ -12,19 +13,19 @@ import android.os.Looper
 import com.xzakota.hyper.notification.focus.FocusNotification
 import moe.chenxy.huaweipods.hook.Log
 import moe.chenxy.huaweipods.config.ConfigManager
+import moe.chenxy.huaweipods.config.NotificationPresentationPolicy
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.BatteryParams
 
-@SuppressLint("NotificationPermission", "WrongConstant")
+@SuppressLint("NotificationPermission", "WrongConstant", "MissingPermission")
 object FocusIslandUtil {
     private const val TAG = "HuaweiPods-FocusIsland"
     private const val CHANNEL_ID = "huaweipods_focus_island"
     private const val CHANNEL_NAME = "HuaweiPods Battery"
     private const val NOTIFICATION_ID = 10086
-    private const val ISLAND_TIMEOUT_SECONDS = 8
-    private const val DISMISS_DELAY_MS = ISLAND_TIMEOUT_SECONDS * 1_000L
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private var dismissRunnable: Runnable? = null
+    private var activeAddress: String? = null
 
     @Synchronized
     fun closeForHotReload() {
@@ -40,11 +41,17 @@ object FocusIslandUtil {
     ): Boolean {
         try {
             if (!ConfigManager.superIslandEnabled()) return false
+            val persistent = ConfigManager.persistentIslandEnabled()
             val leftConnected = batteryParams.left?.isConnected == true
             val rightConnected = batteryParams.right?.isConnected == true
 
             // Need at least one ear connected
             if (!leftConnected && !rightConnected) return false
+
+            val device = runCatching {
+                context.getSystemService(BluetoothManager::class.java)?.adapter?.getRemoteDevice(address)
+            }.getOrNull()
+            val displayName = device.notificationDisplayName()
 
             val leftText = if (leftConnected) "${batteryParams.left!!.battery}" else "-"
             val rightText = if (rightConnected) "${batteryParams.right!!.battery}" else "-"
@@ -86,14 +93,15 @@ object FocusIslandUtil {
                 val picLeft = createPicture("key_pic_left", leftIcon)
                 val picRight = createPicture("key_pic_right", rightIcon)
 
-                enableFloat = true
-                ticker = "HuaweiPods"
+                enableFloat = !persistent || activeAddress != address
+                updatable = true
+                ticker = displayName
                 tickerPic = picLeft
 
                 isShowNotification = false
                 island {
                     islandProperty = 1
-                    islandTimeout = ISLAND_TIMEOUT_SECONDS
+                    islandTimeout = NotificationPresentationPolicy.batteryIslandTimeoutSeconds(persistent)
                     bigIslandArea {
                         imageTextInfoLeft {
                             type = 1
@@ -119,7 +127,7 @@ object FocusIslandUtil {
                         }
                     }
                     shareData {
-                        title = "HuaweiPods"
+                        title = displayName
                         content = contentText
                         shareContent = contentText
                     }
@@ -128,9 +136,11 @@ object FocusIslandUtil {
 
             val notification = Notification.Builder(context, CHANNEL_ID)
                 .setSmallIcon(android.R.drawable.stat_sys_data_bluetooth)
-                .setContentTitle("HuaweiPods")
+                .setContentTitle(displayName)
                 .setContentText(contentText)
-                .setTicker("HuaweiPods")
+                .setTicker(displayName)
+                .setOngoing(persistent)
+                .setOnlyAlertOnce(persistent)
                 .setVisibility(
                     if (ConfigManager.lockscreenNotificationEnabled()) {
                         Notification.VISIBILITY_PUBLIC
@@ -142,7 +152,8 @@ object FocusIslandUtil {
                 .build()
 
             nm.notify(NOTIFICATION_ID, notification)
-            scheduleDismiss(nm)
+            activeAddress = address
+            scheduleDismiss(nm, persistent)
 
             Log.d(TAG, "Focus Island shown: L=$leftText% R=$rightText%")
             return true
@@ -159,6 +170,8 @@ object FocusIslandUtil {
     }
 
     fun cancelBatteryIsland(context: Context) {
+        closeForHotReload()
+        activeAddress = null
         runCatching {
             val notificationManager =
                 context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -167,14 +180,18 @@ object FocusIslandUtil {
     }
 
     @Synchronized
-    private fun scheduleDismiss(notificationManager: NotificationManager) {
+    private fun scheduleDismiss(notificationManager: NotificationManager, persistent: Boolean) {
         dismissRunnable?.let(mainHandler::removeCallbacks)
+        dismissRunnable = null
+        if (persistent) return
         dismissRunnable = Runnable {
             try {
                 notificationManager.cancel(NOTIFICATION_ID)
             } catch (_: Exception) {
                 // SystemUI 或通知服务重启时无需继续处理。
             }
-        }.also { mainHandler.postDelayed(it, DISMISS_DELAY_MS) }
+        }.also {
+            mainHandler.postDelayed(it, NotificationPresentationPolicy.TEMPORARY_ISLAND_TIMEOUT_SECONDS * 1_000L)
+        }
     }
 }

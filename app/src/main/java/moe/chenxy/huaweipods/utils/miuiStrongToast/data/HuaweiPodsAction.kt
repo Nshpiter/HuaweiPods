@@ -44,6 +44,7 @@ object HuaweiPodsAction {
     const val FREECLIP2_AUDIO_KIND_SOUND_EFFECT = "sound_effect"
 
     const val ACTION_SHOW_PODS_UI = PREFIX + ".show_pods_ui"
+    const val ACTION_OPEN_DEVICE_SETTINGS = PREFIX + ".open_device_settings"
     const val ACTION_SEND_STRONG_TOAST = PREFIX + ".sendstrongtoast"
     const val ACTION_UPDATE_PODS_NOTIFICATION = PREFIX + ".updatepodsnotification"
     const val ACTION_CANCEL_PODS_NOTIFICATION = PREFIX + ".cancelpodsnotification"
@@ -84,6 +85,8 @@ object HuaweiPodsAction {
     const val ACTION_HUAWEI_EQUALIZER_PRESET_SET = PREFIX + ".huawei_equalizer_preset_set"
     const val ACTION_HUAWEI_EQUALIZER_REFRESH = PREFIX + ".huawei_equalizer_refresh"
     const val ACTION_HUAWEI_EQUALIZER_CHANGED = PREFIX + ".huawei_equalizer_changed"
+    const val ACTION_SHARED_CONTROL_REQUEST = PREFIX + ".shared_control_request"
+    const val ACTION_SHARED_CONTROL_RESULT = PREFIX + ".shared_control_result"
     const val ACTION_HUAWEI_LOW_LATENCY_SET = PREFIX + ".huawei_low_latency_set"
     const val ACTION_HUAWEI_LOW_LATENCY_CHANGED = PREFIX + ".huawei_low_latency_changed"
     const val ACTION_SMART_AUDIO_FREECLIP2_SET = PREFIX + ".smart_audio_freeclip2_set"

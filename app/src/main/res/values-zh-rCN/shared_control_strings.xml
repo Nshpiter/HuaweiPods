@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="huawei_equalizer_read_failed">音效读取失败，请检查连接后重试</string>
+    <string name="huawei_equalizer_retry">重新读取</string>
+    <string name="huawei_equalizer_other_preset">耳机中的其他音效</string>
+</resources>

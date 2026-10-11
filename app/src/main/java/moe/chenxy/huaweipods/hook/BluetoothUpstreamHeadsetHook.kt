@@ -42,6 +42,7 @@ class BluetoothUpstreamHeadsetHook : HookContext() {
     private data class RegisteredHuaweiCallback(
         val callback: Any,
         val address: String,
+        val refreshMethodName: String,
     )
 
     private data class CallbackCaller(
@@ -223,6 +224,26 @@ class BluetoothUpstreamHeadsetHook : HookContext() {
         val notificationClass = findClassOrNull("com.android.bluetooth.ble.app.MiuiBluetoothNotification")
         val requestClass = findClassOrNull("com.android.bluetooth.ble.app.C4705R2")
         if (notificationClass != null) {
+            // OS 2 在 Handler 中处理六参数连接提示，没有新版 updateParameters。
+            if (notificationClass.declaredMethods.none { it.name == "updateParameters" }) runCatching {
+                val render = notificationClass.method(
+                    "handleShowConnectedToast", Int::class.java, Int::class.java,
+                    Int::class.java, Int::class.java, BluetoothDevice::class.java, String::class.java,
+                )
+                hookBefore(render) {
+                    val device = args[4] as? BluetoothDevice
+                    if (!isHuaweiPod(device)) return@hookBefore
+                    val battery = effectiveBattery() ?: return@hookBefore
+                    val left = displayBattery(battery.left) ?: args[1]
+                    val right = displayBattery(battery.right) ?: args[2]
+                    val wear = upstreamHuaweiWearState(
+                        battery, args[3] as? Int ?: 1,
+                        currentHuaweiRoute().usesReportedEarbudAvailability,
+                    )
+                    proceedWithArgs(args[0], left, right, wear, device, args[5])
+                }
+                Log.d(TAG, "MiuiBluetoothNotification.handleShowConnectedToast hook installed")
+            }.onFailure { Log.d(TAG, "Legacy notification render unavailable: ${it.message}") }
             runCatching {
                 hookBefore(notificationClass.method("invokeStatusBar", Context::class.java, String::class.java, Bundle::class.java)) {
                     val bundle = args[2] as? Bundle
@@ -289,9 +310,12 @@ class BluetoothUpstreamHeadsetHook : HookContext() {
 
         listOf(
             "com.android.bluetooth.ble.app.headset.BinderC6776v",
-            "com.android.bluetooth.ble.app.headset.v"
+            "com.android.bluetooth.ble.app.headset.v",
+            "com.android.bluetooth.ble.app.headset.m",
         ).forEach { className ->
-            findClassOrNull(className)?.let { installHeadsetBinderHooks(it) }
+            findClassOrNull(className)
+                ?.takeIf { IBinder::class.java.isAssignableFrom(it) }
+                ?.let { installHeadsetBinderHooks(it) }
         }
     }
 
@@ -573,10 +597,11 @@ class BluetoothUpstreamHeadsetHook : HookContext() {
     private fun installHeadsetBinderHooks(binderClass: Class<*>) {
         val className = binderClass.name
         if (!hookedBinderClasses.add(className)) return
-        Log.d(TAG, "BluetoothHeadsetService binder class=$className")
+        val hostSpec = headsetHostSpec(binderClass)
+        Log.i(TAG, "BluetoothHeadsetService binder class=$className adapter=${hostSpec.name}")
 
         runCatching {
-            hookBefore(binderClass.method("checkSupport", BluetoothDevice::class.java)) {
+            hookBefore(binderClass.binderMethod("checkSupport", BluetoothDevice::class.java)) {
                 val device = args[0] as? BluetoothDevice
                 if (!isHuaweiPod(device)) {
                     clearPendingHuaweiCallback()
@@ -596,14 +621,14 @@ class BluetoothUpstreamHeadsetHook : HookContext() {
             Log.d(TAG, "BinderC6776v.checkSupport hook installed")
         }.onFailure { Log.w(TAG, "hook BinderC6776v.checkSupport skipped", it) }
 
-        hookAddressStringResult(binderClass, listOf("getDeviceInfo"), "getDeviceInfo") { fakeSupport() }
+        hookAddressStringResult(binderClass, listOf(hostSpec.methodName("getDeviceInfo")), "getDeviceInfo") { fakeSupport() }
         hookAddressStringResult(binderClass, listOf("isSupportAudioSwitch", "mo19775z1", "z1"), "isSupportAudioSwitch") { "1" }
-        hookAddressBooleanResult(binderClass, listOf("isMiTWS", "mo19771O0", "O0"), "isMiTWS", true)
-        hookAddressBooleanResult(binderClass, listOf("checkIsMiTWS", "mo19766B", "B"), "checkIsMiTWS", true)
+        hookAddressBooleanResult(binderClass, listOf(hostSpec.methodName("isMiTWS"), "mo19771O0", "O0"), "isMiTWS", true)
+        hookAddressBooleanResult(binderClass, listOf(hostSpec.methodName("checkIsMiTWS"), "mo19766B", "B"), "checkIsMiTWS", true)
         hookAddressBooleanResult(binderClass, listOf("getRingFindState", "mo19772m0", "m0"), "getRingFindState", false)
 
         runCatching {
-            hookBefore(binderClass.method("setCommonCommand", Int::class.java, String::class.java, BluetoothDevice::class.java)) {
+            hookBefore(binderClass.binderMethod("setCommonCommand", Int::class.java, String::class.java, BluetoothDevice::class.java)) {
                 val command = args[0] as? Int
                 val value = args[1] as? String
                 val device = args[2] as? BluetoothDevice
@@ -627,31 +652,31 @@ class BluetoothUpstreamHeadsetHook : HookContext() {
         hookBinderAncLevel(binderClass)
 
         runCatching {
-            val callbackClass = findClass("com.android.bluetooth.ble.app.IMiuiHeadsetCallback")
-            hookBefore(binderClass.method("register", callbackClass)) {
+            val callbackClass = findClass(hostSpec.callbackClassName)
+            hookBefore(binderClass.binderMethod("register", callbackClass)) {
                 val callback = args[0]
                 val address = consumePendingHuaweiCallbackAddress()
                 if (callback == null || address == null) return@hookBefore
-                rememberCallback(callback, address)
+                rememberCallback(callback, address, hostSpec.refreshMethodName)
                 result = null
                 Log.d(TAG, "BinderC6776v.register swallowed callback=$callback address=$address")
                 requestBluetoothStatus("register")
                 sendRealStatus(address, "register")
                 sendRealStatusDelayed(address, "register-refresh", 350L)
             }
-            hookBefore(binderClass.method("registerCallbackDevice", callbackClass, BluetoothDevice::class.java)) {
+            hookBefore(binderClass.binderMethod("registerCallbackDevice", callbackClass, BluetoothDevice::class.java)) {
                 val callback = args[0]
                 val device = args[1] as? BluetoothDevice
                 if (!isHuaweiPod(device) || callback == null) return@hookBefore
                 lastHuaweiDevice = device
-                rememberCallback(callback, device)
+                rememberCallback(callback, device, hostSpec.refreshMethodName)
                 result = null
                 Log.d(TAG, "BinderC6776v.registerCallbackDevice swallowed callback=$callback device=${device.describe()}")
                 requestBluetoothStatus("registerCallbackDevice")
                 sendRealStatus(device, "registerCallbackDevice")
                 sendRealStatusDelayed(device, "registerCallbackDevice-refresh", 350L)
             }
-            hookBefore(binderClass.method("unregister", callbackClass, BluetoothDevice::class.java)) {
+            hookBefore(binderClass.binderMethod("unregister", callbackClass, BluetoothDevice::class.java)) {
                 val callback = args[0]
                 val device = args[1] as? BluetoothDevice
                 if (!isHuaweiPod(device) || callback == null) return@hookBefore
@@ -665,7 +690,7 @@ class BluetoothUpstreamHeadsetHook : HookContext() {
 
     private fun hookBinderVoidDevice(binderClass: Class<*>, methodName: String, after: (BluetoothDevice?, String) -> Unit) {
         runCatching {
-            hookBefore(binderClass.method(methodName, BluetoothDevice::class.java)) {
+            hookBefore(binderClass.binderMethod(methodName, BluetoothDevice::class.java)) {
                 val device = args[0] as? BluetoothDevice
                 if (!isHuaweiPod(device)) return@hookBefore
                 lastHuaweiDevice = device
@@ -726,7 +751,7 @@ class BluetoothUpstreamHeadsetHook : HookContext() {
 
     private fun hookBinderVoidDeviceString(binderClass: Class<*>, methodName: String, after: (BluetoothDevice?, String) -> Unit) {
         runCatching {
-            hookBefore(binderClass.method(methodName, BluetoothDevice::class.java, String::class.java)) {
+            hookBefore(binderClass.binderMethod(methodName, BluetoothDevice::class.java, String::class.java)) {
                 val device = args[0] as? BluetoothDevice
                 val value = args[1] as? String
                 if (!isHuaweiPod(device)) return@hookBefore
@@ -742,7 +767,7 @@ class BluetoothUpstreamHeadsetHook : HookContext() {
 
     private fun hookBinderAncMode(binderClass: Class<*>) {
         runCatching {
-            hookBefore(binderClass.method("changeAncMode", Int::class.java, BluetoothDevice::class.java)) {
+            hookBefore(binderClass.binderMethod("changeAncMode", Int::class.java, BluetoothDevice::class.java)) {
                 val mode = args[0] as? Int
                 val device = args[1] as? BluetoothDevice
                 if (!isHuaweiPod(device)) return@hookBefore
@@ -762,7 +787,7 @@ class BluetoothUpstreamHeadsetHook : HookContext() {
 
     private fun hookBinderAncLevel(binderClass: Class<*>) {
         runCatching {
-            hookBefore(binderClass.method("changeAncLevel", String::class.java, BluetoothDevice::class.java)) {
+            hookBefore(binderClass.binderMethod("changeAncLevel", String::class.java, BluetoothDevice::class.java)) {
                 val level = args[0] as? String
                 val device = args[1] as? BluetoothDevice
                 if (!isHuaweiPod(device)) return@hookBefore
@@ -780,14 +805,14 @@ class BluetoothUpstreamHeadsetHook : HookContext() {
         }.onFailure { Log.w(TAG, "hook BinderC6776v.changeAncLevel skipped", it) }
     }
 
-    private fun rememberCallback(callback: Any, device: BluetoothDevice?) {
+    private fun rememberCallback(callback: Any, device: BluetoothDevice?, refreshMethodName: String = "refreshStatus") {
         val address = runCatching { device?.address }.getOrNull()?.takeIf(String::isNotBlank) ?: return
-        rememberCallback(callback, address)
+        rememberCallback(callback, address, refreshMethodName)
     }
 
-    private fun rememberCallback(callback: Any, address: String) {
+    private fun rememberCallback(callback: Any, address: String, refreshMethodName: String = "refreshStatus") {
         (callMethod(callback, "asBinder") as? IBinder)?.let {
-            callbacks[it] = RegisteredHuaweiCallback(callback, address)
+            callbacks[it] = RegisteredHuaweiCallback(callback, address, refreshMethodName)
         }
     }
 
@@ -804,6 +829,16 @@ class BluetoothUpstreamHeadsetHook : HookContext() {
     private fun Class<*>.method(name: String, vararg parameterTypes: Class<*>): Method {
         return getDeclaredMethod(name, *parameterTypes).apply { isAccessible = true }
     }
+
+    private fun headsetHostSpec(binderClass: Class<*>): BluetoothHeadsetHostSpec =
+        resolveBluetoothHeadsetHostSpec(
+            binderClass.superclass?.name,
+            runCatching { binderClass.method("K0", BluetoothDevice::class.java) }
+                .getOrNull()?.returnType == String::class.java,
+        )
+
+    private fun Class<*>.binderMethod(name: String, vararg parameterTypes: Class<*>): Method =
+        method(headsetHostSpec(this).methodName(name), *parameterTypes)
 
     private fun hookMiuiHeadsetBinder() {
         val stubClass = firstExistingClass("com.android.bluetooth.ble.app.IMiuiHeadsetService\$Stub") ?: run {
@@ -1096,7 +1131,7 @@ class BluetoothUpstreamHeadsetHook : HookContext() {
             targetCallbacks.forEach { registration ->
                 val callback = registration.callback
                 runCatching {
-                    callMethod(callback, "refreshStatus", address, payload)
+                    callMethod(callback, registration.refreshMethodName, address, payload)
                     Log.d(TAG, "sent real refreshStatus reason=$reason address=$address payload=$payload callback=$callback")
                 }.onFailure {
                     forgetCallback(callback)

@@ -24,6 +24,8 @@ fun App(
         showOnboarding = false,
         showUpdated = false,
     ),
+    requestedDeviceAddress: String? = null,
+    onDeviceSettingsRequestHandled: () -> Unit = {},
     themeMode: MutableState<Int> = mutableStateOf(0),
     onThemeModeChange: (Int) -> Unit = {},
     accentMode: MutableState<Int> = mutableStateOf(0),
@@ -96,6 +98,8 @@ fun App(
             } else {
                 MainUI(
                     backStack = backStack,
+                    requestedDeviceAddress = requestedDeviceAddress,
+                    onDeviceSettingsRequestHandled = onDeviceSettingsRequestHandled,
                     selectedTab = selectedTab,
                     onSelectedTabChange = { selectedTab = it },
                     showUpdatedDialogOnLaunch = showUpdatedDialog,

@@ -1,5 +1,6 @@
 package moe.chenxy.huaweipods.hook
 
+import android.annotation.SuppressLint
 import android.app.Application
 import android.os.Bundle
 import android.util.Log as AndroidLog
@@ -191,6 +192,8 @@ class Api102HookEntry : HookEntry() {
         }
     }
 
+    // The detector reads main's API 101 metadata; release/module.prop requires API 102.
+    @SuppressLint("XposedNewApi")
     internal override fun installHook(
         executable: Executable,
         hookId: String,

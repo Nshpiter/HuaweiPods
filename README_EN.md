@@ -18,7 +18,7 @@
 
 HuaweiPods is an Xposed module for Xiaomi HyperOS. It integrates supported Huawei audio devices with the system headset popup, Super Island, Fusion Device Center, and Bluetooth detail page.
 
-The unified build supports the 17 models below in one APK. Model-specific test APKs are no longer distributed.
+The source integrates the 18 models below in one APK. FreeBuds 6, HyperOS 2 compatibility, and the notification updates below are not included in the published 1.9.0 APK.
 
 ## Supported models
 
@@ -28,8 +28,9 @@ The unified build supports the 17 models below in one APK. Model-specific test A
 | HUAWEI FreeBuds 4E | Battery, ANC/off with Light/Balanced levels and readback, left/right double-tap and press-and-hold, wear detection, fixed swipe-volume guidance, three official sound presets, and official color images |
 | HUAWEI FreeBuds 5 | Battery, ANC/off readback, Smart/Light/Balanced ANC levels, wear detection, four official sound presets, high-quality audio and low-latency auto-apply; gesture settings remain pending |
 | HUAWEI FreeBuds 5i | Battery, transparency/ANC/off readback, Smart/Light/Balanced/Deep ANC levels, left/right double-tap, wear detection, four official sound presets, high-quality audio, low-latency auto-apply, and official color images; long-press and swipe settings remain pending |
-| HUAWEI FreeBuds SE 4 ANC | Battery, transparency/ANC/off readback, Light/Balanced/Deep ANC levels, wind-noise reduction, four official sound presets, a 10-band custom EQ, low-latency auto-apply, and official color images; gesture settings remain pending |
+| HUAWEI FreeBuds SE 4 ANC | Battery, transparency/ANC/off readback, Smart/Light/Balanced/Deep ANC levels (Smart requires device comparison), wind-noise reduction, four official sound presets, a 10-band custom EQ, low-latency auto-apply, and official color images; gesture settings remain pending |
 | HUAWEI FreeBuds 6i | Battery, transparency/ANC/off readback, four ANC levels, voice transparency, double/triple-tap gestures, four official sound presets, a 10-band custom EQ, saved low-latency preference with reconnect auto-apply, Fusion Device Center synchronization, and dedicated images |
+| HUAWEI FreeBuds 6 | Battery and official color images, ANC/off with three ANC levels and readback, selected sound presets, adaptive volume, wear detection, drop reminder, case sounds, low-latency readback and reconnect auto-apply; [protocol and validation scope](docs/FREEBUDS6_ADAPTATION.md) (Chinese) |
 | HUAWEI FreeBuds Pro 3 | Battery, three-mode control and readback, four ANC levels, voice transparency, long-press/pinch/swipe gestures, and low-latency auto-apply |
 | HUAWEI FreeBuds Pro 4 | Battery and ANC/off; no verified ANC state readback or gesture settings |
 | HUAWEI FreeBuds Pro 5 | Battery, three-mode readback, four ANC levels, standard/voice/adaptive transparency, triple-tap/pinch/swipe-volume gestures, wear detection, adaptive volume, head-motion and voice controls, spatial audio, nine Yuezhang/scene/AI sound presets, a 10-band custom EQ, high-quality audio, low-latency auto-apply, dual-device connection, case-open sound, and ear-tip material |
@@ -53,6 +54,8 @@ The table lists currently integrated capabilities. Unlisted official features sh
 - **Super Island / popup** status display and quick ANC controls.
 - Independent switches for lock-screen headset notifications and all Super Island notifications.
 - Notification taps can open the module popup, system settings, or Huawei Smart Audio; verified models can toggle low latency in the popup.
+- Notifications and Super Island prefer the name saved in system Bluetooth settings and update when renamed while connected. Model identification still uses the original device information and address binding.
+- An optional persistent battery island is off by default, updates with battery reports, and is removed on disconnect. System style also requires the persistent headset notification and ROM support for Super Island.
 - **Fusion Device Center** headset display and transfer between paired devices, with an optional low-latency quick card on verified legacy hosts.
 - **Manual model binding** by Bluetooth address when a device has been renamed or cannot be identified automatically.
 - **First-run setup guide** and in-app GitHub release checks.
@@ -63,7 +66,7 @@ The table lists currently integrated capabilities. Unlisted official features sh
 ## Requirements
 
 - Xiaomi / Redmi device running HyperOS.
-- Android 15+.
+- Android 14+ (Android 14 / HyperOS 2 compatibility is implemented in source and is not included in the published 1.9.0 APK).
 - LSPosed API version >= 102 (the protocol-capture Debug build uses API 101).
 - A paired device listed in the support table above.
 
@@ -103,3 +106,7 @@ Internal package names, broadcast actions, configuration names, and the public a
 ## License
 
 [GPL-3.0](LICENSE)
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=Nshpiter/HuaweiPods&type=Date)](https://star-history.com/#Nshpiter/HuaweiPods&Date)

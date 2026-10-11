@@ -19,6 +19,12 @@ object HuaweiWindNoiseReductionController {
             onState(null)
             return
         }
+        if (HuaweiSharedControlClient.usesSharedConnection(context, route)) {
+            HuaweiSharedControlClient.request(context, device, route, HuaweiSharedControlPolicy.WIND_READ) {
+                onState(it?.let(::parseState))
+            }
+            return
+        }
         HuaweiL2capAncController.requestRawPacketOnce(
             context = context,
             device = device,
@@ -42,6 +48,16 @@ object HuaweiWindNoiseReductionController {
     ) {
         if (!route.supportsWindNoiseReduction) {
             onComplete(false)
+            return
+        }
+        if (HuaweiSharedControlClient.usesSharedConnection(context, route)) {
+            HuaweiSharedControlClient.request(
+                context, device, route, HuaweiSharedControlPolicy.WIND_SET, enabled = enabled,
+            ) {
+                val state = it?.let(::parseState)
+                onState(state)
+                onComplete(state == enabled)
+            }
             return
         }
         var actualState: Boolean? = null

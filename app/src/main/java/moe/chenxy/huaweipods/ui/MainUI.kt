@@ -61,6 +61,7 @@ import moe.chenxy.huaweipods.pods.defaultAncSubMode
 import moe.chenxy.huaweipods.pods.defaultTransparencySubMode
 import moe.chenxy.huaweipods.pods.encodeHuaweiDeviceRouteForBroadcast
 import moe.chenxy.huaweipods.pods.isKnown
+import moe.chenxy.huaweipods.pods.isSupported
 import moe.chenxy.huaweipods.pods.supportsAnc
 import moe.chenxy.huaweipods.pods.supportsAncDirectionDial
 import moe.chenxy.huaweipods.pods.supportsAncStateReadback
@@ -124,6 +125,8 @@ private const val GITHUB_ISSUES_URL = "$GITHUB_REPOSITORY_URL/issues"
 @Composable
 internal fun MainUI(
     backStack: SnapshotStateList<Screen>,
+    requestedDeviceAddress: String? = null,
+    onDeviceSettingsRequestHandled: () -> Unit = {},
     selectedTab: MainTab = MainTab.Module,
     onSelectedTabChange: (MainTab) -> Unit = {},
     showUpdatedDialogOnLaunch: Boolean = false,
@@ -191,6 +194,7 @@ internal fun MainUI(
     val logLevel = remember { mutableStateOf(appConfig.logLevel) }
     val fakeDeviceId = remember { mutableStateOf(appConfig.fakeDeviceId) }
     val islandMode = remember { mutableStateOf(ConfigManager.islandMode()) }
+    val persistentIslandEnabled = remember { mutableStateOf(appConfig.persistentIslandEnabled) }
     val persistentNotificationEnabled = remember {
         mutableStateOf(appConfig.persistentNotificationEnabled)
     }
@@ -744,6 +748,40 @@ internal fun MainUI(
         onSelectedTabChange(MainTab.Earphones)
     }
 
+    LaunchedEffect(requestedDeviceAddress) {
+        val address = requestedDeviceAddress ?: return@LaunchedEffect
+        while (backStack.size > 1) backStack.removeAt(backStack.lastIndex)
+        hasAppliedDefaultTab = true
+        onSelectedTabChange(MainTab.Earphones)
+        if (context.checkSelfPermission(android.Manifest.permission.BLUETOOTH_CONNECT) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            showDevicePicker = true
+            onDeviceSettingsRequestHandled()
+            return@LaunchedEffect
+        }
+        // 从系统设置打开时核对本机已配对设备，不信任外部传入的机型或连接状态。
+        val device = runCatching {
+            context.getSystemService(BluetoothManager::class.java)?.adapter?.bondedDevices
+                ?.firstOrNull { it.address.equals(address, ignoreCase = true) }
+        }.getOrNull()
+        val route = device?.let {
+            runCatching {
+                DeviceRoutePrefs.resolve(prefs, it.address, it.name ?: it.alias.orEmpty())
+            }.getOrNull()
+        }
+        if (device != null && route?.isSupported == true) {
+            if (hookConnected.value && address.equals(connectedDeviceAddress, ignoreCase = true)) {
+                onConnectedDeviceClick()
+            } else {
+                onDeviceSelected(device, route)
+            }
+        } else {
+            showDevicePicker = true
+        }
+        onDeviceSettingsRequestHandled()
+    }
+
     fun backToDevicePicker() {
         showDevicePicker = true
     }
@@ -991,7 +1029,7 @@ internal fun MainUI(
                         largeTitle = stringResource(R.string.theme_title),
                         scrollBehavior = themeScrollBehavior,
                         navigationIcon = {
-                            IconButton(onClick = { backStack.removeLast() }) {
+                            IconButton(onClick = { backStack.removeAt(backStack.lastIndex) }) {
                                 Icon(
                                     imageVector = MiuixIcons.Back,
                                     contentDescription = stringResource(R.string.back),
@@ -1034,7 +1072,7 @@ internal fun MainUI(
                         largeTitle = stringResource(R.string.settings),
                         scrollBehavior = settingsScrollBehavior,
                         navigationIcon = {
-                            IconButton(onClick = { backStack.removeLast() }) {
+                            IconButton(onClick = { backStack.removeAt(backStack.lastIndex) }) {
                                 Icon(
                                     imageVector = MiuixIcons.Back,
                                     contentDescription = stringResource(R.string.back),
@@ -1087,6 +1125,12 @@ internal fun MainUI(
                             broadcastConfigChanged(context, "com.xiaomi.bluetooth")
                         },
                         persistentNotificationEnabled = persistentNotificationEnabled,
+                        persistentIslandEnabled = persistentIslandEnabled,
+                        onPersistentIslandEnabledChange = {
+                            persistentIslandEnabled.value = it
+                            ConfigManager.updatePersistentIslandEnabled(prefs, xposedService, it)
+                            broadcastConfigChanged(context, "com.xiaomi.bluetooth")
+                        },
                         onPersistentNotificationEnabledChange = {
                             persistentNotificationEnabled.value = it
                             ConfigManager.updatePersistentNotificationEnabled(prefs, xposedService, it)
@@ -1149,7 +1193,7 @@ internal fun MainUI(
                         largeTitle = stringResource(R.string.documentation_title),
                         scrollBehavior = documentationScrollBehavior,
                         navigationIcon = {
-                            IconButton(onClick = { backStack.removeLast() }) {
+                            IconButton(onClick = { backStack.removeAt(backStack.lastIndex) }) {
                                 Icon(
                                     imageVector = MiuixIcons.Back,
                                     contentDescription = stringResource(R.string.back),
@@ -1183,7 +1227,7 @@ internal fun MainUI(
                         largeTitle = stringResource(R.string.sponsor_title),
                         scrollBehavior = sponsorScrollBehavior,
                         navigationIcon = {
-                            IconButton(onClick = { backStack.removeLast() }) {
+                            IconButton(onClick = { backStack.removeAt(backStack.lastIndex) }) {
                                 Icon(
                                     imageVector = MiuixIcons.Back,
                                     contentDescription = stringResource(R.string.back),
@@ -1218,7 +1262,7 @@ internal fun MainUI(
                         largeTitle = stringResource(R.string.about_references),
                         scrollBehavior = referencesScrollBehavior,
                         navigationIcon = {
-                            IconButton(onClick = { backStack.removeLast() }) {
+                            IconButton(onClick = { backStack.removeAt(backStack.lastIndex) }) {
                                 Icon(
                                     imageVector = MiuixIcons.Back,
                                     contentDescription = stringResource(R.string.back),
@@ -1255,7 +1299,7 @@ internal fun MainUI(
         entries = entries,
         onBack = {
             if (backStack.size > 1) {
-                backStack.removeLast()
+                backStack.removeAt(backStack.lastIndex)
             } else {
                 (context as? Activity)?.finish()
             }
@@ -1285,7 +1329,7 @@ internal fun MainUI(
         onLater = onUpdatedDialogHandled,
         onRestartScope = {
             while (backStack.size > 1) {
-                backStack.removeLast()
+                backStack.removeAt(backStack.lastIndex)
             }
             restartRequestedByUpdate = true
             showRestartScopeDialog = true

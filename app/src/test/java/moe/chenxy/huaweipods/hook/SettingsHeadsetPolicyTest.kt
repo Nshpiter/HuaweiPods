@@ -62,6 +62,7 @@ class SettingsHeadsetPolicyTest {
             HuaweiDeviceRoute.HUAWEI_FREEBUDS5 to expectedPolicy(true, false, false),
             HuaweiDeviceRoute.HUAWEI_FREEBUDS5I to expectedPolicy(true, true, true),
             HuaweiDeviceRoute.HUAWEI_FREEBUDS_SE4_ANC to expectedPolicy(true, true, false),
+            HuaweiDeviceRoute.HUAWEI_FREEBUDS6 to expectedPolicy(true, false, false),
             HuaweiDeviceRoute.HUAWEI_FREEBUDS6I to expectedPolicy(true, true, true),
             HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3 to expectedPolicy(true, true, true),
             HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO4 to expectedPolicy(true, false, false),

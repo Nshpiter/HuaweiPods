@@ -113,6 +113,8 @@
     <string name="transparency_voice">Enhance voices</string>
     <string name="island_mode">Super Island</string>
     <string name="island_mode_summary">Choose which battery island is displayed</string>
+    <string name="persistent_island">Keep battery island visible</string>
+    <string name="persistent_island_summary">Keep the battery island while connected and remove it on disconnect. System style also requires the persistent headset notification.</string>
     <string name="lockscreen_notification">Lock screen notifications</string>
     <string name="lockscreen_notification_summary">Allow an enabled persistent headset notification to appear on the lock screen and AOD</string>
     <string name="persistent_notification">Persistent headset notification</string>

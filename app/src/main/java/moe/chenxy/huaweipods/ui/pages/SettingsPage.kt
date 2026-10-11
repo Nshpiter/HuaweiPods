@@ -35,6 +35,8 @@ fun SettingsPage(
     onLogLevelChange: (Int) -> Unit = {},
     islandMode: MutableState<Int> = mutableStateOf(ConfigManager.ISLAND_MODE_OFFICIAL),
     onIslandModeChange: (Int) -> Unit = {},
+    persistentIslandEnabled: MutableState<Boolean> = mutableStateOf(false),
+    onPersistentIslandEnabledChange: (Boolean) -> Unit = {},
     persistentNotificationEnabled: MutableState<Boolean> = mutableStateOf(true),
     onPersistentNotificationEnabledChange: (Boolean) -> Unit = {},
     lockscreenNotificationEnabled: MutableState<Boolean> = mutableStateOf(true),
@@ -157,6 +159,13 @@ fun SettingsPage(
                     items = islandModeOptions,
                     selectedIndex = islandModeValues.indexOf(islandMode.value).coerceAtLeast(0),
                     onSelectedIndexChange = { onIslandModeChange(islandModeValues[it]) },
+                )
+                SwitchPreference(
+                    title = stringResource(R.string.persistent_island),
+                    summary = stringResource(R.string.persistent_island_summary),
+                    checked = persistentIslandEnabled.value,
+                    enabled = islandMode.value != ConfigManager.ISLAND_MODE_NONE,
+                    onCheckedChange = onPersistentIslandEnabledChange,
                 )
                 SwitchPreference(
                     title = stringResource(R.string.persistent_notification),

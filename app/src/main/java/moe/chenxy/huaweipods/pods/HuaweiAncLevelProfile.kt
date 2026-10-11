@@ -42,8 +42,9 @@ private val freeBuds4eAncOptions = listOf(
     HuaweiAncLevelOption(HuaweiAncLevel.BALANCED, protocolValue = 0x00, miuiValue = 0x00),
 )
 
-/** FreeBuds SE 4 ANC 000169/02 实机抓包确认：轻度=01、均衡=00、深度=02。 */
+/** SE 4 ANC 官方页面现有智慧动态；按同族 03 接入，仍需实机对照确认该档回读。 */
 private val freeBudsSe4AncOptions = listOf(
+    HuaweiAncLevelOption(HuaweiAncLevel.ADAPTIVE, protocolValue = 0x03, miuiValue = 0x03),
     HuaweiAncLevelOption(HuaweiAncLevel.LIGHT, protocolValue = 0x01, miuiValue = 0x01),
     HuaweiAncLevelOption(HuaweiAncLevel.BALANCED, protocolValue = 0x00, miuiValue = 0x00),
     HuaweiAncLevelOption(HuaweiAncLevel.DEEP, protocolValue = 0x02, miuiValue = 0x02),
@@ -52,6 +53,7 @@ private val freeBudsSe4AncOptions = listOf(
 internal val HuaweiDeviceRoute.ancLevelOptions: List<HuaweiAncLevelOption>
     get() = when (this) {
         HuaweiDeviceRoute.HUAWEI_FREEBUDS5,
+        HuaweiDeviceRoute.HUAWEI_FREEBUDS6,
         HuaweiDeviceRoute.HUAWEI_FREEBUDS7,
         -> freeBuds5AncOptions
         HuaweiDeviceRoute.HUAWEI_FREEBUDS4E -> freeBuds4eAncOptions
@@ -67,7 +69,9 @@ internal val HuaweiDeviceRoute.ancLevelOptions: List<HuaweiAncLevelOption>
     }
 
 internal val HuaweiDeviceRoute.defaultAncSubMode: Int?
-    get() = ancLevelOptions.firstOrNull { it.level == HuaweiAncLevel.ADAPTIVE }?.protocolValue
+    // 新增选项不改变 SE 4 ANC 旧版直接开启降噪时使用的轻度档。
+    get() = if (this == HuaweiDeviceRoute.HUAWEI_FREEBUDS_SE4_ANC) 0x01
+        else ancLevelOptions.firstOrNull { it.level == HuaweiAncLevel.ADAPTIVE }?.protocolValue
         ?: ancLevelOptions.firstOrNull()?.protocolValue
 
 internal fun HuaweiDeviceRoute.ancLevelOptionForProtocolValue(value: Int): HuaweiAncLevelOption? =

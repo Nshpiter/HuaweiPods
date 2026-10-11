@@ -14,11 +14,14 @@ import android.content.IntentFilter
 import android.graphics.BitmapFactory
 import android.graphics.drawable.Icon
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.service.notification.StatusBarNotification
 import com.xzakota.hyper.notification.focus.FocusNotification
 import moe.chenxy.huaweipods.utils.FocusIslandUtil
 import moe.chenxy.huaweipods.utils.ModuleResourceResolver
 import moe.chenxy.huaweipods.utils.PodImageLoader
+import moe.chenxy.huaweipods.utils.notificationDisplayName
 import moe.chenxy.huaweipods.utils.SystemApisUtils
 import moe.chenxy.huaweipods.utils.SystemApisUtils.cancelAsUser
 import moe.chenxy.huaweipods.utils.SystemApisUtils.notifyAsUser
@@ -50,6 +53,28 @@ object MiBluetoothToastHook : HookContext() {
     private var receiverRegistered = false
     private var notificationReceiverContext: Context? = null
     private var notificationReceiver: BroadcastReceiver? = null
+    private val islandRefreshHandler = Handler(Looper.getMainLooper())
+    private var islandRefreshRunnable: Runnable? = null
+    private var persistentIslandAddress: String? = null
+
+    private fun stopPersistentIslandRefresh() {
+        islandRefreshRunnable?.let(islandRefreshHandler::removeCallbacks)
+        islandRefreshRunnable = null
+        persistentIslandAddress = null
+    }
+
+    private fun schedulePersistentIslandRefresh(context: Context, device: BluetoothDevice) {
+        islandRefreshRunnable?.let(islandRefreshHandler::removeCallbacks)
+        persistentIslandAddress = device.address
+        islandRefreshRunnable = Runnable {
+            if (ConfigManager.persistentIslandEnabled() && persistentIslandAddress == device.address) {
+                // 请求当前连接的真实快照，避免续期时重放已经断开的旧设备电量。
+                requestCurrentNotificationRestore(context, device.address)
+            }
+        }.also {
+            islandRefreshHandler.postDelayed(it, NotificationPresentationPolicy.PERSISTENT_ISLAND_REFRESH_MS)
+        }
+    }
 
     override fun onHook() {
 
@@ -106,21 +131,32 @@ object MiBluetoothToastHook : HookContext() {
             try {
                 val address: String = bluetoothDevice.address
                 val notificationIdentity = headsetNotificationIntentIdentity(address)
+                if (!ModuleResourceResolver.isCurrentModuleBuild(context)) return
+                val displayName = bluetoothDevice.notificationDisplayName()
+                val deviceName = runCatching { bluetoothDevice.name }.getOrNull().orEmpty()
+                val keepIsland = NotificationPresentationPolicy.shouldKeepBatteryIsland(
+                    enabled = ConfigManager.persistentIslandEnabled(),
+                    effectiveMode = ConfigManager.islandMode(),
+                    persistentNotificationEnabled = ConfigManager.persistentNotificationEnabled(),
+                    hasConnectedEarBattery = batteryParams.left?.isConnected == true ||
+                        batteryParams.right?.isConnected == true,
+                )
+                val updatingPersistentIsland = persistentIslandAddress == address
+                if (!keepIsland && updatingPersistentIsland) {
+                    stopPersistentIslandRefresh()
+                    FocusIslandUtil.cancelBatteryIsland(context)
+                }
+                if (keepIsland && ConfigManager.islandMode() == ConfigManager.ISLAND_MODE_MODULE &&
+                    FocusIslandUtil.showBatteryIsland(context, prefs, batteryParams, address)
+                ) {
+                    schedulePersistentIslandRefresh(context, bluetoothDevice)
+                }
                 if (!NotificationPresentationPolicy.shouldPostPersistentNotification(
                         ConfigManager.persistentNotificationEnabled(),
                     )
                 ) {
                     cancelNotificationForAddress(address, context)
                     Log.d("HuaweiPods", "skip persistent notification: disabled")
-                    return
-                }
-                var alias: String? = bluetoothDevice.alias
-                if (alias?.isEmpty() == true) {
-                    alias = bluetoothDevice.name
-                }
-                val deviceName = alias ?: bluetoothDevice.name.orEmpty()
-                if (!ModuleResourceResolver.isCurrentModuleBuild(context)) {
-                    Log.w("HuaweiPods", "skip notification: stale Hook build")
                     return
                 }
                 val moduleResources = ModuleResourceResolver.resources(context) ?: run {
@@ -157,7 +193,7 @@ object MiBluetoothToastHook : HookContext() {
                 notificationManager.createNotificationChannel(
                     NotificationChannel(
                         "BTHeadset$address",
-                        alias,
+                        displayName,
                         NotificationManager.IMPORTANCE_DEFAULT
                     ).apply {
                         setSound(null, null)
@@ -222,14 +258,14 @@ object MiBluetoothToastHook : HookContext() {
                         setIdentifier(notificationIdentity)
                         putExtra("android.bluetooth.device.extra.DEVICE", bluetoothDevice)
                         putExtra("bluetoothaddress", bluetoothDevice.address)
-                        putExtra("device_name", alias)
+                        putExtra("device_name", deviceName)
                     },
                     PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
                 )
                 val focusExtras = FocusNotification.buildV3 {
                     val logo = createPicture("key_headset", headsetIcon)
-                    enableFloat = attachOfficialIsland
-                    ticker = alias ?: ""
+                    enableFloat = attachOfficialIsland && !(keepIsland && updatingPersistentIsland)
+                    ticker = displayName
                     updatable = true
 //                    tickerPic = logo
 
@@ -238,13 +274,16 @@ object MiBluetoothToastHook : HookContext() {
                             type = 0
                             src = logo
                         }
-                        title = alias ?: ""
+                        title = displayName
                         content = contentText
                     }
 
                     if (attachOfficialIsland) {
                         island {
                             islandProperty = 1
+                            if (keepIsland) {
+                                islandTimeout = NotificationPresentationPolicy.PERSISTENT_ISLAND_TIMEOUT_SECONDS
+                            }
                             bigIslandArea {
                                 imageTextInfoLeft {
                                     type = 1
@@ -256,7 +295,7 @@ object MiBluetoothToastHook : HookContext() {
                                 imageTextInfoRight {
                                     type = 2
                                     textInfo {
-                                        title = alias ?: ""
+                                        title = displayName
                                         content = contentText
                                     }
                                 }
@@ -298,11 +337,15 @@ object MiBluetoothToastHook : HookContext() {
                 }
                 val notification = Notification.Builder(context, "BTHeadset$address")
                     .setSmallIcon(android.R.drawable.stat_sys_data_bluetooth)
+                    // 旧版系统忽略 V3 焦点扩展时，普通通知仍显示当前耳机图片。
+                    .setLargeIcon(headsetBitmap)
                     .setWhen(0L)
-                    .setTicker(alias)
+                    .setTicker(displayName)
                     .setDefaults(-1)
-                    .setContentTitle(alias)
+                    .setContentTitle(displayName)
                     .setContentText(contentText)
+                    .setOngoing(keepIsland && attachOfficialIsland)
+                    .setOnlyAlertOnce(keepIsland)
                     .setContentIntent(pendingIntent)
                     .setDeleteIntent(deleteIntent(context, bluetoothDevice))
                     .setColor(context.getColor(system_notification_accent_color))
@@ -318,6 +361,9 @@ object MiBluetoothToastHook : HookContext() {
                     SystemApisUtils.getUserAllUserHandle()
                 )
                 activeNotificationAddresses.add(address)
+                if (keepIsland && attachOfficialIsland) {
+                    schedulePersistentIslandRefresh(context, bluetoothDevice)
+                }
             } catch (e: Exception) {
                 Log.e("HuaweiPods", "Failed to create Pod Notification", e)
             }
@@ -346,6 +392,19 @@ object MiBluetoothToastHook : HookContext() {
                         runCatching {
                             val intent = receivedIntent ?: return@runCatching
                             when (HuaweiPodsAction.canonical(intent.action)) {
+                                BluetoothDevice.ACTION_ALIAS_CHANGED,
+                                BluetoothDevice.ACTION_NAME_CHANGED -> {
+                                    val device = intent.getParcelableExtra(
+                                        BluetoothDevice.EXTRA_DEVICE,
+                                        BluetoothDevice::class.java,
+                                    ) ?: return@runCatching
+                                    // 仅更新已有耳机通知，避免无关设备改名触发连接提示。
+                                    if (device.address in activeNotificationAddresses ||
+                                        persistentIslandAddress == device.address
+                                    ) {
+                                        requestCurrentNotificationRestore(context, device.address)
+                                    }
+                                }
                                 HuaweiPodsAction.ACTION_PODS_UI_INIT -> {
                                     if (!ModuleResourceResolver.isCurrentModuleBuild(context)) {
                                         Log.w("HuaweiPods", "skip ready signal: stale Hook build")
@@ -364,12 +423,12 @@ object MiBluetoothToastHook : HookContext() {
                                 }
                                 HuaweiPodsAction.ACTION_CONFIG_CHANGED -> {
                                     ConfigManager.refreshFromPrefs(prefs)
+                                    stopPersistentIslandRefresh()
                                     if (!ConfigManager.persistentNotificationEnabled()) {
                                         cancelAllPodsNotifications(context)
                                     }
-                                    if (ConfigManager.islandMode() != ConfigManager.ISLAND_MODE_MODULE) {
-                                        FocusIslandUtil.cancelBatteryIsland(context)
-                                    }
+                                    FocusIslandUtil.cancelBatteryIsland(context)
+                                    requestCurrentNotificationRestore(context)
                                 }
                                 HuaweiPodsAction.ACTION_POD_IMAGES_CHANGED -> {
                                     val refreshed = refreshActiveNotificationImages()
@@ -408,7 +467,13 @@ object MiBluetoothToastHook : HookContext() {
                                 }
                                 HuaweiPodsAction.ACTION_CANCEL_PODS_NOTIFICATION -> {
                                     intent.getParcelableExtra("device", BluetoothDevice::class.java)
-                                        ?.let { cancelNotification(it, context) }
+                                        ?.let {
+                                            if (persistentIslandAddress == it.address) {
+                                                stopPersistentIslandRefresh()
+                                                FocusIslandUtil.cancelBatteryIsland(context)
+                                            }
+                                            cancelNotification(it, context)
+                                        }
                                 }
                             }
                         }.onFailure {
@@ -418,6 +483,8 @@ object MiBluetoothToastHook : HookContext() {
                 }
 
                 val intentFilter = IntentFilter().apply {
+                    addAction(BluetoothDevice.ACTION_ALIAS_CHANGED)
+                    addAction(BluetoothDevice.ACTION_NAME_CHANGED)
                     addHuaweiPodsAction(HuaweiPodsAction.ACTION_PODS_UI_INIT)
                     addHuaweiPodsAction(HuaweiPodsAction.ACTION_CONFIG_CHANGED)
                     addHuaweiPodsAction(HuaweiPodsAction.ACTION_POD_IMAGES_CHANGED)
@@ -436,11 +503,9 @@ object MiBluetoothToastHook : HookContext() {
                         "notification receiver registered build=${BuildConfig.MODULE_BUILD_ID} " +
                             "receiver=${System.identityHashCode(broadcastReceiver)}",
                     )
-                    // API 102 不会重放连接事件。优先原位替换 USER_ALL 通知；旧代
-                    // 没留下通知时，再向 Android 蓝牙进程请求当前状态重建。
-                    if (refreshActiveNotificationImages() == 0) {
-                        requestCurrentNotificationRestore(context)
-                    }
+                    // API 102 不会重放连接事件。先换图，再用当前快照同步名称与常驻续期任务。
+                    refreshActiveNotificationImages()
+                    requestCurrentNotificationRestore(context)
                 }.onFailure {
                     Log.e("HuaweiPods", "Failed to register Bluetooth notification receiver", it)
                 }
@@ -586,6 +651,7 @@ object MiBluetoothToastHook : HookContext() {
     }
 
     override fun onClose() {
+        stopPersistentIslandRefresh()
         synchronized(receiverRegistrationLock) {
             val receiver = notificationReceiver
             val receiverContext = notificationReceiverContext

@@ -75,7 +75,18 @@ object HeadsetStateDispatcher : HookContext() {
             Log.w("HuaweiPods", "AdapterService.onCreate hook skipped", it)
         }
 
-        hookAfter(findMethodByParamCount("com.android.bluetooth.a2dp.A2dpService", "handleConnectionStateChanged", 3)) {
+        val a2dpClass = findClass("com.android.bluetooth.a2dp.A2dpService")
+        val connectionMethod = listOf("handleConnectionStateChanged", "connectionStateChanged")
+            .firstNotNullOfOrNull { name ->
+                runCatching {
+                    a2dpClass.getDeclaredMethod(
+                        name, BluetoothDevice::class.java,
+                        Int::class.javaPrimitiveType, Int::class.javaPrimitiveType,
+                    ).apply { isAccessible = true }
+                }.getOrNull()
+            } ?: throw NoSuchMethodException("A2dpService connection state callback")
+        Log.i("HuaweiPods", "A2DP connection callback=${connectionMethod.name}")
+        hookAfter(connectionMethod) {
             val currState = args[2] as Int
             val fromState = args[1] as Int
             val device = args[0] as BluetoothDevice?

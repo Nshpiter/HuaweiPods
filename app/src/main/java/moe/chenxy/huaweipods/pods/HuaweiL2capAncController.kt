@@ -304,6 +304,7 @@ object HuaweiL2capAncController {
         responseWindowMs: Long = 1_000L,
         responseComplete: ((ByteArray) -> Boolean)? = null,
         onComplete: ((Boolean) -> Unit)? = null,
+        keepSocket: Boolean = false,
         onResponse: (ByteArray) -> Unit,
     ) {
         enqueueWrite(
@@ -312,7 +313,7 @@ object HuaweiL2capAncController {
             route = route,
             packet = packet,
             description = description,
-            keepSocket = false,
+            keepSocket = keepSocket,
             responseWindowMs = responseWindowMs,
             responseComplete = responseComplete,
             onComplete = onComplete,
@@ -512,7 +513,7 @@ object HuaweiL2capAncController {
 
         device.uuids.orEmpty()
             .mapNotNull { it?.uuid }
-            .filter { it != SPP_UUID }
+            .filter { it != SPP_UUID && HuaweiRfcommServicePolicy.isControlCandidate(it) }
             .forEach { uuid ->
                 add("secure-sdp-$uuid") { device.createRfcommSocketToServiceRecord(uuid) }
                 add("insecure-sdp-$uuid") { device.createInsecureRfcommSocketToServiceRecord(uuid) }

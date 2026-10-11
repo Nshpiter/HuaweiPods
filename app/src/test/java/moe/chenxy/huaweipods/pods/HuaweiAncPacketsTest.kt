@@ -86,7 +86,7 @@ class HuaweiAncPacketsTest {
     }
 
     @Test
-    fun `FreeBuds SE 4 ANC packets match verified capture`() {
+    fun `FreeBuds SE 4 ANC preserves captured modes and supports adaptive family command`() {
         val route = HuaweiDeviceRoute.HUAWEI_FREEBUDS_SE4_ANC
         assertArrayEquals(
             hex("5A0007002B0401020000D22D"),
@@ -100,7 +100,11 @@ class HuaweiAncPacketsTest {
             hex("5A0007002B0401020102C15E"),
             HuaweiAncPackets.mode(route, NoiseControlMode.NOISE_CANCELLATION, 0x02),
         )
-        assertNull(HuaweiAncPackets.mode(route, NoiseControlMode.NOISE_CANCELLATION, 0x03))
+        assertArrayEquals(
+            hex("5A0007002B0401020103D17F"),
+            HuaweiAncPackets.mode(route, NoiseControlMode.NOISE_CANCELLATION, 0x03),
+        )
+        assertNull(HuaweiAncPackets.mode(route, NoiseControlMode.NOISE_CANCELLATION, 0x04))
     }
 
     @Test

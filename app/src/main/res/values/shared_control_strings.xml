@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="huawei_equalizer_read_failed">Could not read the sound effect. Check the connection and retry.</string>
+    <string name="huawei_equalizer_retry">Retry</string>
+    <string name="huawei_equalizer_other_preset">Other preset on the earbuds</string>
+</resources>

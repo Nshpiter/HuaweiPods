@@ -1,6 +1,8 @@
 package moe.chenxy.huaweipods
 
 import android.content.Context
+import android.content.Intent
+import android.bluetooth.BluetoothAdapter
 import android.graphics.Color
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -15,8 +17,23 @@ import moe.chenxy.huaweipods.config.AppLifecyclePrefs
 import moe.chenxy.huaweipods.config.ConfigManager
 import moe.chenxy.huaweipods.ui.App
 import moe.chenxy.huaweipods.ui.AppLocale
+import moe.chenxy.huaweipods.utils.miuiStrongToast.data.HuaweiPodsAction
 
 class MainActivity : ComponentActivity() {
+    private val requestedDeviceAddress = mutableStateOf<String?>(null)
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        readDeviceSettingsRequest(intent)
+    }
+
+    private fun readDeviceSettingsRequest(intent: Intent?) {
+        if (intent?.action != HuaweiPodsAction.ACTION_OPEN_DEVICE_SETTINGS) return
+        requestedDeviceAddress.value = intent.getStringExtra("address")
+            ?.takeIf(BluetoothAdapter::checkBluetoothAddress)
+    }
+
     override fun attachBaseContext(newBase: Context) {
         AppLocale.rememberDeviceLocale(newBase)
         AppLocale.apply(newBase, newBase.getSharedPreferences(ConfigManager.PREFS_NAME, Context.MODE_PRIVATE).getInt("app_language", AppLocale.SYSTEM))
@@ -25,6 +42,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        readDeviceSettingsRequest(intent)
 
         val lifecyclePrefs = AppLifecyclePrefs(this)
         val launchDecision = lifecyclePrefs.consumeLaunchDecision(
@@ -59,6 +77,8 @@ class MainActivity : ComponentActivity() {
 
             App(
                 initialLaunchDecision = launchDecision,
+                requestedDeviceAddress = requestedDeviceAddress.value,
+                onDeviceSettingsRequestHandled = { requestedDeviceAddress.value = null },
                 themeMode = themeMode,
                 onThemeModeChange = {
                     themeMode.value = it

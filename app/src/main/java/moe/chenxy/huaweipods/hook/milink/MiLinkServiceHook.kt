@@ -228,7 +228,9 @@ internal data class MiLinkAncHostSpec(
     val recomputeHeightWhenHidden: Boolean,
     val displayValueOrder: MiLinkAncValueOrder,
     val refreshMethodNames: Set<String>? = null,
-)
+) {
+    val usesLegacyLayout: Boolean get() = selectCardIdName == null
+}
 
 internal enum class MiLinkAncValueOrder {
     OFF_NOISE_TRANSPARENCY,
@@ -266,6 +268,26 @@ internal fun compatibleMiLinkAncHostSpecs(
     hasCompatibleConstructor: (String) -> Boolean,
 ): List<MiLinkAncHostSpec> = miLinkAncHostSpecs.filter { spec ->
     hasCompatibleConstructor(spec.cardClassName)
+}
+
+/** OS 2 v16 的 j.x(int) 只重画 ANC，HeadSetsDetail.u() 负责重算高度。 */
+internal fun resolveMiLinkAncHostSpec(
+    spec: MiLinkAncHostSpec,
+    hasOriginalHeightMethod: Boolean,
+    hasOs2HeightMethod: Boolean,
+    hasOs2RenderMethod: Boolean,
+): MiLinkAncHostSpec = if (spec.adapterName == "legacy" && !hasOriginalHeightMethod &&
+    hasOs2HeightMethod && hasOs2RenderMethod
+) {
+    spec.copy(
+        adapterName = "hyperos2-v16",
+        heightMethodName = "u",
+        refreshMethodNames = setOf("x"),
+        // j.x(int) 的实际绘制顺序为 0=降噪、1=通透、2=关闭，控制接口仍单独处理。
+        displayValueOrder = MiLinkAncValueOrder.NOISE_TRANSPARENCY_OFF,
+    )
+} else {
+    spec
 }
 
 internal data class MiLinkAudioEffectHostSpec(
@@ -524,7 +546,7 @@ internal fun shouldReserveLegacyMiLinkAncHeight(
     route: HuaweiDeviceRoute,
     hostSpec: MiLinkAncHostSpec,
 ): Boolean = route == HuaweiDeviceRoute.HUAWEI_FREECLIP2 &&
-    hostSpec.adapterName == "legacy"
+    hostSpec.usesLegacyLayout
 
 /** 只接受当前机型确实支持的融合设备中心状态。 */
 internal fun huaweiAncStatusForMiLink(
@@ -1358,7 +1380,14 @@ object MiLinkServiceHook : HookContext() {
             "com.xiaomi.mxbluetoothsdk.service.MxBluetoothService"
         )
         classes.forEach { className ->
-            hookBluetoothDeviceResult(className, "checkIsMiTWS") { 1 }
+            if (runCatching {
+                    findClass(className).getDeclaredMethod("checkIsMiTWS", String::class.java)
+                }.isSuccess
+            ) {
+                hookStringAddressResult(className, "checkIsMiTWS") { 1 }
+            } else {
+                hookBluetoothDeviceResult(className, "checkIsMiTWS") { 1 }
+            }
             hookBluetoothDeviceResult(className, "getDeviceId") { fakeDeviceId() }
             hookBluetoothDeviceResult(className, "getBatteryLevel") { 1 }
             hookBluetoothDeviceResult(
@@ -1797,6 +1826,17 @@ object MiLinkServiceHook : HookContext() {
                 runCatching {
                     findClass(className).getDeclaredConstructor(detailClass)
                 }.isSuccess
+            }.map { spec ->
+                resolveMiLinkAncHostSpec(
+                    spec = spec,
+                    hasOriginalHeightMethod = runCatching {
+                        detailClass.getDeclaredMethod(spec.heightMethodName)
+                    }.isSuccess,
+                    hasOs2HeightMethod = runCatching { detailClass.getDeclaredMethod("u") }.isSuccess,
+                    hasOs2RenderMethod = runCatching {
+                        findClass(spec.cardClassName).getDeclaredMethod("x", Int::class.javaPrimitiveType)
+                    }.isSuccess,
+                )
             }
             if (hostSpecs.isEmpty()) {
                 throw NoSuchMethodException("No compatible MiLink ANC card constructor")
@@ -3282,9 +3322,13 @@ object MiLinkServiceHook : HookContext() {
     private fun recomputeHostDetailHeight(detail: View) {
         val method = miLinkAncHostSpecs
             .asSequence()
-            .mapNotNull { spec ->
+            .flatMap { spec ->
+                if (spec.adapterName == "legacy") sequenceOf(spec.heightMethodName, "u")
+                else sequenceOf(spec.heightMethodName)
+            }
+            .mapNotNull { methodName ->
                 detail.javaClass.declaredMethods.firstOrNull { candidate ->
-                    candidate.name == spec.heightMethodName &&
+                    candidate.name == methodName &&
                         candidate.parameterTypes.isEmpty() &&
                         candidate.returnType == Void.TYPE
                 }
@@ -3605,7 +3649,7 @@ object MiLinkServiceHook : HookContext() {
         binding: AncCardBinding,
         detail: View?,
     ): View? {
-        if (binding.hostSpec.adapterName == "legacy") {
+        if (binding.hostSpec.usesLegacyLayout) {
             return runCatching { getObjectField(card, "f") as? View }.getOrNull()
         }
         val selectCard = binding.hostSpec.selectCardIdName
@@ -5041,7 +5085,7 @@ object MiLinkServiceHook : HookContext() {
         binding: AncCardBinding,
         reason: String,
     ) {
-        if (binding.hostSpec.adapterName != "legacy") return
+        if (!binding.hostSpec.usesLegacyLayout) return
         val hostState = miLinkAncDisplayState(binding.hostSpec)
         // Legacy MiLink can repaint an old selection after its async command callback.
         // For FreeBuds 7, reapply confirmed readbacks even if our last render matched:

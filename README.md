@@ -6,7 +6,7 @@
 
 **让华为耳机接入小米 HyperOS 的系统体验**
 
-[![Android 15+](https://img.shields.io/badge/Android-15%2B-3DDC84?style=flat-square&logo=android&logoColor=white)](https://www.android.com/)
+[![Android 14+](https://img.shields.io/badge/Android-14%2B-3DDC84?style=flat-square&logo=android&logoColor=white)](https://www.android.com/)
 [![HyperOS](https://img.shields.io/badge/ROM-HyperOS-FF6900?style=flat-square)](https://hyperos.mi.com/)
 [![LSPosed](https://img.shields.io/badge/Framework-LSPosed-6F42C1?style=flat-square)](https://github.com/LSPosed/LSPosed)
 [![License](https://img.shields.io/github/license/Nshpiter/HuaweiPods?style=flat-square)](LICENSE)
@@ -23,7 +23,7 @@ QQ群 `1022359908`
 
 HuaweiPods 是一个面向小米 / Redmi HyperOS 设备的 Xposed 模块，将华为耳机接入系统蓝牙详情页、连接弹窗、超级岛与融合设备中心。
 
-> 当前统一版已集成下列 17 个型号，所有型号使用同一个 APK，不再按型号单独分发测试包。
+> 当前源码已集成下列 18 个型号，所有型号使用同一个 APK。FreeBuds 6、HyperOS 2 兼容及下述通知更新尚未随 1.9.0 正式版发布。
 
 ## 支持型号
 
@@ -33,8 +33,9 @@ HuaweiPods 是一个面向小米 / Redmi HyperOS 设备的 Xposed 模块，将�
 | HUAWEI FreeBuds 4E | 电量、降噪 / 关闭与轻度 / 均衡两档降噪、状态回读、左右耳双击与按住、佩戴检测、轻滑音量说明、3 种官方音效和官方配色图片 |
 | HUAWEI FreeBuds 5 | 电量、降噪 / 关闭与状态回读、智慧动态 / 轻度 / 均衡三档降噪、佩戴检测、4 种官方音效、高清音质与低时延自动保持；手势设置待补充 |
 | HUAWEI FreeBuds 5i | 电量、通透 / 降噪 / 关闭与状态回读、智慧动态 / 轻度 / 均衡 / 深度四档降噪、左右耳双击、佩戴检测、4 种官方音效、高清音质、低时延自动保持与官方配色图片；长按和滑动设置待补充 |
-| HUAWEI FreeBuds SE 4 ANC | 电量、通透 / 降噪 / 关闭与状态回读、轻度 / 均衡 / 深度三档降噪、防风噪、4 种官方音效、10 段自定义均衡器、低时延自动保持与官方配色图片；手势设置待补充 |
+| HUAWEI FreeBuds SE 4 ANC | 电量、通透 / 降噪 / 关闭与状态回读、智慧动态 / 轻度 / 均衡 / 深度四档降噪（智慧动态待实机对照）、防风噪、4 种官方音效、10 段自定义均衡器、低时延自动保持与官方配色图片；手势设置待补充 |
 | HUAWEI FreeBuds 6i | 电量、通透 / 降噪 / 关闭与状态回读、4 档降噪、通透人声模式、双击 / 三击手势、4 种官方音效、10 段自定义均衡器、低时延设置保存与重连自动应用、融合设备中心同步与专属图片 |
+| HUAWEI FreeBuds 6 | 电量与官方配色图片、降噪 / 关闭及 3 档降噪回读、部分音效、自适应音量、佩戴检测、掉落提醒、盒提示音、低时延回读与重连自动应用；[协议与测试范围](docs/FREEBUDS6_ADAPTATION.md) |
 | HUAWEI FreeBuds Pro 3 | 电量、三态控制与状态回读、4 档降噪、通透人声模式、长按 / 捏合 / 滑动手势与低时延自动保持 |
 | HUAWEI FreeBuds Pro 4 | 电量、降噪 / 关闭两态控制；暂不支持降噪状态回读与手势设置 |
 | HUAWEI FreeBuds Pro 5 | 电量、三态回读、4 档降噪、通透 / 透传人声 / 智慧动态透传、三击 / 按捏 / 轻滑音量、佩戴检测、自适应音量、头动与语音控制、空间音频、9 种悦彰 / 场景 / AI 音效、10 段自定义均衡器、高清音质、低时延自动保持、双设备连接、开盒提示音与耳塞材质 |
@@ -57,6 +58,8 @@ HuaweiPods 是一个面向小米 / Redmi HyperOS 设备的 Xposed 模块，将�
 - 接入 HyperOS 连接弹窗和超级岛
 - 可分别控制锁屏耳机通知与超级岛通知
 - 通知可打开模块弹窗、系统设置或华为智慧音频；模块弹窗可直接切换低时延
+- 耳机通知与超级岛优先显示系统蓝牙设置中的设备名称，连接期间改名会同步更新；机型识别仍使用原始信息与地址绑定
+- 设置可开启“电量超级岛常驻”，默认关闭；连接期间随电量更新，断开后清除。系统样式需同时开启耳机常驻通知，并由 ROM 支持超级岛
 - 接入融合设备中心，并支持已配对设备间流转；已验证的旧版宿主可复用“查找耳机”卡片快速切换低时延
 - 显示左右耳、充电盒或眼镜左右镜腿电量
 - 按机型提供主动降噪、通透模式、降噪等级和手势设置
@@ -69,7 +72,7 @@ HuaweiPods 是一个面向小米 / Redmi HyperOS 设备的 Xposed 模块，将�
 ## 使用要求
 
 - 小米或 Redmi 设备
-- HyperOS，Android 15 及以上
+- HyperOS，Android 14 及以上（Android 14 / HyperOS 2 兼容已接入源码，尚未随 1.9.0 正式版发布）
 - LSPosed API 102 及以上（协议采集 Debug 版使用 API 101）
 - 表中任一已集成型号
 
@@ -127,3 +130,7 @@ HuaweiPods 是一个面向小米 / Redmi HyperOS 设备的 Xposed 模块，将�
 ## 许可证
 
 本项目基于 [GPL-3.0](LICENSE) 开源。
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=Nshpiter/HuaweiPods&type=Date)](https://star-history.com/#Nshpiter/HuaweiPods&Date)

@@ -157,6 +157,7 @@ object DeviceRoutePrefs {
         HuaweiDeviceRoute.HUAWEI_FREEBUDS5I -> "freebuds5i"
         HuaweiDeviceRoute.HUAWEI_FREEBUDS_SE4_ANC -> "freebuds_se4_anc"
         HuaweiDeviceRoute.HUAWEI_FREEBUDS6I -> "freebuds6i"
+        HuaweiDeviceRoute.HUAWEI_FREEBUDS6 -> "freebuds6"
         HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3 -> "freebuds_pro3"
         HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO4 -> "freebuds_pro4"
         HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5 -> "freebuds_pro5"
@@ -177,6 +178,7 @@ object DeviceRoutePrefs {
         "freebuds5i" -> HuaweiDeviceRoute.HUAWEI_FREEBUDS5I
         "freebuds_se4_anc" -> HuaweiDeviceRoute.HUAWEI_FREEBUDS_SE4_ANC
         "freebuds6i" -> HuaweiDeviceRoute.HUAWEI_FREEBUDS6I
+        "freebuds6" -> HuaweiDeviceRoute.HUAWEI_FREEBUDS6
         "freebuds_pro3" -> HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3
         "freebuds_pro4" -> HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO4
         "freebuds_pro5" -> HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5

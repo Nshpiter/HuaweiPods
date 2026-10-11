@@ -19,6 +19,12 @@ object HuaweiEqualizerController {
             onState(null)
             return
         }
+        if (HuaweiSharedControlClient.usesSharedConnection(context, route)) {
+            HuaweiSharedControlClient.request(context, device, route, HuaweiSharedControlPolicy.EQ_READ) {
+                onState(it?.let(HuaweiEqualizerCodec::parseState))
+            }
+            return
+        }
         HuaweiL2capAncController.requestRawPacketOnce(
             context = context,
             device = device,
@@ -27,6 +33,7 @@ object HuaweiEqualizerController {
             description = "equalizer-state-query route=$route",
             responseWindowMs = 1_500L,
             responseComplete = { HuaweiEqualizerCodec.parseState(it) != null },
+            onComplete = { if (!it) onState(null) },
             onResponse = { onState(HuaweiEqualizerCodec.parseState(it)) },
         )
     }
@@ -51,6 +58,13 @@ object HuaweiEqualizerController {
             onComplete(false)
             return
         }
+        if (HuaweiSharedControlClient.usesSharedConnection(context, route)) {
+            HuaweiSharedControlClient.request(
+                context, device, route, HuaweiSharedControlPolicy.EQ_CUSTOM,
+                name = presetName, gains = gains,
+            ) { onComplete(it != null) }
+            return
+        }
         HuaweiL2capAncController.sendRawPacketOnce(
             context = context,
             device = device,
@@ -71,6 +85,12 @@ object HuaweiEqualizerController {
         val packet = HuaweiEqualizerCodec.buildBuiltInPresetPacket(route, presetId)
         if (!isTarget(context, device, route) || packet == null) {
             onComplete(false)
+            return
+        }
+        if (HuaweiSharedControlClient.usesSharedConnection(context, route)) {
+            HuaweiSharedControlClient.request(
+                context, device, route, HuaweiSharedControlPolicy.EQ_PRESET, presetId = presetId,
+            ) { onComplete(it != null) }
             return
         }
         HuaweiL2capAncController.sendRawPacketOnce(
