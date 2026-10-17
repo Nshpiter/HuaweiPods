@@ -287,7 +287,9 @@ internal fun resolveMiLinkAncHostSpec(
         displayValueOrder = MiLinkAncValueOrder.NOISE_TRANSPARENCY_OFF,
     )
 } else {
-    spec
+    // 私有方法名随版本变化；同名的无参 void 方法也可能是初始化或隐藏动画。
+    // 仅凭存在 u() 不能把未知宿主当成 OS 2 的高度实现。
+    if (hasOriginalHeightMethod) spec else spec.copy(recomputeHeightWhenHidden = false)
 }
 
 internal data class MiLinkAudioEffectHostSpec(
@@ -904,6 +906,7 @@ object MiLinkServiceHook : HookContext() {
     private var pendingFreeClip2CustomEqualizerId: Int? = null
     private var currentHuaweiEqualizerSelectedId: Int? = null
     private var currentLowLatencyEnabled = false
+    private var lowLatencyCleanupGuardInstalled = false
     private var lowLatencyCardIcon: Drawable? = null
     private val ancPendingGate = MiLinkAncPendingGate()
     private val freeClip2AudioPendingGate = FreeClip2AudioPendingGate()
@@ -1110,6 +1113,7 @@ object MiLinkServiceHook : HookContext() {
         lastHeadsetDeviceInfo = null
         lastHeadsetServiceInfo = null
         lowLatencyCardIcon = null
+        lowLatencyCleanupGuardInstalled = false
         context = null
         currentAddress = null
         currentName = null
@@ -1577,6 +1581,27 @@ object MiLinkServiceHook : HookContext() {
             return
         }
         runCatching {
+            // HeadSetsDetail 退出时的停止响铃会异步转发到 AncBatteryController。
+            // 在转发前过滤清理调用，避免其被下层的“切换低时延”钩子当成用户点击。
+            val serviceInfoClass = findClass("com.miui.circulate.api.service.CirculateServiceInfo")
+            val cleanupMethod = findMethod(
+                "com.miui.circulate.api.protocol.headset.HeadsetServiceController",
+                "setFindRing",
+                serviceInfoClass,
+                Int::class.javaPrimitiveType!!,
+            )
+            check(CompletableFuture::class.java.isAssignableFrom(cleanupMethod.returnType))
+            hookBefore(cleanupMethod) {
+                if (!lowLatencyQuickCardEnabled() ||
+                    !isTargetCirculateHeadset(args[0]) ||
+                    !MiLinkLowLatencyQuickCardPolicy.isDetailCleanup(
+                        args[1] as? Int ?: -1,
+                        Thread.currentThread().stackTrace,
+                    )
+                ) return@hookBefore
+                result = CompletableFuture.completedFuture(100)
+                Log.i(TAG, "MiLink low-latency ignored detail-detach ring cleanup")
+            }
             hookBefore(
                 findMethod(
                     "com.miui.headset.runtime.AncBatteryController",
@@ -1598,13 +1623,17 @@ object MiLinkServiceHook : HookContext() {
                     currentLowLatencyEnabled,
                 )
                 currentLowLatencyEnabled = enabled
+                Log.i(TAG, "MiLink low-latency toggle enabled=$enabled hostState=${args[1]}")
                 sendHuaweiLowLatency(enabled)
                 notifyHeadsetPropertyChanged(instance, device, 10)
                 this.result = 100
             }
+            lowLatencyCleanupGuardInstalled = true
         }.onFailure {
-            Log.w(TAG, "hook AncBatteryController.setFindRing low-latency skipped", it)
+            lowLatencyCleanupGuardInstalled = false
+            Log.w(TAG, "MiLink low-latency quick card disabled: safe ring hooks unavailable", it)
         }
+        if (!lowLatencyCleanupGuardInstalled) return
 
         val synergyViewClass = listOf(
             "com.miui.circulate.world.sticker.ui.SynergyView",
@@ -1655,7 +1684,7 @@ object MiLinkServiceHook : HookContext() {
 
     private fun lowLatencyQuickCardEnabled(
         route: HuaweiDeviceRoute = currentHuaweiRoute(),
-    ): Boolean = MiLinkLowLatencyQuickCardPolicy.isAvailable(
+    ): Boolean = lowLatencyCleanupGuardInstalled && MiLinkLowLatencyQuickCardPolicy.isAvailable(
         route = route,
         configured = ConfigManager.milinkLowLatencyCardEnabled(),
         hostAdapterName = activeMiLinkAncHostSpec?.adapterName,
@@ -1665,7 +1694,7 @@ object MiLinkServiceHook : HookContext() {
         loadState()
         return MiLinkLowLatencyQuickCardPolicy.hostState(
             route = currentHuaweiRoute(),
-            configured = ConfigManager.milinkLowLatencyCardEnabled(),
+            configured = lowLatencyCleanupGuardInstalled && ConfigManager.milinkLowLatencyCardEnabled(),
             enabled = currentLowLatencyEnabled,
             hostAdapterName = activeMiLinkAncHostSpec?.adapterName,
         )
@@ -3229,8 +3258,9 @@ object MiLinkServiceHook : HookContext() {
             // legacy 的 B() 不会统计后来插入的音效 View。保留原 ANC 固定配额，ANC 按钮行仍由
             // configureAncCardViews() 隐藏，这样新增音效与音量区不会被父卡片裁掉。
             restoreHostAncSectionVisibility(detail, route)
+            if (!hostSpec.recomputeHeightWhenHidden) return
             postTracked(detail) {
-                runCatching { recomputeHostDetailHeight(detail) }
+                runCatching { recomputeHostDetailHeight(detail, hostSpec) }
                     .onFailure {
                         Log.w(TAG, "MiLink legacy FreeClip2 height reserve failed", it)
                     }
@@ -3241,7 +3271,7 @@ object MiLinkServiceHook : HookContext() {
             // View 若曾由可重算的旧模板复用，仍要恢复旧值；正常 OS4 路径不会进入此分支。
             if (restoreHostAncSectionVisibility(detail, route)) {
                 postTracked(detail) {
-                    runCatching { recomputeHostDetailHeight(detail) }
+                    runCatching { recomputeHostDetailHeight(detail, hostSpec) }
                         .onFailure {
                             Log.w(TAG, "MiLink host detail height restore failed route=$route", it)
                         }
@@ -3259,7 +3289,7 @@ object MiLinkServiceHook : HookContext() {
             if (!restoreHostAncSectionVisibility(detail, route)) return
         }
         postTracked(detail) {
-            runCatching { recomputeHostDetailHeight(detail) }
+            runCatching { recomputeHostDetailHeight(detail, hostSpec) }
                 .onFailure { Log.w(TAG, "MiLink host detail height recompute failed route=$route", it) }
         }
     }
@@ -3319,22 +3349,12 @@ object MiLinkServiceHook : HookContext() {
             .getOrElse { setObjectField(detail, "modeVisible", visible) }
     }
 
-    private fun recomputeHostDetailHeight(detail: View) {
-        val method = miLinkAncHostSpecs
-            .asSequence()
-            .flatMap { spec ->
-                if (spec.adapterName == "legacy") sequenceOf(spec.heightMethodName, "u")
-                else sequenceOf(spec.heightMethodName)
-            }
-            .mapNotNull { methodName ->
-                detail.javaClass.declaredMethods.firstOrNull { candidate ->
-                    candidate.name == methodName &&
-                        candidate.parameterTypes.isEmpty() &&
-                        candidate.returnType == Void.TYPE
-                }
-            }
-            .firstOrNull()
-            ?: throw NoSuchMethodException("MiLink headset height recompute method")
+    private fun recomputeHostDetailHeight(detail: View, hostSpec: MiLinkAncHostSpec) {
+        // 只能调用与该卡片一起验证过的方法，不能跨版本遍历 B/u/W 猜测高度接口。
+        val method = detail.javaClass.getDeclaredMethod(hostSpec.heightMethodName)
+        if (method.returnType != Void.TYPE) {
+            throw NoSuchMethodException("MiLink headset height method ${hostSpec.heightMethodName}")
+        }
         method.isAccessible = true
         method.invoke(detail)
     }

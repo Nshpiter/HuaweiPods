@@ -9,6 +9,37 @@ import org.junit.Test
 
 class HuaweiFreeClip2ControllerTest {
     @Test
+    fun `head motion supports none and independent shake action without rewriting the nod field`() {
+        assertPacket(
+            "5A0009002BB401010B0401014217",
+            HuaweiFreeClip2Controller.headMotionActionPacket(FreeClip2HeadMotionGesture.SHAKE, FreeClip2HeadMotionAction.ANSWER_CALL),
+        )
+        assertPacket("5A0009002BB401010B0401027274", HuaweiFreeClip2Controller.headMotionActionPacket(
+            FreeClip2HeadMotionGesture.SHAKE, FreeClip2HeadMotionAction.REJECT_CALL,
+        ))
+        assertPacket("5A0009002BB401010B030100D7A6", HuaweiFreeClip2Controller.headMotionActionPacket(
+            FreeClip2HeadMotionGesture.NOD, FreeClip2HeadMotionAction.NONE,
+        ))
+        val bothNone = frameWithCrc("5A000F002BB401010B020100030100040100")
+        assertEquals(FreeClip2HeadMotionState(false, FreeClip2HeadMotionAction.NONE, FreeClip2HeadMotionAction.NONE),
+            HuaweiFreeClip2Controller.parseHeadMotionState(bothNone))
+    }
+
+    @Test
+    fun `head motion rejects unknown missing duplicate or malformed fields`() {
+        listOf(
+            "5A000F002BB401010B02010103017F040102",
+            "5A000F002BB401010B02017F030101040102",
+            "5A000F002BB4010118020101030101040102",
+            "5A000F002BB401010B020101030101030102",
+            "5A000C002BB401010B020101030101",
+            "5A000F002BB401010B020101030201040102",
+        ).forEach { assertNull(HuaweiFreeClip2Controller.parseHeadMotionState(frameWithCrc(it))) }
+        assertNull(HuaweiFreeClip2Controller.parseNoisyVolumeState(frameWithCrc("5A0009002B88010100010101")))
+        assertNull(HuaweiFreeClip2Controller.parseNoisyVolumeState(frameWithCrc("5A0006002B88010102")))
+    }
+
+    @Test
     fun `boolean feature packets match the guided capture`() {
         assertPacket("5A0006002B10010100B977", FreeClip2BooleanFeature.WEAR_DETECTION.packet(false))
         assertPacket("5A0006002B10010101A956", FreeClip2BooleanFeature.WEAR_DETECTION.packet(true))
@@ -18,8 +49,8 @@ class HuaweiFreeClip2ControllerTest {
         assertPacket("5A0009002BB401010202010103C0", FreeClip2BooleanFeature.ADAPTIVE_VOLUME.packet(true))
         assertPacket("5A0009002BB401010B020100E096", FreeClip2BooleanFeature.HEAD_MOTION_CONTROL.packet(false))
         assertPacket("5A0009002BB401010B020101F0B7", FreeClip2BooleanFeature.HEAD_MOTION_CONTROL.packet(true))
-        assertPacket("5A0006002B870101002EC5", FreeClip2BooleanFeature.SOUND_QUALITY_PRIORITY.packet(false))
-        assertPacket("5A0006002B870101013EE4", FreeClip2BooleanFeature.SOUND_QUALITY_PRIORITY.packet(true))
+        assertPacket("5A0006002B870101002EC5", FreeClip2BooleanFeature.NOISY_VOLUME_BOOST.packet(false))
+        assertPacket("5A0006002B870101013EE4", FreeClip2BooleanFeature.NOISY_VOLUME_BOOST.packet(true))
         assertPacket("5A0006002B6C010100B430", FreeClip2BooleanFeature.LOW_LATENCY.packet(false))
         assertPacket("5A0006002B6C010101A411", FreeClip2BooleanFeature.LOW_LATENCY.packet(true))
         assertPacket("5A0006002B2E01010037C4", FreeClip2BooleanFeature.DUAL_DEVICE.packet(false))

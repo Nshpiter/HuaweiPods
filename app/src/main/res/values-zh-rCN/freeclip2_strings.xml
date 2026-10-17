@@ -5,6 +5,14 @@
     <string name="freeclip2_drop_reminder">掉落提醒</string>
     <string name="freeclip2_adaptive_volume">智感音量自适应</string>
     <string name="freeclip2_head_motion">头动控制</string>
+    <string name="freeclip2_head_nod">点头</string>
+    <string name="freeclip2_head_shake">摇头</string>
+    <string name="freeclip2_head_action_none">无</string>
+    <string name="freeclip2_head_action_answer">接听来电</string>
+    <string name="freeclip2_head_action_reject">拒接来电</string>
+    <string name="freeclip2_noisy_volume_boost">嘈杂环境增大媒体音量</string>
+    <string name="freeclip2_noisy_volume_hint">允许进一步增大媒体音量，会影响音质；此功能不宜长时间使用。</string>
+    <string name="freeclip2_settings_retry">正在读取耳机设置；若一直未显示，点击重试。</string>
     <string name="freeclip2_spatial_audio">空间音频</string>
     <string name="freeclip2_audio_settings">音效</string>
     <string name="freeclip2_spatial_mode">空间音频模式</string>
@@ -32,7 +40,6 @@
     <string name="freeclip2_custom_effect_default_name">我的音效 %1$d</string>
     <string name="freeclip2_custom_effect_edit_hint">选择后可修改名称与 10 段曲线</string>
     <string name="freeclip2_custom_effect_bridge_hint">最多保存 3 个；写入复用智慧音频官方通道，需先运行智慧音频。</string>
-    <string name="freeclip2_sound_quality_priority">声音质量优先</string>
     <string name="freeclip2_low_latency">低时延模式</string>
     <string name="freeclip2_dual_device">双设备连接</string>
     <string name="freeclip2_case_prompt_sound">充电盒提示音</string>

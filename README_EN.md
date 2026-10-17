@@ -18,7 +18,7 @@
 
 HuaweiPods is an Xposed module for Xiaomi HyperOS. It integrates supported Huawei audio devices with the system headset popup, Super Island, Fusion Device Center, and Bluetooth detail page.
 
-The source integrates the 18 models below in one APK. FreeBuds 6, HyperOS 2 compatibility, and the notification updates below are not included in the published 1.9.0 APK.
+Version 1.9.1 integrates the 19 models below, including FreeClip 2 Collector Edition, in one APK. This release adds FreeBuds 6, FreeClip 2 Collector Edition, and Android 14 / HyperOS 2 compatibility, alongside notification-name, persistent-island, and low-latency improvements.
 
 ## Supported models
 
@@ -37,7 +37,8 @@ The source integrates the 18 models below in one APK. FreeBuds 6, HyperOS 2 comp
 | HUAWEI FreeBuds 7 | Battery and official images, three ANC levels with readback, spatial audio, double/triple-tap, pinch and swipe settings, wear detection, eight sound effects, a 10-band EQ, high-quality audio, low latency, and selected smart settings; native Settings and fusion-center controls ([validation scope](docs/FREEBUDS7_ADAPTATION.md), Chinese) |
 | HUAWEI FreeBuds 7i | Battery, transparency/ANC/off readback, four ANC levels, double/triple-tap, long-press and swipe-volume gestures, wear detection, head-motion control, spatial audio, four sound presets, a 10-band custom EQ, high-quality audio, low-latency auto-apply, dual-device list management, and official color images |
 | HUAWEI FreeClip | Left/right/case battery; no traditional ANC |
-| HUAWEI FreeClip 2 | Battery, double/triple-tap and swipe gestures, spatial audio, four official sound presets, saved custom presets, low-latency auto-apply, and selected wearing/audio settings; no traditional ANC |
+| HUAWEI FreeClip 2 | Battery, double/triple-tap and swipe gestures, spatial audio, four official sound presets, saved custom presets, separate nod/shake call actions, noisy-environment volume boost, low-latency auto-apply, and selected wearing/audio settings; no traditional ANC |
+| HUAWEI FreeClip 2 Collector Edition | Separate product identity and official color images, sharing the integrated FreeClip 2 controls, with head-action and volume-boost readback; [protocol and validation scope](docs/FREECLIP2_COLLECTOR_ADAPTATION.md) (Chinese) |
 | HUAWEI FreeArc | Left/right/case battery, double/triple-tap, press-and-hold and swipe gestures, five official sound presets, a 10-band custom EQ, and official color images; no traditional ANC |
 | HUAWEI Eyewear (1st generation) | Left/right temple battery and system UI integration; no ANC |
 | HUAWEI Eyewear 2 | Left/right temple battery, double-tap/swipe gestures, and low-latency auto-apply; no ANC |
@@ -66,7 +67,7 @@ The table lists currently integrated capabilities. Unlisted official features sh
 ## Requirements
 
 - Xiaomi / Redmi device running HyperOS.
-- Android 14+ (Android 14 / HyperOS 2 compatibility is implemented in source and is not included in the published 1.9.0 APK).
+- Android 14+ (Android 14 / HyperOS 2 compatibility is available starting with 1.9.1).
 - LSPosed API version >= 102 (the protocol-capture Debug build uses API 101).
 - A paired device listed in the support table above.
 
@@ -88,6 +89,8 @@ The release build no longer needs to install, run, or hook HUAWEI AI Life Audio 
 The Fusion Device Center low-latency card is enabled only on verified legacy hosts and can be disabled in HuaweiPods settings; on HyperOS 4, use the module popup or detail page instead. Version 1.8.3 fixes a popup issue where a successful FreeBuds 6i low-latency write was not saved and the switch appeared off when reopened. Because the protocol has no reliable readback for this setting, the UI shows the last successful write that will be reapplied after reconnection rather than a live device-reported state. The effect on the earbuds still needs device testing.
 
 For model-specific retesting and protocol capture, join QQ group `1022359908`.
+
+Version 1.9.1 routes module low-latency writes through the Bluetooth host to avoid duplicate connections, prevents queued auto-enable operations from overriding manual changes, and filters unintended disable requests when leaving legacy Fusion details. If auto-apply was previously turned off by this issue, enable low latency once after updating. The Collector Edition reconnect fix still awaits device retesting; a successful write is not device-state confirmation.
 
 ## Development Notes
 

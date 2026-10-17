@@ -177,7 +177,7 @@ private val routeCapabilities = linkedMapOf(
     ),
     HuaweiDeviceRoute.HUAWEI_FREECLIP2 to HuaweiDeviceCapabilities(
         displayName = "HUAWEI FreeClip 2",
-        aliases = setOf("huaweifreeclip2", "freeclip2"),
+        aliases = setOf("huaweifreeclip2", "freeclip2", "huaweifreeclip2典藏版", "freeclip2典藏版"),
         supportsRfcommBattery = true,
         supportsBackgroundBatteryRefresh = true,
         supportsGestureConfiguration = true,

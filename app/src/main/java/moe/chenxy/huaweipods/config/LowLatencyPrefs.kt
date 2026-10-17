@@ -22,6 +22,7 @@ object LowLatencyPrefs {
             "low_latency_auto_v1_[0-9A-F]{12})$",
     )
     private val syncLock = Any()
+    private val hookDesired = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
 
     @Volatile
     private var hookPreferences: SharedPreferences? = null
@@ -49,14 +50,19 @@ object LowLatencyPrefs {
     fun isAutoApplyEnabled(address: String, route: HuaweiDeviceRoute): Boolean =
         desiredForHook(address, route) == true
 
-    fun desiredForHook(address: String, route: HuaweiDeviceRoute): Boolean? =
-        hookPreferences?.let { desiredOrNull(it, address, route) }
+    fun desiredForHook(address: String, route: HuaweiDeviceRoute): Boolean? {
+        val key = preferenceKey(address, route) ?: return null
+        return hookDesired[key] ?: hookPreferences?.let { desiredOrNull(it, address, route) }
+    }
 
     fun setDesiredFromHook(
         address: String,
         route: HuaweiDeviceRoute,
         enabled: Boolean,
     ): Boolean {
+        val key = preferenceKey(address, route) ?: return false
+        // 写出成功后立即记住本进程的策略；只读远程配置稍后由模块广播接收器持久化。
+        hookDesired[key] = enabled
         val prefs = hookPreferences ?: return false
         return synchronized(syncLock) {
             writeDesired(prefs, address, route, enabled)

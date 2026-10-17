@@ -99,4 +99,48 @@ class MiLinkLowLatencyQuickCardPolicyTest {
         assertTrue(MiLinkLowLatencyQuickCardPolicy.toggledEnabled(currentEnabled = false))
         assertFalse(MiLinkLowLatencyQuickCardPolicy.toggledEnabled(currentEnabled = true))
     }
+
+    @Test
+    fun `detail cleanup does not turn off low latency across repeated reconnects`() {
+        val cleanupStack = arrayOf(
+            frame("com.miui.circulate.api.protocol.headset.HeadsetServiceController", "setFindRing"),
+            frame("com.miui.circulateplus.world.headset.HeadSetsDetail", "onDetachedFromWindow"),
+            frame("android.view.View", "dispatchDetachedFromWindow"),
+        )
+        var enabled = true
+        repeat(3) {
+            if (!MiLinkLowLatencyQuickCardPolicy.isDetailCleanup(0, cleanupStack)) {
+                enabled = MiLinkLowLatencyQuickCardPolicy.toggledEnabled(enabled)
+            }
+            assertTrue("Leaving detail must preserve the next reconnect policy", enabled)
+        }
+    }
+
+    @Test
+    fun `explicit stop click remains usable even though it also sends zero`() {
+        val clickStack = arrayOf(
+            frame("com.miui.circulate.api.protocol.headset.HeadsetServiceController", "setFindRing"),
+            frame("com.miui.circulateplus.world.headset.d1", "c"),
+            frame("android.view.View", "performClick"),
+        )
+        assertFalse(MiLinkLowLatencyQuickCardPolicy.isDetailCleanup(0, clickStack))
+        assertFalse(MiLinkLowLatencyQuickCardPolicy.toggledEnabled(true))
+        assertFalse(MiLinkLowLatencyQuickCardPolicy.isDetailCleanup(1, clickStack))
+    }
+
+    @Test
+    fun `cleanup detection is limited to the exact detail lifecycle and stop command`() {
+        assertFalse(MiLinkLowLatencyQuickCardPolicy.isDetailCleanup(0, emptyArray()))
+        assertFalse(MiLinkLowLatencyQuickCardPolicy.isDetailCleanup(0, arrayOf(
+            frame("android.view.View", "onDetachedFromWindow"),
+        )))
+        assertFalse(MiLinkLowLatencyQuickCardPolicy.isDetailCleanup(0, arrayOf(
+            frame("com.miui.circulateplus.world.headset.HeadSetsDetail", "onAttachedToWindow"),
+        )))
+        assertFalse(MiLinkLowLatencyQuickCardPolicy.isDetailCleanup(1, arrayOf(
+            frame("com.miui.circulateplus.world.headset.HeadSetsDetail", "onDetachedFromWindow"),
+        )))
+    }
+
+    private fun frame(className: String, method: String) = StackTraceElement(className, method, null, -1)
 }

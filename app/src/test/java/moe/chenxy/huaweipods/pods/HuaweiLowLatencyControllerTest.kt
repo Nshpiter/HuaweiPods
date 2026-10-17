@@ -4,8 +4,21 @@ import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import moe.chenxy.huaweipods.BuildConfig
 
 class HuaweiLowLatencyControllerTest {
+    @Test
+    fun `app setters use Bluetooth host for every supported route without host recursion`() {
+        HuaweiDeviceRoute.entries.forEach { route ->
+            if (route.supportsLowLatencyControl) {
+                assertTrue(route.name, HuaweiLowLatencyController.usesSharedConnection(BuildConfig.APPLICATION_ID, route))
+            } else {
+                assertFalse(route.name, HuaweiLowLatencyController.usesSharedConnection(BuildConfig.APPLICATION_ID, route))
+            }
+            assertFalse(route.name, HuaweiLowLatencyController.usesSharedConnection("com.android.bluetooth", route))
+        }
+    }
+
     @Test
     fun `setter packets match every verified capture`() {
         assertArrayEquals(

@@ -160,6 +160,34 @@ class LowLatencyPrefsTest {
         }
     }
 
+    @Test
+    fun `manual off overrides stale remote auto on across reconnect reads`() {
+        val testAddress = "11:22:33:44:55:99"
+        val route = HuaweiDeviceRoute.HUAWEI_FREEBUDS_SE4_ANC
+        val readOnlyPrefs = Proxy.newProxyInstance(
+            SharedPreferences::class.java.classLoader,
+            arrayOf(SharedPreferences::class.java),
+        ) { _, method, _ ->
+            when (method.name) {
+                "edit" -> throw UnsupportedOperationException("Read only implementation")
+                "contains", "getBoolean" -> true
+                else -> null
+            }
+        } as SharedPreferences
+        LowLatencyPrefs.attachHookPreferences(readOnlyPrefs)
+        try {
+            assertTrue(LowLatencyPrefs.isAutoApplyEnabled(testAddress, route))
+            assertFalse(LowLatencyPrefs.setDesiredFromHook(testAddress, route, false))
+            assertFalse(LowLatencyPrefs.isAutoApplyEnabled(testAddress, route))
+            assertEquals(false, LowLatencyPrefs.desiredForHook(testAddress.lowercase(), route))
+            assertTrue(LowLatencyPrefs.isAutoApplyEnabled("11:22:33:44:55:88", route))
+            assertFalse(LowLatencyPrefs.setDesiredFromHook(testAddress, route, true))
+            assertTrue(LowLatencyPrefs.isAutoApplyEnabled(testAddress, route))
+        } finally {
+            LowLatencyPrefs.attachHookPreferences(inMemoryPreferences())
+        }
+    }
+
     private fun inMemoryPreferences(): SharedPreferences {
         val values = ConcurrentHashMap<String, Any>()
         return Proxy.newProxyInstance(

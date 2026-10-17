@@ -2,13 +2,14 @@ package moe.chenxy.huaweipods.pods
 
 import java.util.UUID
 
-/** 仅开放已验证的音效和防风噪操作，不允许 App 发送任意蓝牙指令。 */
+/** 仅开放已验证的控制操作，不允许 App 发送任意蓝牙指令。 */
 internal object HuaweiSharedControlPolicy {
     const val EQ_READ = "eq_read"
     const val EQ_PRESET = "eq_preset"
     const val EQ_CUSTOM = "eq_custom"
     const val WIND_READ = "wind_read"
     const val WIND_SET = "wind_set"
+    const val LOW_LATENCY_SET = "low_latency_set"
 
     fun supports(route: HuaweiDeviceRoute): Boolean =
         route == HuaweiDeviceRoute.HUAWEI_FREEBUDS6I ||

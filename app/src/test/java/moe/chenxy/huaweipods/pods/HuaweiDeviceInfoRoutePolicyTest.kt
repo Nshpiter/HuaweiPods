@@ -8,6 +8,18 @@ import org.junit.Test
 
 class HuaweiDeviceInfoRoutePolicyTest {
     @Test
+    fun `FreeClip 2 collector identity shares controls without replacing standard catalog identity`() {
+        val route = HuaweiDeviceRoute.HUAWEI_FREECLIP2
+        assertEquals(route, HuaweiDeviceInfoRoutePolicy.routeForModelId("000173"))
+        assertTrue(HuaweiDeviceInfoRoutePolicy.isCompatible(route, "000173"))
+        assertTrue(HuaweiDeviceInfoRoutePolicy.isCompatible(route, "000167"))
+        assertEquals("000167", HuaweiDeviceInfoRoutePolicy.modelIdForRoute(route))
+        assertFalse(HuaweiDeviceInfoRoutePolicy.isCompatible(HuaweiDeviceRoute.HUAWEI_FREECLIP, "000173"))
+        assertFalse(HuaweiDeviceInfoRoutePolicy.isCompatible(HuaweiDeviceRoute.HUAWEI_FREEBUDS6I, "000173"))
+        assertFalse(HuaweiDeviceInfoRoutePolicy.isCompatible(route, "000999"))
+    }
+
+    @Test
     fun `verified model ids resolve to their authoritative routes`() {
         val expected = mapOf(
             "000141" to HuaweiDeviceRoute.HUAWEI_FREEBUDS5,

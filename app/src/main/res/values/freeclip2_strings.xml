@@ -5,6 +5,14 @@
     <string name="freeclip2_drop_reminder">Drop reminder</string>
     <string name="freeclip2_adaptive_volume">Adaptive volume</string>
     <string name="freeclip2_head_motion">Head motion control</string>
+    <string name="freeclip2_head_nod">Nod</string>
+    <string name="freeclip2_head_shake">Shake</string>
+    <string name="freeclip2_head_action_none">None</string>
+    <string name="freeclip2_head_action_answer">Answer call</string>
+    <string name="freeclip2_head_action_reject">Reject call</string>
+    <string name="freeclip2_noisy_volume_boost">Increase media volume in noisy environments</string>
+    <string name="freeclip2_noisy_volume_hint">Allows higher media volume at the cost of sound quality. Avoid prolonged use.</string>
+    <string name="freeclip2_settings_retry">Reading device settings. Tap to retry if they do not appear.</string>
     <string name="freeclip2_spatial_audio">Spatial audio</string>
     <string name="freeclip2_audio_settings">Sound effect</string>
     <string name="freeclip2_spatial_mode">Spatial audio mode</string>
@@ -32,7 +40,6 @@
     <string name="freeclip2_custom_effect_default_name">My effect %1$d</string>
     <string name="freeclip2_custom_effect_edit_hint">Select to edit its name and 10-band curve</string>
     <string name="freeclip2_custom_effect_bridge_hint">Up to three effects. Writing uses Smart Audio’s official channel, so Smart Audio must be running.</string>
-    <string name="freeclip2_sound_quality_priority">Prioritize sound quality</string>
     <string name="freeclip2_low_latency">Low latency mode</string>
     <string name="freeclip2_dual_device">Dual-device connection</string>
     <string name="freeclip2_case_prompt_sound">Case prompt sound</string>

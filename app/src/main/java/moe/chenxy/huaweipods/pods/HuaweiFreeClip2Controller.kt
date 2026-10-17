@@ -12,6 +12,107 @@ import android.content.Context
 object HuaweiFreeClip2Controller {
     private val SPATIAL_AUDIO_STATE_QUERY = hex("5A000A002BB4010118020003009B3F")
     private val SOUND_EFFECT_STATE_QUERY = hex("5A0005002B4A02008C46")
+    private val HEAD_MOTION_QUERY = hex("5A0006002BB401010B289B")
+    private val NOISY_VOLUME_QUERY = hex("5A0005002B8801009182")
+
+    fun requestHeadMotionState(context: Context, device: BluetoothDevice, onState: (FreeClip2HeadMotionState?) -> Unit) =
+        requestSetting(context, device, HEAD_MOTION_QUERY, ::parseHeadMotionState, onState)
+
+    fun requestNoisyVolumeState(context: Context, device: BluetoothDevice, onState: (Boolean?) -> Unit) =
+        requestSetting(context, device, NOISY_VOLUME_QUERY, ::parseNoisyVolumeState, onState)
+
+    fun setHeadMotionEnabled(
+        context: Context, device: BluetoothDevice, enabled: Boolean,
+        onState: (FreeClip2HeadMotionState?) -> Unit, onComplete: (Boolean) -> Unit,
+    ) = writeSetting(
+        context, device, FreeClip2BooleanFeature.HEAD_MOTION_CONTROL.packet(enabled), HEAD_MOTION_QUERY,
+        ::parseHeadMotionState, { it.enabled == enabled }, onState, onComplete,
+    )
+
+    fun setHeadMotionAction(
+        context: Context, device: BluetoothDevice, gesture: FreeClip2HeadMotionGesture,
+        action: FreeClip2HeadMotionAction, onState: (FreeClip2HeadMotionState?) -> Unit,
+        onComplete: (Boolean) -> Unit,
+    ) = writeSetting(
+        context, device, headMotionActionPacket(gesture, action), HEAD_MOTION_QUERY,
+        ::parseHeadMotionState, { it.action(gesture) == action }, onState, onComplete,
+    )
+
+    fun setNoisyVolumeEnabled(
+        context: Context, device: BluetoothDevice, enabled: Boolean,
+        onState: (Boolean?) -> Unit, onComplete: (Boolean) -> Unit,
+    ) = writeSetting(
+        context, device, FreeClip2BooleanFeature.NOISY_VOLUME_BOOST.packet(enabled), NOISY_VOLUME_QUERY,
+        ::parseNoisyVolumeState, { it == enabled }, onState, onComplete,
+    )
+
+    /** 官方 ZAB1/ZAB2 配置：动作 0=无、1=接听、2=拒接；TLV 03=点头、04=摇头。 */
+    internal fun headMotionActionPacket(gesture: FreeClip2HeadMotionGesture, action: FreeClip2HeadMotionAction): ByteArray {
+        val bytes = byteArrayOf(0x5A, 0, 9, 0, 0x2B, 0xB4.toByte(), 1, 1, 0x0B,
+            gesture.field.toByte(), 1, action.protocolValue.toByte())
+        return bytes.withCrc16Xmodem()
+    }
+
+    internal fun headMotionQueryPacket(): ByteArray = HEAD_MOTION_QUERY.copyOf()
+    internal fun noisyVolumeQueryPacket(): ByteArray = NOISY_VOLUME_QUERY.copyOf()
+
+    internal fun parseHeadMotionState(stream: ByteArray): FreeClip2HeadMotionState? {
+        var latest: FreeClip2HeadMotionState? = null
+        frames(stream).forEach { frame ->
+            if (frame.u8OrNull(4) != 0x2B || frame.u8OrNull(5) != 0xB4) return@forEach
+            val fields = frame.settingFields() ?: return@forEach
+            if (fields[1] != 0x0B) return@forEach
+            val enabled = fields[2]?.asBoolean() ?: return@forEach
+            val nod = FreeClip2HeadMotionAction.fromProtocolValue(fields[3]) ?: return@forEach
+            val shake = FreeClip2HeadMotionAction.fromProtocolValue(fields[4]) ?: return@forEach
+            latest = FreeClip2HeadMotionState(enabled, nod, shake)
+        }
+        return latest
+    }
+
+    internal fun parseNoisyVolumeState(stream: ByteArray): Boolean? {
+        var latest: Boolean? = null
+        frames(stream).forEach { frame ->
+            if (frame.u8OrNull(4) != 0x2B || frame.u8OrNull(5) != 0x88) return@forEach
+            val fields = frame.settingFields() ?: return@forEach
+            fields[1]?.asBoolean()?.let { latest = it }
+        }
+        return latest
+    }
+
+    private fun <T : Any> requestSetting(
+        context: Context, device: BluetoothDevice, packet: ByteArray,
+        parser: (ByteArray) -> T?, onState: (T?) -> Unit,
+    ) {
+        var delivered = false
+        fun deliver(state: T?) {
+            if (!delivered) {
+                delivered = true
+                onState(state)
+            }
+        }
+        HuaweiL2capAncController.requestRawPacketOnce(
+            context, device, HuaweiDeviceRoute.HUAWEI_FREECLIP2, packet.copyOf(),
+            description = "freeclip2 device-setting", responseWindowMs = 1_500L,
+            responseComplete = { parser(it) != null },
+            onComplete = { if (!it) deliver(null) }, onResponse = { deliver(parser(it)) },
+        )
+    }
+
+    private fun <T : Any> writeSetting(
+        context: Context, device: BluetoothDevice, packet: ByteArray, query: ByteArray,
+        parser: (ByteArray) -> T?, matches: (T) -> Boolean,
+        onState: (T?) -> Unit, onComplete: (Boolean) -> Unit,
+    ) {
+        fun finish(state: T?) {
+            onState(state)
+            onComplete(state != null && matches(state))
+        }
+        requestSetting(context, device, packet + query, parser) { state ->
+            if (state != null && matches(state)) finish(state)
+            else requestSetting(context, device, query, parser, ::finish)
+        }
+    }
 
     fun setBooleanFeature(
         context: Context,
@@ -267,8 +368,8 @@ enum class FreeClip2BooleanFeature(
         hex("5A0009002BB401010B020100E096"),
         hex("5A0009002BB401010B020101F0B7"),
     ),
-    SOUND_QUALITY_PRIORITY(
-        "sound_quality_priority",
+    NOISY_VOLUME_BOOST(
+        "noisy_volume_boost",
         hex("5A0006002B870101002EC5"),
         hex("5A0006002B870101013EE4"),
     ),
@@ -290,6 +391,25 @@ enum class FreeClip2BooleanFeature(
 
     fun packet(enabled: Boolean): ByteArray =
         (if (enabled) enabledPacket else disabledPacket).copyOf()
+}
+
+enum class FreeClip2HeadMotionGesture(val field: Int) { NOD(3), SHAKE(4) }
+
+enum class FreeClip2HeadMotionAction(val protocolValue: Int) {
+    NONE(0), ANSWER_CALL(1), REJECT_CALL(2);
+
+    companion object {
+        fun fromProtocolValue(value: Int?): FreeClip2HeadMotionAction? = entries.firstOrNull { it.protocolValue == value }
+    }
+}
+
+data class FreeClip2HeadMotionState(
+    val enabled: Boolean,
+    val nod: FreeClip2HeadMotionAction,
+    val shake: FreeClip2HeadMotionAction,
+) {
+    fun action(gesture: FreeClip2HeadMotionGesture): FreeClip2HeadMotionAction =
+        if (gesture == FreeClip2HeadMotionGesture.NOD) nod else shake
 }
 
 /**
@@ -412,8 +532,18 @@ private fun frames(stream: ByteArray): Sequence<ByteArray> = sequence {
 /** Huawei RFCOMM frames append CRC16/XMODEM as high byte followed by low byte. */
 private fun ByteArray.hasValidCrc16Xmodem(): Boolean {
     if (size < HEADER_SIZE + CHECKSUM_SIZE) return false
+    val crc = copyOf(size - CHECKSUM_SIZE).crc16Xmodem()
+    return u8(size - 2) == (crc shr 8) && u8(size - 1) == (crc and 0xFF)
+}
+
+private fun ByteArray.withCrc16Xmodem(): ByteArray {
+    val crc = crc16Xmodem()
+    return this + byteArrayOf((crc shr 8).toByte(), crc.toByte())
+}
+
+private fun ByteArray.crc16Xmodem(): Int {
     var crc = 0
-    for (index in 0 until size - CHECKSUM_SIZE) {
+    for (index in indices) {
         crc = crc xor (u8(index) shl 8)
         repeat(8) {
             crc = if ((crc and 0x8000) != 0) {
@@ -424,8 +554,23 @@ private fun ByteArray.hasValidCrc16Xmodem(): Boolean {
             crc = crc and 0xFFFF
         }
     }
-    return u8(size - 2) == (crc shr 8) && u8(size - 1) == (crc and 0xFF)
+    return crc
 }
+
+/** Single-byte setting fields; reject malformed or duplicate TLVs, including ACKs. */
+private fun ByteArray.settingFields(): Map<Int, Int>? {
+    val fields = mutableMapOf<Int, Int>()
+    val end = size - CHECKSUM_SIZE
+    var offset = 6
+    while (offset < end) {
+        if (offset + 3 > end || u8(offset + 1) != 1) return null
+        if (fields.put(u8(offset), u8(offset + 2)) != null) return null
+        offset += 3
+    }
+    return fields
+}
+
+private fun Int.asBoolean(): Boolean? = when (this) { 0 -> false; 1 -> true; else -> null }
 
 private fun ByteArray.indexOfSequence(needle: ByteArray, startIndex: Int): Int {
     if (needle.isEmpty()) return startIndex.coerceIn(0, size)

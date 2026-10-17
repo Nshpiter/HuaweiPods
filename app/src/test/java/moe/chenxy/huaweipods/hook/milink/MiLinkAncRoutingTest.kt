@@ -29,10 +29,26 @@ class MiLinkAncRoutingTest {
         assertEquals(2, huaweiAncStatusForMiLink(HuaweiDeviceRoute.HUAWEI_FREEBUDS6I, 1))
         assertEquals(3, huaweiAncStatusForMiLink(HuaweiDeviceRoute.HUAWEI_FREEBUDS6I, 2))
         assertEquals(legacy, resolveMiLinkAncHostSpec(legacy, true, true, true))
-        assertEquals(legacy, resolveMiLinkAncHostSpec(legacy, false, true, false))
+        val unknown = resolveMiLinkAncHostSpec(legacy, false, true, false)
+        assertEquals("B", unknown.heightMethodName)
+        assertFalse(unknown.recomputeHeightWhenHidden)
         val os4 = miLinkAncHostSpecs.first { it.adapterName == "hyperos4-v18" }
         assertFalse(os4.usesLegacyLayout)
         assertEquals(os4, resolveMiLinkAncHostSpec(os4, false, true, true))
+    }
+
+    @Test
+    fun `unrecognized host height methods never enable guessed animation calls`() {
+        val legacy = miLinkAncHostSpecs.first { it.adapterName == "legacy" }
+        listOf(false to false, true to false, false to true).forEach { (hasU, hasX) ->
+            val unknown = resolveMiLinkAncHostSpec(legacy, false, hasU, hasX)
+            assertEquals("B", unknown.heightMethodName)
+            assertFalse(unknown.recomputeHeightWhenHidden)
+            assertTrue(shouldReserveLegacyMiLinkAncHeight(HuaweiDeviceRoute.HUAWEI_FREECLIP2, unknown))
+        }
+        // 真正支持的旧版与 OS 2 仍分别使用验证过的 B()、u()。
+        assertEquals(legacy, resolveMiLinkAncHostSpec(legacy, true, false, false))
+        assertTrue(resolveMiLinkAncHostSpec(legacy, false, true, true).recomputeHeightWhenHidden)
     }
 
     @Test

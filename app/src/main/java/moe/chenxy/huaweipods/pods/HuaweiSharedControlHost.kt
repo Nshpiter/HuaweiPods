@@ -17,12 +17,12 @@ internal object HuaweiSharedControlHost {
         device: BluetoothDevice,
         route: HuaweiDeviceRoute,
         intent: Intent,
+        writeLowLatency: (Boolean, (Boolean) -> Unit) -> Unit,
         stillCurrent: () -> Boolean,
     ) {
         val nonce = intent.getStringExtra("nonce")
         if (!HuaweiSharedControlPolicy.validNonce(nonce)) return
         val operation = intent.getStringExtra("operation").orEmpty()
-        val query = HuaweiSharedControlPolicy.query(route, operation) ?: return
         val presetId = intent.getIntExtra("preset_id", -1)
         val enabled = intent.getBooleanExtra("enabled", false)
         val name = intent.getStringExtra("name").orEmpty()
@@ -39,6 +39,17 @@ internal object HuaweiSharedControlHost {
                 addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
             })
         }
+        if (operation == HuaweiSharedControlPolicy.LOW_LATENCY_SET) {
+            if (!route.supportsLowLatencyControl || !intent.hasExtra("enabled") || !stillCurrent()) {
+                reply(null)
+            } else {
+                writeLowLatency(enabled) { success ->
+                    reply(if (success) byteArrayOf(1) else null)
+                }
+            }
+            return
+        }
+        val query = HuaweiSharedControlPolicy.query(route, operation) ?: return reply(null)
         fun readState() {
             if (!stillCurrent()) {
                 reply(null)

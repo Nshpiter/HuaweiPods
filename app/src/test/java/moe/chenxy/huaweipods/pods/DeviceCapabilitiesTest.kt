@@ -23,6 +23,8 @@ class DeviceCapabilitiesTest {
             "HUAWEI FreeBuds 7i" to HuaweiDeviceRoute.HUAWEI_FREEBUDS7I,
             "FreeClip" to HuaweiDeviceRoute.HUAWEI_FREECLIP,
             "HUAWEI FreeClip 2" to HuaweiDeviceRoute.HUAWEI_FREECLIP2,
+            "HUAWEI FreeClip 2 典藏版" to HuaweiDeviceRoute.HUAWEI_FREECLIP2,
+            "FreeClip 2 典藏版" to HuaweiDeviceRoute.HUAWEI_FREECLIP2,
             "HUAWEI FreeArc" to HuaweiDeviceRoute.HUAWEI_FREEARC,
             "HUAWEI Eyewear" to HuaweiDeviceRoute.HUAWEI_EYEWEAR,
             "Eyewear 2" to HuaweiDeviceRoute.HUAWEI_EYEWEAR2,
@@ -38,6 +40,7 @@ class DeviceCapabilitiesTest {
     fun `near matches and unrelated bluetooth devices remain unsupported`() {
         listOf(
             "HUAWEI FreeBuds Pro 5i",
+            "HUAWEI FreeClip 2 Pro",
             "HUAWEI Eyewear 2 Pro",
             "My custom freebuds3 headset",
             "OPPO Enco X3",
