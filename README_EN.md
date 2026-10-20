@@ -1,6 +1,6 @@
 # HuaweiPods ColorOS
 
-The ColorOS distribution of Nshpiter/HuaweiPods, currently **1.9.1-coloros.1-rc1**.
+The ColorOS distribution of Nshpiter/HuaweiPods, currently **1.9.1-coloros.1-rc2**.
 
 Built on HuaweiPods 1.9.1 (`1f013d2`), with ColorOS integration, original FreeClip controls, and lifecycle recovery ported from [Artifical0/HuaweiPods-ColorOS](https://github.com/Artifical0/HuaweiPods-ColorOS) (`061fad7`). FreeBuds 6, FreeClip 2 Collector Edition, shared control connections, and manual low-latency priority are retained.
 

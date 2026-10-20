@@ -22,7 +22,9 @@
 - 更新读取本仓库发行列表，筛选 ColorOS 标签和预发布渠道，不使用通用 Latest 回退。
 - ColorOS CI 只监听本分支和 ColorOS 标签，不将任何 ColorOS Release 标为 Latest。
 - 本地 Release 不签名；Debug 只作开发测试；正式签名由本仓库 CI 提供。
-- 未创建标签、未上传 APK、未发布 Release。
+- 初次本地交付时未创建标签、未上传 APK、未发布 Release。
+
+后续试用发布使用 `1.9.1-coloros.1-rc2`（versionCode 23）。rc1 的 CI 在 SDK 安装阶段请求已下架的 `tools` 包而失败；rc2 显式安装 `platform-tools`，仅调整 CI 与版本信息，保留业务实现及审查发现的已知问题。原 rc1 标签保留，避免改写已推送的标签。
 
 ## 验证范围
 
