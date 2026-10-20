@@ -20,6 +20,8 @@ jobs:
       github.event_name != 'workflow_run' ||
       (github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch != 'coloros' &&
+      !contains(github.event.workflow_run.head_branch, '-coloros.') &&
       github.event.workflow_run.head_repository.full_name == github.repository)
     runs-on: ubuntu-latest
     steps:
@@ -38,7 +40,18 @@ jobs:
           set -euo pipefail
           VERSION_NAME=$(grep -oP 'versionName\s*=\s*"\K[^"]+' app/build.gradle.kts)
           VERSION_CODE=$(grep -oP 'versionCode\s*=\s*\K[0-9]+' app/build.gradle.kts)
+          APPLICATION_ID=$(grep -oP 'applicationId\s*=\s*"\K[^"]+' app/build.gradle.kts)
           TAG=${INPUT_TAG:-"${VERSION_CODE}-${VERSION_NAME}"}
+
+          # This module entry serves stable HyperOS releases only. Both automatic
+          # builds and manual dispatches must pass the same channel checks.
+          if [ "$APPLICATION_ID" != "moe.chenxy.huaweipods" ] ||
+             [[ ! "$VERSION_NAME" =~ ^[0-9]+(\.[0-9]+)+$ ]] ||
+             [ "$TAG" != "${VERSION_CODE}-${VERSION_NAME}" ]; then
+            echo "Not a stable HyperOS release; skipping LSPosed sync."
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
 
           if [ "$GITHUB_EVENT_NAME" = "workflow_run" ] && [ "$WORKFLOW_HEAD_BRANCH" != "$TAG" ]; then
             echo "Build came from $WORKFLOW_HEAD_BRANCH, not release tag $TAG; skipping sync."
@@ -46,8 +59,16 @@ jobs:
             exit 0
           fi
 
-          if ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+          if ! SOURCE_TAG=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" \
+            --json tagName,isDraft,isPrerelease \
+            --jq 'select(.isDraft == false and .isPrerelease == false) | .tagName'); then
             echo "No published source release found for $TAG; skipping sync."
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ "$SOURCE_TAG" != "$TAG" ]; then
+            echo "Source release is a draft or prerelease; skipping LSPosed sync."
             echo "found=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -55,6 +76,7 @@ jobs:
           echo "found=true" >> "$GITHUB_OUTPUT"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "version_name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
+          echo "version_code=$VERSION_CODE" >> "$GITHUB_OUTPUT"
 
       - name: Download source release
         if: steps.release.outputs.found == 'true'
@@ -65,6 +87,39 @@ jobs:
           mkdir release
           gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern '*.apk' --dir release
           gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body --jq .body > release-notes.md
+
+      - name: Setup APK inspection tools
+        if: steps.release.outputs.found == 'true'
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools build-tools;36.0.0'
+          log-accepted-android-sdk-licenses: false
+
+      - name: Verify APK identity before publishing
+        if: steps.release.outputs.found == 'true'
+        env:
+          EXPECTED_VERSION_NAME: ${{ steps.release.outputs.version_name }}
+          EXPECTED_VERSION_CODE: ${{ steps.release.outputs.version_code }}
+        run: |
+          python3 - <<'PY'
+          import os, pathlib, re, subprocess
+          apks = list(pathlib.Path('release').glob('*.apk'))
+          if not apks:
+              raise SystemExit('No APK to publish')
+          expected = {
+              'name': 'moe.chenxy.huaweipods',
+              'versionCode': os.environ['EXPECTED_VERSION_CODE'],
+              'versionName': os.environ['EXPECTED_VERSION_NAME'],
+          }
+          aapt2 = os.path.join(os.environ['ANDROID_HOME'], 'build-tools/36.0.0/aapt2')
+          for apk in apks:
+              badging = subprocess.check_output([aapt2, 'dump', 'badging', str(apk)], text=True)
+              package_line = next(line for line in badging.splitlines() if line.startswith('package: '))
+              actual = dict(re.findall(r"(\w+)='([^']*)'", package_line))
+              if any(actual.get(key) != value for key, value in expected.items()):
+                  raise SystemExit(f'APK identity does not match the HyperOS release: {apk.name}')
+              print(f'Verified {apk.name}: {expected}')
+          PY
 
       - name: Publish LSPosed release
         if: steps.release.outputs.found == 'true'

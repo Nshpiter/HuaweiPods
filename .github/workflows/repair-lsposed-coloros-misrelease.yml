@@ -1,0 +1,61 @@
+name: Repair ColorOS misrelease in LSPosed
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  repair:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout published HyperOS version
+        uses: actions/checkout@v4
+        with:
+          ref: '21-1.9.1'
+
+      - name: Withdraw the wrong module release and restore HyperOS metadata
+        env:
+          GH_TOKEN: ${{ secrets.TARGET_REPO_TOKEN }}
+          TARGET_REPOSITORY: Xposed-Modules-Repo/moe.chenxy.huaweipods
+        run: |
+          set -euo pipefail
+          # One-time repair, restricted to the two releases involved in this incident.
+          gh api "repos/$TARGET_REPOSITORY/releases/418194986" > wrong-release.json
+          gh api "repos/$TARGET_REPOSITORY/releases/tags/21-1.9.1" > stable-release.json
+          python3 - <<'PY'
+          import json
+          wrong = json.load(open('wrong-release.json'))
+          stable = json.load(open('stable-release.json'))
+          assert wrong['tag_name'] == '23-1.9.1-coloros.1-rc2'
+          assert stable['tag_name'] == '21-1.9.1'
+          assert not stable['draft'] and not stable['prerelease']
+          assert [a['name'] for a in stable['assets']] == ['HuaweiPods-1.9.1-release.apk']
+          PY
+
+          # Preserve the mistaken upload as a private draft instead of deleting it.
+          gh release edit '23-1.9.1-coloros.1-rc2' --repo "$TARGET_REPOSITORY" --draft --latest=false
+          gh release edit '21-1.9.1' --repo "$TARGET_REPOSITORY" --latest
+
+          gh auth setup-git
+          gh repo clone "$TARGET_REPOSITORY" target-repository -- --depth=1
+          cp README.md README_EN.md SCOPE target-repository/
+          printf '%s\n' '21-1.9.1' > target-repository/VERSION
+          git -C target-repository config user.name 'github-actions[bot]'
+          git -C target-repository config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git -C target-repository add README.md README_EN.md SCOPE VERSION
+          if ! git -C target-repository diff --cached --quiet; then
+            git -C target-repository commit -m 'fix: restore HyperOS module metadata after ColorOS misrelease'
+            git -C target-repository push origin HEAD:main
+          fi
+
+          gh api "repos/$TARGET_REPOSITORY/releases/418194986" --jq '.draft' > withdrawn.txt
+          test "$(cat withdrawn.txt)" = 'true'
+          test "$(gh api "repos/$TARGET_REPOSITORY/releases/latest" --jq .tag_name)" = '21-1.9.1'
+          for file in README.md README_EN.md SCOPE; do
+            cmp "$file" "target-repository/$file"
+          done
+          test "$(cat target-repository/VERSION)" = '21-1.9.1'
+          echo 'Wrong release withdrawn; Latest and module metadata restored to HyperOS 1.9.1.'
