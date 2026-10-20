@@ -63,6 +63,8 @@ jobs:
             echo "This workflow only publishes ColorOS versions." >&2
             exit 1
           fi
+          # Keep the channel in internal versions/tags; show ColorOS only once in public names.
+          DISPLAY_VERSION=$(printf '%s' "$VERSION_NAME" | sed -E 's/-coloros\.[0-9]+//')
 
           if [[ "$GITHUB_REF" == refs/tags/* ]]; then
             EXPECTED_TAG="${VERSION_CODE}-${VERSION_NAME}"
@@ -79,7 +81,7 @@ jobs:
           BUILD_TOOLS=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)
 
           if [ -n "$SIGNING_KEY" ]; then
-            OUT_NAME="HuaweiPods-ColorOS-${VERSION_NAME}-release.apk"
+            OUT_NAME="HuaweiPods-ColorOS-${DISPLAY_VERSION}.apk"
             umask 077
             trap 'rm -f /tmp/huaweipods-release.jks' EXIT
             echo "$SIGNING_KEY" | base64 -d > /tmp/huaweipods-release.jks
@@ -93,7 +95,7 @@ jobs:
             "${BUILD_TOOLS}apksigner" verify --verbose "./$OUT_NAME"
             echo "signed=true" >> "$GITHUB_OUTPUT"
           else
-            OUT_NAME="HuaweiPods-ColorOS-${VERSION_NAME}-unsigned.apk"
+            OUT_NAME="HuaweiPods-ColorOS-${DISPLAY_VERSION}-unsigned.apk"
             cp "$UNSIGNED_APK" "./$OUT_NAME"
             echo "signed=false" >> "$GITHUB_OUTPUT"
           fi
@@ -104,6 +106,7 @@ jobs:
           fi
           echo "apk=$OUT_NAME" >> "$GITHUB_OUTPUT"
           echo "version_name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
+          echo "display_version=$DISPLAY_VERSION" >> "$GITHUB_OUTPUT"
           echo "version_code=$VERSION_CODE" >> "$GITHUB_OUTPUT"
           echo "release_notes=$RELEASE_NOTES" >> "$GITHUB_OUTPUT"
 
@@ -121,7 +124,7 @@ jobs:
         with:
           token: ${{ github.token }}
           artifacts: "./${{ steps.sign.outputs.apk }}"
-          name: ${{ steps.sign.outputs.version_name }}
+          name: HuaweiPods ColorOS ${{ steps.sign.outputs.display_version }}
           bodyFile: ${{ steps.sign.outputs.release_notes }}
           # ColorOS uses its own channel; repository Latest remains the HyperOS release.
           prerelease: ${{ contains(github.ref_name, '-rc') || contains(github.ref_name, '-beta') || contains(github.ref_name, '-alpha') }}

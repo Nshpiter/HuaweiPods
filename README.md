@@ -1,10 +1,10 @@
 # HuaweiPods ColorOS
 
-Nshpiter/HuaweiPods 的 ColorOS 发行分支，当前开发版本 **1.9.1-coloros.1-rc2**。
+Nshpiter/HuaweiPods 的 ColorOS 发行分支，当前测试版本 **1.9.1-rc2**。
 
 以 HuaweiPods 1.9.1 为协议底座，移植 [Artifical0/HuaweiPods-ColorOS](https://github.com/Artifical0/HuaweiPods-ColorOS) 的 ColorOS 接入、第一代 FreeClip 控制和后台恢复逻辑。保留 FreeBuds 6、FreeClip 2 典藏版、共享控制通道及手动低时延优先策略。
 
-本版本尚未发布；本轮移植需要在 ColorOS 真机完成验证，不能将单元测试或固件静态分析视为实机通过。
+已发布 [ColorOS 1.9.1-rc2 预发布版](https://github.com/Nshpiter/HuaweiPods/releases/tag/23-1.9.1-coloros.1-rc2)，[下载 APK](https://github.com/Nshpiter/HuaweiPods/releases/download/23-1.9.1-coloros.1-rc2/HuaweiPods-ColorOS-1.9.1-rc2.apk)。本轮移植需要在 ColorOS 真机完成验证，不能将单元测试或固件静态分析视为实机通过。
 
 ## 安装与系统集成
 
@@ -67,7 +67,8 @@ Nshpiter/HuaweiPods 的 ColorOS 发行分支，当前开发版本 **1.9.1-coloro
 
 ## 发布与更新
 
-- 版本为 `<上游版本>-coloros.<修订号>[-rcN]`；Git 标签为 `<versionCode>-<versionName>`。
+- Release 标题为 `HuaweiPods ColorOS <上游版本>[-rcN]`，签名 APK 为 `HuaweiPods-ColorOS-<上游版本>[-rcN].apk`，例如 `HuaweiPods-ColorOS-1.9.1-rc2.apk`。
+- 应用内部版本保留 `<上游版本>-coloros.<修订号>[-rcN]`（当前为 `1.9.1-coloros.1-rc2`）；Git 标签保留 `<versionCode>-<versionName>`，用于更新渠道识别。
 - 当前试用版标签为 `23-1.9.1-coloros.1-rc2`，按预发布渠道发布。
 - ColorOS 工作流只监听 `coloros` 分支与 ColorOS 标签，所有 ColorOS Release 均不设置为仓库 Latest。
 - 应用从本仓库发行列表筛选 ColorOS 版本；稳定版忽略预发布，RC／Beta 版可检查同渠道预发布。不会退回仓库通用 Latest。

@@ -1,10 +1,10 @@
 # HuaweiPods ColorOS
 
-The ColorOS distribution of Nshpiter/HuaweiPods, currently **1.9.1-coloros.1-rc2**.
+The ColorOS distribution of Nshpiter/HuaweiPods, currently **1.9.1-rc2**.
 
 Built on HuaweiPods 1.9.1 (`1f013d2`), with ColorOS integration, original FreeClip controls, and lifecycle recovery ported from [Artifical0/HuaweiPods-ColorOS](https://github.com/Artifical0/HuaweiPods-ColorOS) (`061fad7`). FreeBuds 6, FreeClip 2 Collector Edition, shared control connections, and manual low-latency priority are retained.
 
-This is an unpublished development candidate. The current port requires real-device verification; unit tests and firmware analysis do not establish hardware compatibility.
+The [ColorOS 1.9.1-rc2 prerelease](https://github.com/Nshpiter/HuaweiPods/releases/tag/23-1.9.1-coloros.1-rc2) is available: [download APK](https://github.com/Nshpiter/HuaweiPods/releases/download/23-1.9.1-coloros.1-rc2/HuaweiPods-ColorOS-1.9.1-rc2.apk). The current port requires real-device verification; unit tests and firmware analysis do not establish hardware compatibility.
 
 ## Requirements and setup
 
@@ -33,6 +33,8 @@ JDK 23, Android SDK Platform 37.0, Build Tools 36.0.0:
 ```
 
 Local Release builds are unsigned; Debug builds are for testing. CI signs published packages with this repository's stable key. ColorOS releases never replace repository Latest. The updater filters ColorOS tags and excludes prereleases for stable installations.
+
+Release titles use `HuaweiPods ColorOS <upstream version>[-rcN]`; signed packages use `HuaweiPods-ColorOS-<upstream version>[-rcN].apk`. The current package is `HuaweiPods-ColorOS-1.9.1-rc2.apk`. Internal version names retain the ColorOS channel (`1.9.1-coloros.1-rc2`), and Git tags retain `<versionCode>-<versionName>` for update detection.
 
 ## Credits and license
 
