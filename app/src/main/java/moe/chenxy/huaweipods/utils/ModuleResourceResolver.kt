@@ -49,5 +49,5 @@ object ModuleResourceResolver {
         !installedBuildId.isNullOrBlank() && installedBuildId == hookBuildId
 
     private const val MODULE_BUILD_ID_META_DATA =
-        "moe.chenxy.huaweipods.MODULE_BUILD_ID"
+        "moe.chenxy.huaweipods.coloros.MODULE_BUILD_ID"
 }

@@ -3,9 +3,12 @@ package moe.chenxy.huaweipods.utils.miuiStrongToast.data
 import android.content.IntentFilter
 
 object HuaweiPodsAction {
-    private const val PREFIX = "chen.action.huaweipods"
+    private const val PREFIX = "chen.action.huaweipods.coloros"
 
     const val EXTRA_DEVICE_ROUTE = "device_route"
+    /** Display only: never use a custom alias to select the model or protocol. */
+    const val EXTRA_DEVICE_DISPLAY_NAME = "device_display_name"
+    const val EXTRA_PRESENTATION_ONLY = "presentation_only"
     const val EXTRA_FREECLIP2_AUDIO_KIND = "freeclip2_audio_kind"
     const val EXTRA_FREECLIP2_AUDIO_VALUE = "freeclip2_audio_value"
     const val EXTRA_FREECLIP2_SPATIAL_MODE = "spatial_mode"
@@ -16,6 +19,8 @@ object HuaweiPodsAction {
     const val EXTRA_HUAWEI_EQUALIZER_CONFIRMED = "huawei_equalizer_confirmed"
     const val EXTRA_HUAWEI_LOW_LATENCY_ENABLED = "huawei_low_latency_enabled"
     const val EXTRA_HUAWEI_LOW_LATENCY_WRITE_SUCCESS = "huawei_low_latency_write_success"
+    const val EXTRA_HUAWEI_WEAR_DETECTION_ENABLED = "huawei_wear_detection_enabled"
+    const val EXTRA_HUAWEI_WEAR_DETECTION_WRITE_SUCCESS = "huawei_wear_detection_write_success"
     const val EXTRA_FREECLIP2_BRIDGE_NONCE = "freeclip2_bridge_nonce"
     const val EXTRA_FREECLIP2_BRIDGE_ADDRESS = "freeclip2_bridge_address"
     const val EXTRA_FREECLIP2_BRIDGE_MODE = "freeclip2_bridge_mode"
@@ -33,6 +38,7 @@ object HuaweiPodsAction {
     const val EXTRA_FREECLIP2_BRIDGE_EQ_CUSTOM_GAINS = "freeclip2_bridge_eq_custom_gains"
     const val EXTRA_MODULE_BUILD_ID = "module_build_id"
     const val EXTRA_RESTORE_NOTIFICATION = "restore_notification"
+    const val EXTRA_EVENT_ELAPSED_REALTIME = "event_elapsed_realtime"
     const val EXTRA_ROUTE_PROBE_ADDRESS = "route_probe_address"
     const val EXTRA_ROUTE_PROBE_GENERATION = "route_probe_generation"
     const val EXTRA_ROUTE_PROBE_NONCE = "route_probe_nonce"
@@ -44,10 +50,9 @@ object HuaweiPodsAction {
     const val FREECLIP2_AUDIO_KIND_SOUND_EFFECT = "sound_effect"
 
     const val ACTION_SHOW_PODS_UI = PREFIX + ".show_pods_ui"
-    const val ACTION_OPEN_DEVICE_SETTINGS = PREFIX + ".open_device_settings"
-    const val ACTION_SEND_STRONG_TOAST = PREFIX + ".sendstrongtoast"
     const val ACTION_UPDATE_PODS_NOTIFICATION = PREFIX + ".updatepodsnotification"
     const val ACTION_CANCEL_PODS_NOTIFICATION = PREFIX + ".cancelpodsnotification"
+    const val ACTION_PREVIEW_LOW_BATTERY_REMINDER = PREFIX + ".preview_low_battery_reminder"
 
     const val ACTION_PODS_UI_INIT = PREFIX + ".ui_init"
     const val ACTION_PODS_UI_CLOSED = PREFIX + ".ui_closed"
@@ -89,6 +94,9 @@ object HuaweiPodsAction {
     const val ACTION_SHARED_CONTROL_RESULT = PREFIX + ".shared_control_result"
     const val ACTION_HUAWEI_LOW_LATENCY_SET = PREFIX + ".huawei_low_latency_set"
     const val ACTION_HUAWEI_LOW_LATENCY_CHANGED = PREFIX + ".huawei_low_latency_changed"
+    const val ACTION_HUAWEI_WEAR_DETECTION_SET = PREFIX + ".huawei_wear_detection_set"
+    const val ACTION_HUAWEI_WEAR_DETECTION_REFRESH = PREFIX + ".huawei_wear_detection_refresh"
+    const val ACTION_HUAWEI_WEAR_DETECTION_CHANGED = PREFIX + ".huawei_wear_detection_changed"
     const val ACTION_SMART_AUDIO_FREECLIP2_SET = PREFIX + ".smart_audio_freeclip2_set"
     const val ACTION_SMART_AUDIO_FREECLIP2_RESULT = PREFIX + ".smart_audio_freeclip2_result"
     const val ACTION_SMART_AUDIO_FREECLIP2_STATE = PREFIX + ".smart_audio_freeclip2_state"
@@ -101,6 +109,8 @@ object HuaweiPodsAction {
         PREFIX + ".smart_audio_image_provider_ready"
     const val ACTION_POD_IMAGES_CHANGED = PREFIX + ".pod_images_changed"
     const val ACTION_CONFIG_CHANGED = PREFIX + ".config_changed"
+    const val ACTION_COLOROS_POPUP_HOST_PROBE = PREFIX + ".coloros_popup_host_probe"
+    const val ACTION_COLOROS_POPUP_HOST_READY = PREFIX + ".coloros_popup_host_ready"
 
     fun canonical(action: String?): String? = action
 

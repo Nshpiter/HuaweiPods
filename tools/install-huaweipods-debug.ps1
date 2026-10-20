@@ -2,6 +2,7 @@ param(
     [string]$AdbPath = "",
     [string]$SdkDir = "",
     [string]$ApkPath = "",
+    [string]$PackageName = "moe.chenxy.huaweipods.coloros",
     [switch]$RestartBluetoothWithRoot
 )
 
@@ -62,11 +63,42 @@ function Wait-AuthorizedDevice {
 $repoRoot = Split-Path -Parent (Split-Path -Parent $PSCommandPath)
 if (-not $ApkPath) { $ApkPath = Join-Path $repoRoot "app/build/outputs/apk/debug/app-debug.apk" }
 if (-not (Test-Path -LiteralPath $ApkPath)) { throw "APK not found: $ApkPath" }
-$PackageName = "moe.chenxy.huaweipods"
 
 $adb = Resolve-Adb -AdbPath $AdbPath -SdkDir $SdkDir
 $apk = (Resolve-Path -LiteralPath $ApkPath).Path
 $hash = Get-FileHash -LiteralPath $apk -Algorithm SHA256
+
+# 尝试通过 aapt / aapt2 / apkanalyzer 验证 APK 中的真实 applicationId
+$detectedPackage = $null
+$tools = @("aapt.exe", "aapt2.exe", "apkanalyzer.bat", "apkanalyzer.exe")
+foreach ($tool in $tools) {
+    $cmd = Get-Command $tool -ErrorAction SilentlyContinue
+    if ($cmd) {
+        if ($tool -match "aapt") {
+            $dump = & $cmd.Source dump badging $apk 2>$null
+            if ($dump -match "package:\s*name='([^']+)'") {
+                $detectedPackage = $Matches[1]
+                break
+            }
+        } elseif ($tool -match "apkanalyzer") {
+            $dump = & $cmd.Source manifest application-id $apk 2>$null
+            if ($dump -and $dump.Trim()) {
+                $detectedPackage = $dump.Trim()
+                break
+            }
+        }
+    }
+}
+
+if ($detectedPackage) {
+    if ($detectedPackage -ne $PackageName) {
+        throw "APK package name '$detectedPackage' does not match expected '$PackageName'. Please check if you selected the right APK."
+    } else {
+        Write-Host "Verified APK package name: $PackageName"
+    }
+} else {
+    Write-Host "Target PackageName: $PackageName"
+}
 
 Write-Host "ADB: $adb"
 Write-Host "APK: $apk"
@@ -94,6 +126,6 @@ Write-Host "Installed package info:"
 
 Write-Host ""
 Write-Host "Next steps:"
-Write-Host "1. In LSPosed, make sure HuaweiPods is enabled and scoped to com.android.bluetooth, com.android.settings, com.milink.service, and com.xiaomi.bluetooth."
+Write-Host "1. In LSPosed, make sure HuaweiPods is enabled and scoped to com.android.bluetooth, com.android.settings, com.milink.service, com.xiaomi.bluetooth, com.heytap.accessory, and com.heytap.mydevices."
 Write-Host "2. Reboot the phone, or disable/enable the module and restart the scoped apps. Reboot is the most reliable."
 Write-Host "3. Test battery display, the notification ANC action, and gesture settings."

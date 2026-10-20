@@ -2,7 +2,7 @@
 <!-- 当前采集向导仅面向中文 issue 测试者，故有意使用中文默认文案。 -->
 <resources xmlns:tools="http://schemas.android.com/tools"
     tools:ignore="MissingTranslation">
-    <string name="debug_capture_app_name">HuaweiPods 协议采集</string>
+    <string name="debug_capture_app_name">HuaweiPods ColorOS（调试）</string>
     <string name="debug_capture_title">协议采集</string>
     <string name="debug_capture_open_main_short">返回模块</string>
 

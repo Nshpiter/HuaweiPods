@@ -2,6 +2,9 @@ package moe.chenxy.huaweipods
 
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothDevice
+import moe.chenxy.huaweipods.broadcast.HuaweiPodsBroadcastTrustPolicy
+import moe.chenxy.huaweipods.utils.safeDisplayName
+import moe.chenxy.huaweipods.utils.miuiStrongToast.data.sendIdentitySharingBroadcast
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -36,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import moe.chenxy.huaweipods.pods.NoiseControlMode
 import moe.chenxy.huaweipods.pods.HuaweiDeviceRoute
+import moe.chenxy.huaweipods.platform.SystemHeadsetSettingsIntent
 import moe.chenxy.huaweipods.pods.UNKNOWN_HUAWEI_ANC_SUBMODE
 import moe.chenxy.huaweipods.pods.decodeHuaweiDeviceRouteFromBroadcast
 import moe.chenxy.huaweipods.pods.defaultAncSubMode
@@ -84,7 +88,7 @@ class PopupActivity : ComponentActivity() {
         LowLatencyPrefs.syncWithRemote(prefs, HuaweiPodsApp.xposedService)
         val popupTarget = bluetoothDevice?.let { resolvePopupDeviceTarget(it, prefs) }
         if (popupTarget == null) {
-            openModule()
+            openModule(bluetoothDevice)
             finish()
             return
         }
@@ -117,27 +121,41 @@ class PopupActivity : ComponentActivity() {
     private fun openNotificationTarget(action: Int, bluetoothDevice: BluetoothDevice?) {
         when (action) {
             ConfigManager.NOTIFICATION_CLICK_SYSTEM_SETTINGS -> openSystemSettings(bluetoothDevice)
-            ConfigManager.NOTIFICATION_CLICK_SMART_AUDIO -> openSmartAudioOrModule()
-            else -> openModule()
+            ConfigManager.NOTIFICATION_CLICK_SMART_AUDIO -> openSmartAudioOrModule(bluetoothDevice)
+            else -> openModule(bluetoothDevice)
         }
     }
 
     private fun openMoreTarget(action: Int, bluetoothDevice: BluetoothDevice?) {
         when (action) {
             ConfigManager.MORE_CLICK_SYSTEM_SETTINGS -> openSystemSettings(bluetoothDevice)
-            ConfigManager.MORE_CLICK_SMART_AUDIO -> openSmartAudioOrModule()
-            else -> openModule()
+            ConfigManager.MORE_CLICK_SMART_AUDIO -> openSmartAudioOrModule(bluetoothDevice)
+            else -> openModule(bluetoothDevice)
         }
     }
 
-    private fun openModule() {
-        startActivity(Intent(this, MainActivity::class.java))
+    @SuppressLint("MissingPermission")
+    private fun openModule(bluetoothDevice: BluetoothDevice? = null) {
+        val device = bluetoothDevice ?: intent.parcelableDevice("android.bluetooth.device.extra.DEVICE")
+        val target = Intent(this, MainActivity::class.java).apply {
+            action = Intent.ACTION_VIEW
+            putExtra(MainActivity.EXTRA_NAVIGATE_PAGE, MainActivity.PAGE_EARPHONE_DETAIL)
+            if (device != null) {
+                putExtra(MainActivity.EXTRA_DEVICE_ADDRESS, device.address)
+                val deviceName = device.safeDisplayName()
+                if (deviceName.isNotBlank()) {
+                    putExtra(MainActivity.EXTRA_DEVICE_NAME, deviceName)
+                }
+            }
+            addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        }
+        startActivity(target)
     }
 
-    private fun openSmartAudioOrModule() {
+    private fun openSmartAudioOrModule(bluetoothDevice: BluetoothDevice? = null) {
         packageManager.getLaunchIntentForPackage("com.huawei.smartaudio")
             ?.let(::startActivity)
-            ?: openModule()
+            ?: openModule(bluetoothDevice)
     }
 
     @SuppressLint("MissingPermission")
@@ -146,16 +164,7 @@ class PopupActivity : ComponentActivity() {
             openModule()
             return
         }
-        val intent = Intent().apply {
-            setClassName("com.android.settings", "com.android.settings.bluetooth.MiuiHeadsetActivity")
-            putExtra("android.bluetooth.device.extra.DEVICE", bluetoothDevice)
-            putExtra("bluetoothaddress", bluetoothDevice.address)
-            putExtra("MIUI_HEADSET_SUPPORT", ConfigManager.fakeSupport())
-            putExtra("COME_FROM", "MIUI_BLUETOOTH_SETTINGS")
-            putExtra("DEVICE_ID", ConfigManager.fakeDeviceId())
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-        runCatching { startActivity(intent) }.onFailure { openModule() }
+        if (!SystemHeadsetSettingsIntent.open(this, bluetoothDevice)) openModule(bluetoothDevice)
     }
 
     private fun Intent.parcelableDevice(key: String): BluetoothDevice? {
@@ -168,11 +177,7 @@ class PopupActivity : ComponentActivity() {
         prefs: android.content.SharedPreferences,
     ): PopupDeviceTarget? {
         val address = runCatching { device.address }.getOrNull()
-        val deviceName = runCatching {
-            device.name?.takeIf(String::isNotBlank)
-                ?: device.alias?.takeIf(String::isNotBlank)
-                ?: ""
-        }.getOrDefault("")
+        val deviceName = device.safeDisplayName()
         val route = DeviceRoutePrefs.resolve(
             prefs = prefs,
             address = address,
@@ -221,6 +226,7 @@ private fun PopupContent(
         object : BroadcastReceiver() {
             override fun onReceive(p0: Context?, p1: Intent?) {
                 val intent = p1 ?: return
+                if (!HuaweiPodsBroadcastTrustPolicy.isTrustedBluetoothStateSender(sentFromPackage)) return
                 val identity = PopupBroadcastIdentity(
                     address = intent.getStringExtra("address"),
                     deviceName = intent.getStringExtra("device_name"),
@@ -384,7 +390,7 @@ private fun PopupContent(
             }
             setPackage("com.android.bluetooth")
             addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
-            context.sendBroadcast(this)
+            context.sendIdentitySharingBroadcast(this)
         }
     }
 
@@ -410,14 +416,14 @@ private fun PopupContent(
             putExtra("level", safeLevel)
             setPackage("com.android.bluetooth")
             addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
-            context.sendBroadcast(this)
+            context.sendIdentitySharingBroadcast(this)
         }
     }
 
     fun setLowLatency(enabled: Boolean) {
         if (!target.route.supportsLowLatencyControl) return
         lowLatencyEnabled.value = enabled
-        context.sendBroadcast(Intent(HuaweiPodsAction.ACTION_HUAWEI_LOW_LATENCY_SET).apply {
+        context.sendIdentitySharingBroadcast(Intent(HuaweiPodsAction.ACTION_HUAWEI_LOW_LATENCY_SET).apply {
             putPopupTarget(target)
             putExtra(HuaweiPodsAction.EXTRA_HUAWEI_LOW_LATENCY_ENABLED, enabled)
             setPackage("com.android.bluetooth")

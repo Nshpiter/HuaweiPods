@@ -8,6 +8,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import java.io.File
+import moe.chenxy.huaweipods.BuildConfig
 
 enum class PodImageResource(val fileSuffix: String) {
     BOX("box"),
@@ -51,7 +52,8 @@ internal data class CloudImageIdentityPref(
 
 object PodImagePrefs {
     private const val MAX_CLOUD_IDENTITIES = 16
-    const val AUTHORITY = "moe.chenxy.huaweipods.podimages"
+    /** 与 Manifest 中的 `${applicationId}.podimages` 保持一致，独立包名下不能指向原版 HuaweiPods。 */
+    const val AUTHORITY = "${BuildConfig.APPLICATION_ID}.podimages"
     private const val PREF_KEY_EARPHONES = "earphone_prefs_json"
     private const val PREF_KEY_CLOUD_IDENTITIES = "cloud_image_identities_json"
     private const val IMAGE_DIR = "pod_images"

@@ -2,7 +2,7 @@ package moe.chenxy.huaweipods.pods
 
 import java.util.UUID
 
-/** HFP/HSP/A2DP/AVRCP 服务不接受华为 AAM 数据帧，连接成功不能作为控制通道证据。 */
+/** Ported from upstream 59d5fa8: audio services do not accept Huawei AAM control frames. */
 internal object HuaweiRfcommServicePolicy {
     private val audioServiceIds = setOf(0x1108, 0x110A, 0x110B, 0x110C, 0x110D, 0x110E, 0x110F,
         0x1112, 0x111E, 0x111F)

@@ -3,7 +3,7 @@ package moe.chenxy.huaweipods.ui.pages
 import java.net.URI
 
 internal object DocumentationUrlPolicy {
-    const val HOME_URL = "https://huaweipods.npiter.de/"
+    const val HOME_URL = "https://github.com/Nshpiter/HuaweiPods/blob/coloros/docs/guide/getting-started.md"
 
     private const val OFFICIAL_HOST = "huaweipods.npiter.de"
 
@@ -20,7 +20,8 @@ internal object DocumentationUrlPolicy {
             return DocumentationUrlDestination.BLOCKED
         }
         val host = uri.host.lowercase()
-        return if (host == OFFICIAL_HOST) {
+        return if (host == OFFICIAL_HOST ||
+            (host == "github.com" && uri.path.startsWith("/Nshpiter/HuaweiPods/blob/coloros/docs/"))) {
             DocumentationUrlDestination.IN_APP
         } else if (host.contains(OFFICIAL_HOST)) {
             DocumentationUrlDestination.BLOCKED

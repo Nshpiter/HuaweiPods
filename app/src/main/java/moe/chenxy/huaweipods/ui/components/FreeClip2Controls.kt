@@ -51,6 +51,7 @@ import moe.chenxy.huaweipods.pods.HuaweiDeviceRoute
 import moe.chenxy.huaweipods.pods.HuaweiEqualizerState
 import moe.chenxy.huaweipods.pods.readHuaweiEqualizerCustomPresets
 import moe.chenxy.huaweipods.pods.encodeHuaweiDeviceRouteForBroadcast
+import moe.chenxy.huaweipods.utils.miuiStrongToast.data.sendIdentitySharingBroadcast
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.HuaweiPodsAction
 import top.yukonga.miuix.kmp.basic.Checkbox
 import top.yukonga.miuix.kmp.basic.Text
@@ -498,7 +499,7 @@ private fun Context.setFreeClip2SoundEffect(
 private fun Context.sendFreeClip2AudioSetting(address: String, kind: String, value: String): Boolean {
     if (!BluetoothAdapter.checkBluetoothAddress(address)) return false
     return runCatching {
-        (applicationContext ?: this).sendBroadcast(Intent(HuaweiPodsAction.ACTION_FREECLIP2_AUDIO_SET).apply {
+        (applicationContext ?: this).sendIdentitySharingBroadcast(Intent(HuaweiPodsAction.ACTION_FREECLIP2_AUDIO_SET).apply {
             putExtra("address", address)
             encodeHuaweiDeviceRouteForBroadcast(HuaweiDeviceRoute.HUAWEI_FREECLIP2)?.let {
                 putExtra(HuaweiPodsAction.EXTRA_DEVICE_ROUTE, it)
@@ -585,7 +586,7 @@ private fun FreeClip2AudioReadbackEffect(
             IntentFilter(HuaweiPodsAction.ACTION_FREECLIP2_AUDIO_CHANGED),
             Context.RECEIVER_EXPORTED,
         )
-        receiverContext.sendBroadcast(Intent(HuaweiPodsAction.ACTION_FREECLIP2_AUDIO_REFRESH).apply {
+        receiverContext.sendIdentitySharingBroadcast(Intent(HuaweiPodsAction.ACTION_FREECLIP2_AUDIO_REFRESH).apply {
             putExtra("address", address)
             encodeHuaweiDeviceRouteForBroadcast(HuaweiDeviceRoute.HUAWEI_FREECLIP2)?.let {
                 putExtra(HuaweiPodsAction.EXTRA_DEVICE_ROUTE, it)

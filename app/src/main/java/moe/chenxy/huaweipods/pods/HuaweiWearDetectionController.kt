@@ -7,6 +7,7 @@ import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import moe.chenxy.huaweipods.config.ConfigManager
 import moe.chenxy.huaweipods.config.DeviceRoutePrefs
@@ -32,6 +33,7 @@ object HuaweiWearDetectionController {
         HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3,
         HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5,
         HuaweiDeviceRoute.HUAWEI_FREEBUDS7I,
+        HuaweiDeviceRoute.HUAWEI_FREECLIP,
         HuaweiDeviceRoute.HUAWEI_FREEBUDS7,
         HuaweiDeviceRoute.HUAWEI_FREECLIP2,
     )
@@ -120,6 +122,10 @@ object HuaweiWearDetectionController {
             return
         }
         val operationGeneration = generation.get()
+        val readback = WearDetectionStateReadback(
+            isCurrentGeneration = { generation.get() == operationGeneration },
+            onState = onState,
+        )
         HuaweiL2capAncController.requestRawPacketOnce(
             context = context,
             device = device,
@@ -127,9 +133,8 @@ object HuaweiWearDetectionController {
             packet = packet,
             description = "wear-detection-state",
             responseWindowMs = 1_000L,
-            onResponse = {
-                if (generation.get() == operationGeneration) onState(parseState(it))
-            },
+            onComplete = readback::onTransportComplete,
+            onResponse = { readback.onResponse(parseState(it)) },
         )
     }
 
@@ -169,4 +174,22 @@ object HuaweiWearDetectionController {
     private const val WRITE_READBACK_DELAY_MS = 200L
     private const val WRITE_READBACK_RETRY_DELAY_MS = 300L
     private const val WRITE_READBACK_ATTEMPTS = 2
+}
+
+/** A failed transport has no response callback, but must still finish the current readback. */
+internal class WearDetectionStateReadback(
+    private val isCurrentGeneration: () -> Boolean,
+    private val onState: (Boolean?) -> Unit,
+) {
+    private val completed = AtomicBoolean(false)
+
+    fun onResponse(state: Boolean?) = complete(state)
+
+    fun onTransportComplete(success: Boolean) {
+        if (!success) complete(null)
+    }
+
+    private fun complete(state: Boolean?) {
+        if (isCurrentGeneration() && completed.compareAndSet(false, true)) onState(state)
+    }
 }

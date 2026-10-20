@@ -134,6 +134,7 @@ object HuaweiL2capAncController {
         device: BluetoothDevice,
         route: HuaweiDeviceRoute,
         onBattery: (BatteryParams) -> Unit,
+        onInEar: ((Boolean) -> Unit)? = null,
         onComplete: ((Boolean) -> Unit)? = null,
     ) {
         val packet = HuaweiAncPackets.batteryQuery(route) ?: run {
@@ -159,6 +160,8 @@ object HuaweiL2capAncController {
                     "Huawei battery response bytes=${response.size} parsed=${battery != null} device=${device.address}",
                 )
                 battery?.let(onBattery)
+                // 长连接上缓存的耳机主动上报会随电量回包一起读出，其中包括入耳状态。
+                HuaweiRfcommResponseParser.parseInEarState(response)?.let { onInEar?.invoke(it) }
             },
         )
     }

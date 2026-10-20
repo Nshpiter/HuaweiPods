@@ -11,17 +11,17 @@ class RootManagerTest {
         val ordered = RootManager.orderedRestartTargets(
             listOf(
                 "com.android.bluetooth",
-                "com.xiaomi.bluetooth",
-                "com.android.settings",
-                "com.milink.service",
+                "com.heytap.mydevices",
+                "com.huawei.smartaudio",
+                "com.heytap.accessory",
             ),
         )
 
         assertEquals(
             listOf(
-                "com.android.settings",
-                "com.milink.service",
-                "com.xiaomi.bluetooth",
+                "com.heytap.accessory",
+                "com.heytap.mydevices",
+                "com.huawei.smartaudio",
                 "com.android.bluetooth",
             ),
             ordered,
@@ -41,7 +41,7 @@ class RootManagerTest {
     @Test
     fun `restart command captures proc once and verifies old pids before every signal`() {
         val command = RootManager.buildRestartCommand(
-            listOf("com.xiaomi.bluetooth", "com.android.bluetooth"),
+            listOf("com.heytap.mydevices", "com.android.bluetooth"),
         )
 
         assertFalse(command.contains("am force-stop"))
@@ -54,6 +54,6 @@ class RootManagerTest {
         assertTrue(command.contains("kill -15 \"\$rs_pid\""))
         assertTrue(command.contains("kill -9 \"\$rs_pid\""))
         assertTrue(command.contains("sleep 0.2"))
-        assertTrue(command.indexOf("'com.xiaomi.bluetooth'") < command.indexOf("'com.android.bluetooth'"))
+        assertTrue(command.indexOf("'com.heytap.mydevices'") < command.indexOf("'com.android.bluetooth'"))
     }
 }

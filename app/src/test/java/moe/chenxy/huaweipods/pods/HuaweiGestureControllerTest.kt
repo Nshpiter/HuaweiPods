@@ -648,6 +648,67 @@ class HuaweiGestureControllerTest {
     }
 
     @Test
+    fun `FreeClip 1 gesture packets and queries match capture`() {
+        val route = HuaweiDeviceRoute.HUAWEI_FREECLIP
+        val expectedLeftDouble = linkedMapOf(
+            HuaweiTapAction.PLAY_PAUSE to "5A000600011F01010133A2",
+            HuaweiTapAction.PLAY_NEXT to "5A000600011F01010203C1",
+            HuaweiTapAction.PLAY_PREVIOUS to "5A000600011F0101075364",
+            HuaweiTapAction.VOICE_ASSISTANT to "5A000600011F0101002383",
+            HuaweiTapAction.NONE to "5A000600011F0101FF3D73",
+        )
+        expectedLeftDouble.forEach { (action, packet) ->
+            assertArrayEquals(
+                action.name,
+                hex(packet),
+                HuaweiGestureController.buildDoubleTapPacket(
+                    route,
+                    HuaweiGestureSide.LEFT,
+                    action,
+                ),
+            )
+        }
+        val expectedRightDouble = linkedMapOf(
+            HuaweiTapAction.PLAY_PAUSE to "5A000600011F0201016AF2",
+            HuaweiTapAction.PLAY_NEXT to "5A000600011F0201025A91",
+            HuaweiTapAction.PLAY_PREVIOUS to "5A000600011F0201070A34",
+            HuaweiTapAction.VOICE_ASSISTANT to "5A000600011F0201007AD3",
+            HuaweiTapAction.NONE to "5A000600011F0201FF6423",
+        )
+        expectedRightDouble.forEach { (action, packet) ->
+            assertArrayEquals(
+                action.name,
+                hex(packet),
+                HuaweiGestureController.buildDoubleTapPacket(
+                    route,
+                    HuaweiGestureSide.RIGHT,
+                    action,
+                ),
+            )
+        }
+        val expectedLeftTriple = linkedMapOf(
+            HuaweiTapAction.PLAY_NEXT to "5A00060001250101024783",
+            HuaweiTapAction.PLAY_PREVIOUS to "5A00060001250101071726",
+            HuaweiTapAction.NONE to "5A00060001250101FF7931",
+        )
+        expectedLeftTriple.forEach { (action, packet) ->
+            assertArrayEquals(
+                action.name,
+                hex(packet),
+                HuaweiGestureController.buildTripleTapPacket(
+                    route,
+                    HuaweiGestureSide.LEFT,
+                    action,
+                ),
+            )
+        }
+        assertArrayEquals(
+            hex("5A000700012001000200E8975A0007000126010002002512"),
+            HuaweiGestureController.buildGestureStateQuery(route),
+        )
+    }
+
+    @Test
     fun `routes reject packets belonging to another model`() {
         assertNull(
             HuaweiGestureController.buildTripleTapPacket(

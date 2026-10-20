@@ -117,6 +117,34 @@ class PodImageLoaderTest {
     }
 
     @Test
+    fun `original FreeClip uses its dedicated official fallback images`() {
+        assertEquals(
+            R.drawable.img_freeclip_box,
+            PodImageLoader.modelFallbackResId(
+                HuaweiDeviceRoute.HUAWEI_FREECLIP,
+                PodImageResource.BOX,
+                R.drawable.img_box,
+            ),
+        )
+        assertEquals(
+            R.drawable.img_freeclip_left,
+            PodImageLoader.modelFallbackResId(
+                HuaweiDeviceRoute.HUAWEI_FREECLIP,
+                PodImageResource.LEFT,
+                R.drawable.img_left,
+            ),
+        )
+        assertEquals(
+            R.drawable.img_freeclip_right,
+            PodImageLoader.modelFallbackResId(
+                HuaweiDeviceRoute.HUAWEI_FREECLIP,
+                PodImageResource.RIGHT,
+                R.drawable.img_right,
+            ),
+        )
+    }
+
+    @Test
     fun `FreeClip 2 uses its dedicated fallback images`() {
         assertEquals(
             R.drawable.img_freeclip2_box,
@@ -180,7 +208,6 @@ class PodImageLoaderTest {
             HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO4,
             HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5,
             HuaweiDeviceRoute.HUAWEI_FREEBUDS7I,
-            HuaweiDeviceRoute.HUAWEI_FREECLIP,
             HuaweiDeviceRoute.HUAWEI_EYEWEAR,
         )
         val globalFallbacks = mapOf(

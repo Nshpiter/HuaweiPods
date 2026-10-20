@@ -3,6 +3,7 @@ package moe.chenxy.huaweipods.ui
 import android.bluetooth.BluetoothDevice
 import android.content.res.Configuration
 import android.net.Uri
+import android.os.Build
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -34,6 +35,8 @@ import moe.chenxy.huaweipods.config.PodImageResource
 import moe.chenxy.huaweipods.config.preferredImagePath
 import moe.chenxy.huaweipods.pods.HuaweiDeviceRoute
 import moe.chenxy.huaweipods.pods.NoiseControlMode
+import moe.chenxy.huaweipods.platform.RomFamily
+import moe.chenxy.huaweipods.platform.RomIntegrationPolicy
 import moe.chenxy.huaweipods.ui.dialogs.RestartScope
 import moe.chenxy.huaweipods.ui.dialogs.RestartScopeDialog
 import moe.chenxy.huaweipods.ui.dialogs.PodImageConfigDialog
@@ -73,7 +76,7 @@ internal fun MainTabsScaffold(
     overlayBottomBar: Boolean,
     pageBottomContentPadding: Dp,
     xposedService: XposedService?,
-    bluetoothServiceResponsive: Boolean,
+    bluetoothServiceResponsive: ModuleHealth,
     bluetoothEnabled: Boolean,
     bondedDeviceCount: Int,
     onBluetoothStatusClick: () -> Unit,
@@ -258,7 +261,7 @@ internal fun MainTabsScaffold(
         RestartScopeDialog(
             show = showRestartScopeDialog,
             restarting = restartingScopes,
-            scopes = restartScopeOptions,
+            scopes = remember { restartScopeOptionsForCurrentRom() },
             onDismissRequest = { if (!restartingScopes) onDismissRestartScopeDialog() },
             onConfirm = onRestartScopes,
         )
@@ -283,7 +286,7 @@ internal fun MainTabsScaffold(
 @Composable
 private fun ModuleTabPage(
     xposedService: XposedService?,
-    bluetoothServiceResponsive: Boolean,
+    bluetoothServiceResponsive: ModuleHealth,
     bluetoothEnabled: Boolean,
     bondedDeviceCount: Int,
     onBluetoothStatusClick: () -> Unit,
@@ -488,10 +491,19 @@ private fun EarphoneDetailActions(
     }
 }
 
-private val restartScopeOptions = listOf(
+private val commonRestartScopeOptions = listOf(
     RestartScope("com.android.bluetooth", R.string.restart_scope_bluetooth_service),
-    RestartScope("com.android.settings", R.string.restart_scope_settings),
-    RestartScope("com.milink.service", R.string.restart_scope_milink_service),
-    RestartScope("com.xiaomi.bluetooth", R.string.restart_scope_mi_bluetooth),
     RestartScope("com.huawei.smartaudio", R.string.restart_scope_smart_audio),
 )
+
+private fun restartScopeOptionsForCurrentRom(): List<RestartScope> =
+    commonRestartScopeOptions + when (
+        RomIntegrationPolicy.detect(Build.MANUFACTURER, Build.BRAND)
+    ) {
+        RomFamily.COLOR_OS -> listOf(
+            RestartScope("com.heytap.mydevices", R.string.restart_scope_my_devices),
+            RestartScope("com.heytap.accessory", R.string.restart_scope_quick_connect),
+            RestartScope("com.oplus.wirelesssettings", R.string.restart_scope_wireless_settings),
+        )
+        RomFamily.GENERIC_ANDROID -> emptyList()
+    }

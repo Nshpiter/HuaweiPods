@@ -15,12 +15,12 @@ android {
     compileSdkMinor = 0
 
     defaultConfig {
-        applicationId = "moe.chenxy.huaweipods"
-        // HyperOS 2 also ships on Android 14; the LSPosed API requirement is independent.
-        minSdk = 34
+        applicationId = "moe.chenxy.huaweipods.coloros"
+        minSdk = 35
         targetSdk = 36
-        versionCode = 21
-        versionName = "1.9.1"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        versionCode = 22
+        versionName = "1.9.1-coloros.1-rc1"
         buildConfigField("long", "BUILD_TIMESTAMP", moduleBuildTimestamp.toString())
     }
 
@@ -89,12 +89,14 @@ configurations.configureEach {
 
 dependencies {
     implementation(libs.coreKtx)
+    // 正式版按 API 102 编译以支持热重载，并在运行时兼容 101 框架；协议采集 Debug 版固定 API 101。
     debugCompileOnly(libs.libxposedApi)
     debugImplementation(libs.libxposedService)
     releaseCompileOnly(libs.libxposedApi102)
     releaseImplementation(libs.libxposedService102)
     implementation(libs.kotlinx.serialization.json)
     testImplementation("junit:junit:4.13.2")
+    androidTestImplementation("androidx.test:runner:1.7.0")
 
     // Compose
     implementation(platform(libs.compose.bom))
@@ -113,9 +115,6 @@ dependencies {
 
     // Navigation3
     implementation(libs.navigation3.runtime)
-
-    // HyperOS Focus Island API
-    implementation(libs.focus.api)
 
 }
 

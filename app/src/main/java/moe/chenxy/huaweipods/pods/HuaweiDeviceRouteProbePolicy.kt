@@ -19,7 +19,7 @@ internal data class HuaweiDeviceRouteProbeSession(
 
 /** 用户主动点选未知音频设备时的窄探测策略；不负责后台扫描或名称猜测。 */
 internal object HuaweiDeviceRouteProbePolicy {
-    const val REQUEST_SENDER_PACKAGE = "moe.chenxy.huaweipods"
+    const val REQUEST_SENDER_PACKAGE = "moe.chenxy.huaweipods.coloros"
     const val RESULT_SENDER_PACKAGE = "com.android.bluetooth"
     const val MIN_PROBE_INTERVAL_MS = 15_000L
 

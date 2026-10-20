@@ -67,7 +67,7 @@ class AppLifecyclePrefs(context: Context) {
     }
 
     fun checkUpdatesOnLaunch(): Boolean =
-        prefs.getBoolean(KEY_CHECK_UPDATES_ON_LAUNCH, true)
+        prefs.getBoolean(KEY_CHECK_UPDATES_ON_LAUNCH, false)
 
     fun setCheckUpdatesOnLaunch(enabled: Boolean) {
         prefs.edit { putBoolean(KEY_CHECK_UPDATES_ON_LAUNCH, enabled) }

@@ -96,14 +96,11 @@ import moe.chenxy.huaweipods.R
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.LifecycleOwner
+import moe.chenxy.huaweipods.platform.RomIntegrationPolicy
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
-private val requiredCoreScopes = setOf(
-    "com.android.bluetooth",
-    "com.xiaomi.bluetooth",
-)
 
 private fun colorWithWhiteTextContrast(source: Color): Color {
     var result = source
@@ -663,7 +660,11 @@ private fun EnvironmentSetupPage(
     LaunchedEffect(motionEnabled) { visible = true }
     val environmentReady = remember(xposedService) {
         xposedService != null && runCatching {
-            xposedService.scope.containsAll(requiredCoreScopes)
+            val family = RomIntegrationPolicy.detect(
+                manufacturer = android.os.Build.MANUFACTURER,
+                brand = android.os.Build.BRAND,
+            )
+            xposedService.scope.containsAll(RomIntegrationPolicy.requiredCoreScopes(family))
         }.getOrDefault(false)
     }
     Column(
@@ -806,7 +807,15 @@ private fun EnvironmentDetails(
     var refreshVersion by remember { mutableIntStateOf(0) }
     val serviceConnected = xposedService != null
     val coreScopesReady = remember(xposedService, refreshVersion) {
-        runCatching { xposedService?.scope?.containsAll(requiredCoreScopes) == true }
+        runCatching {
+            val family = RomIntegrationPolicy.detect(
+                manufacturer = android.os.Build.MANUFACTURER,
+                brand = android.os.Build.BRAND,
+            )
+            xposedService?.scope?.containsAll(
+                RomIntegrationPolicy.requiredCoreScopes(family),
+            ) == true
+        }
             .getOrDefault(false)
     }
 
@@ -973,10 +982,7 @@ private fun ReadyDetails(accent: Color) {
         SetupDivider()
         ReadyItem(
             "3",
-            stringResource(
-                R.string.onboarding_ready_group,
-                stringResource(R.string.qq_group_number),
-            ),
+            stringResource(R.string.onboarding_ready_group),
             accent,
         )
     }

@@ -127,6 +127,12 @@ object PodImageLoader {
             PodImageResource.RIGHT -> R.drawable.img_freebuds6i_right
         }
 
+        HuaweiDeviceRoute.HUAWEI_FREECLIP -> when (resource) {
+            PodImageResource.BOX -> R.drawable.img_freeclip_box
+            PodImageResource.LEFT -> R.drawable.img_freeclip_left
+            PodImageResource.RIGHT -> R.drawable.img_freeclip_right
+        }
+
         HuaweiDeviceRoute.HUAWEI_FREECLIP2 -> when (resource) {
             PodImageResource.BOX -> R.drawable.img_freeclip2_box
             PodImageResource.LEFT -> R.drawable.img_freeclip2_left

@@ -8,12 +8,13 @@ class PodImageProviderAccessPolicyTest {
     @Test
     fun `only module and actual image scopes may open files`() {
         listOf(
-            "moe.chenxy.huaweipods",
+            "moe.chenxy.huaweipods.coloros",
             "com.android.bluetooth",
-            "com.android.settings",
-            "com.milink.service",
-            "com.xiaomi.bluetooth",
+            "com.heytap.accessory",
         ).forEach { assertTrue(it, PodImageProviderAccessPolicy.mayOpenImage(it)) }
+
+        assertFalse(PodImageProviderAccessPolicy.mayOpenImage("com.milink.service"))
+        assertFalse(PodImageProviderAccessPolicy.mayOpenImage("com.xiaomi.bluetooth"))
 
         assertFalse(PodImageProviderAccessPolicy.mayOpenImage("com.huawei.smartaudio"))
         assertFalse(PodImageProviderAccessPolicy.mayOpenImage("com.example.thirdparty"))
@@ -24,7 +25,7 @@ class PodImageProviderAccessPolicyTest {
     fun `shared bluetooth uid may open images through an allowed package`() {
         assertTrue(
             PodImageProviderAccessPolicy.mayOpenImage(
-                listOf("com.android.bluetooth", "com.xiaomi.bluetooth"),
+                listOf("com.example.shared", "com.android.bluetooth"),
             ),
         )
         assertFalse(
@@ -36,7 +37,7 @@ class PodImageProviderAccessPolicyTest {
 
     @Test
     fun `only trusted identity producers may submit an identity`() {
-        assertTrue(PodImageProviderAccessPolicy.maySubmitOfficialImageIdentity("moe.chenxy.huaweipods"))
+        assertTrue(PodImageProviderAccessPolicy.maySubmitOfficialImageIdentity("moe.chenxy.huaweipods.coloros"))
         assertTrue(PodImageProviderAccessPolicy.maySubmitOfficialImageIdentity("com.android.bluetooth"))
         assertFalse(PodImageProviderAccessPolicy.maySubmitOfficialImageIdentity("com.huawei.smartaudio"))
         assertFalse(PodImageProviderAccessPolicy.maySubmitOfficialImageIdentity("com.android.settings"))

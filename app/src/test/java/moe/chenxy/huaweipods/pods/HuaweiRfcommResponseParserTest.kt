@@ -52,6 +52,23 @@ class HuaweiRfcommResponseParserTest {
     }
 
     @Test
+    fun `parses unsolicited in-ear reports from either field`() {
+        assertEquals(true, HuaweiRfcommResponseParser.parseInEarState(hex("5A0006002B0308010100 00".replace(" ", ""))))
+        assertEquals(false, HuaweiRfcommResponseParser.parseInEarState(hex("5A0006002B0309010000 00".replace(" ", ""))))
+        assertNull(HuaweiRfcommResponseParser.parseInEarState(hex("5A0007002B2A010200001531")))
+    }
+
+    @Test
+    fun `uses the latest in-ear report inside a battery read`() {
+        val battery = hex("5A0014000127010164020364645603030000000402140A075C")
+        val wearing = hex("5A0006002B030801010000")
+        val removed = hex("5A0006002B030801000000")
+
+        assertEquals(false, HuaweiRfcommResponseParser.parseInEarState(wearing + battery + removed))
+        assertEquals(true, HuaweiRfcommResponseParser.parseInEarState(removed + battery + wearing))
+    }
+
+    @Test
     fun `parses FreeBuds 5 battery response captured from official app`() {
         val response = hex("5A0014000127010164020364645603030000000402140A075C")
 

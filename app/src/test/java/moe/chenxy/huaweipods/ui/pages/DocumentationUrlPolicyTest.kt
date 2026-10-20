@@ -5,6 +5,16 @@ import org.junit.Test
 
 class DocumentationUrlPolicyTest {
     @Test
+    fun `ColorOS guide uses its own branch documentation`() {
+        assertEquals(DocumentationUrlDestination.IN_APP, DocumentationUrlPolicy.destination(DocumentationUrlPolicy.HOME_URL))
+        assertEquals(DocumentationUrlDestination.EXTERNAL, DocumentationUrlPolicy.destination(
+            "https://github.com/Nshpiter/HuaweiPods/blob/main/docs/guide/getting-started.md",
+        ))
+        assertEquals(DocumentationUrlDestination.EXTERNAL, DocumentationUrlPolicy.destination(
+            "https://github.com/other/HuaweiPods/blob/coloros/docs/guide/getting-started.md",
+        ))
+    }
+    @Test
     fun `official website stays inside app`() {
         listOf(
             "https://huaweipods.npiter.de/",

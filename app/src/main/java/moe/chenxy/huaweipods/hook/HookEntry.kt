@@ -9,7 +9,6 @@ import java.lang.reflect.Executable
 import moe.chenxy.huaweipods.config.ConfigManager
 import moe.chenxy.huaweipods.config.DeviceRoutePrefs
 import moe.chenxy.huaweipods.config.LowLatencyPrefs
-import moe.chenxy.huaweipods.hook.milink.MiLinkServiceHook
 import moe.chenxy.huaweipods.pods.HuaweiDeviceRouteResolver
 import moe.chenxy.huaweipods.utils.ModuleResourceResolver
 
@@ -52,16 +51,16 @@ open class HookEntry : XposedModule() {
             when (packageName) {
                 "com.android.bluetooth" -> {
                     loadHook("bluetooth-headset-state", HeadsetStateDispatcher, classLoader, packageName)
-                    loadHook("bluetooth-upstream", BluetoothUpstreamHeadsetHook(), classLoader, packageName)
+                    loadHook("bluetooth-hfp-battery", HuaweiHfpBatteryAtHook(), classLoader, packageName)
+                    // ColorOS 没有独立的蓝牙 UI 进程，连接弹窗、常驻通知与流体云都由系统蓝牙进程发起。
+                    loadHook("bluetooth-notification", MiBluetoothToastHook, classLoader, packageName)
                 }
-                "com.android.settings" ->
-                    loadHook("settings-headset", SettingsHeadsetHook, classLoader, packageName)
-                "com.milink.service" ->
-                    loadHook("milink-service", MiLinkServiceHook, classLoader, packageName)
-                "com.xiaomi.bluetooth" -> {
-                    loadHook("mi-bluetooth-toast", MiBluetoothToastHook, classLoader, packageName)
-                    loadHook("bluetooth-upstream", BluetoothUpstreamHeadsetHook(), classLoader, packageName)
-                }
+                "com.heytap.mydevices" ->
+                    loadHook("coloros-mydevices", ColorOsMyDevicesHook, classLoader, packageName)
+                "com.heytap.accessory" ->
+                    loadHook("coloros-accessory", ColorOsAccessoryFrameworkHook, classLoader, packageName)
+                "com.oplus.wirelesssettings" ->
+                    loadHook("coloros-wirelesssettings", ColorOsWirelessSettingsHook, classLoader, packageName)
             }
         } finally {
             strictInstall.set(previousStrict)
@@ -90,9 +89,9 @@ open class HookEntry : XposedModule() {
 
     private fun supportsPackage(packageName: String): Boolean =
         packageName == "com.android.bluetooth" ||
-            packageName == "com.android.settings" ||
-            packageName == "com.milink.service" ||
-            packageName == "com.xiaomi.bluetooth" ||
+            packageName == "com.heytap.mydevices" ||
+            packageName == "com.heytap.accessory" ||
+            packageName == "com.oplus.wirelesssettings" ||
             BuildVariantHooks.supportsPackage(packageName)
 
     internal fun loadHook(

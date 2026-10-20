@@ -4,19 +4,15 @@ import android.content.Context
 import android.content.Intent
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.HuaweiPodsAction
 
-/** 通知模块界面、系统设置与融合设备中心重新读取已同步到远程偏好的耳机图片。 */
+/** 通知模块界面与系统蓝牙进程（ColorOS 通知、弹窗宿主）重新读取已同步到远程偏好的耳机图片。 */
 object PodImageChangeNotifier {
-    private const val SETTINGS_PACKAGE = "com.android.settings"
-    private const val MILINK_PACKAGE = "com.milink.service"
-    private const val MI_BLUETOOTH_PACKAGE = "com.xiaomi.bluetooth"
+    private const val BLUETOOTH_PACKAGE = "com.android.bluetooth"
     const val EXTRA_ADDRESS = "address"
 
     fun notify(context: Context, address: String) {
         listOf(
             context.packageName,
-            SETTINGS_PACKAGE,
-            MILINK_PACKAGE,
-            MI_BLUETOOTH_PACKAGE,
+            BLUETOOTH_PACKAGE,
         ).distinct().forEach { targetPackage ->
             context.sendBroadcast(
                 Intent(HuaweiPodsAction.ACTION_POD_IMAGES_CHANGED)

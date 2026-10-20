@@ -6,8 +6,6 @@ import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
 import android.content.BroadcastReceiver
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -47,6 +45,7 @@ import androidx.navigation3.runtime.rememberDecoratedNavEntries
 import androidx.navigation3.ui.NavDisplay
 import moe.chenxy.huaweipods.HuaweiPodsApp
 import moe.chenxy.huaweipods.R
+import moe.chenxy.huaweipods.coloros.applyColorOsLiveAlertSettings
 import moe.chenxy.huaweipods.config.AppLifecyclePrefs
 import moe.chenxy.huaweipods.config.ConfigManager
 import moe.chenxy.huaweipods.config.DeviceRoutePrefs
@@ -54,6 +53,13 @@ import moe.chenxy.huaweipods.config.PodImagePrefs
 import moe.chenxy.huaweipods.config.PodImageChangeNotifier
 import moe.chenxy.huaweipods.config.PodImageResource
 import moe.chenxy.huaweipods.pods.HuaweiDeviceRoute
+import moe.chenxy.huaweipods.broadcast.HuaweiPodsBroadcastTrustPolicy
+import moe.chenxy.huaweipods.navigation.EarphoneDetailNavigationPolicy
+import moe.chenxy.huaweipods.navigation.EarphoneDetailNavigationState
+import moe.chenxy.huaweipods.navigation.NavigationAction
+import moe.chenxy.huaweipods.navigation.NavigationTransition
+import moe.chenxy.huaweipods.platform.SystemHeadsetSettingsIntent
+import moe.chenxy.huaweipods.utils.miuiStrongToast.data.sendIdentitySharingBroadcast
 import moe.chenxy.huaweipods.pods.NoiseControlMode
 import moe.chenxy.huaweipods.pods.UNKNOWN_HUAWEI_ANC_SUBMODE
 import moe.chenxy.huaweipods.pods.decodeHuaweiDeviceRouteFromBroadcast
@@ -117,7 +123,9 @@ sealed interface Screen : NavKey {
 
 private const val DEVICE_CONNECT_TIMEOUT_MS = 15_000L
 private const val GITHUB_REPOSITORY_URL = "https://github.com/Nshpiter/HuaweiPods"
+// 开发者卡片展示本分支维护者，另保留 ColorOS 移植来源入口。
 private const val GITHUB_DEVELOPER_URL = "https://github.com/Nshpiter"
+private const val UPSTREAM_REPOSITORY_URL = "https://github.com/Artifical0/HuaweiPods-ColorOS"
 private const val GITHUB_RELEASES_URL = "$GITHUB_REPOSITORY_URL/releases"
 private const val GITHUB_ISSUES_URL = "$GITHUB_REPOSITORY_URL/issues"
 
@@ -142,10 +150,12 @@ internal fun MainUI(
     onBlurBottomBarChange: (Boolean) -> Unit = {},
     appLanguage: MutableState<Int> = mutableStateOf(AppLocale.SYSTEM),
     onAppLanguageChange: (Int) -> Unit = {},
+    navigateToEarphoneDetail: MutableState<Boolean> = remember { mutableStateOf(false) },
+    targetDeviceAddress: MutableState<String?> = remember { mutableStateOf(null) },
+    targetDeviceName: MutableState<String?> = remember { mutableStateOf(null) },
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
-    val qqGroupNumber = stringResource(R.string.qq_group_number)
 
     val mainTitle = remember { mutableStateOf("") }
     val batteryParams = remember { mutableStateOf(BatteryParams()) }
@@ -166,10 +176,16 @@ internal fun MainUI(
     var connectedDeviceAddress by remember { mutableStateOf("") }
     var showConnectErrorDialog by remember { mutableStateOf(false) }
     var hookConnectionState by remember { mutableStateOf("disconnected") }
+    var earphoneNavigationState by remember {
+        mutableStateOf<EarphoneDetailNavigationState>(EarphoneDetailNavigationState.Idle)
+    }
     var pendingOpenEarphonesAfterPickerLoaded by remember { mutableStateOf(false) }
     var lastBluetoothServiceAliveMs by remember { mutableStateOf(0L) }
     var lastMiBluetoothServiceAliveMs by remember { mutableStateOf(0L) }
-    var bluetoothServiceResponsive by remember { mutableStateOf(false) }
+    var moduleCheckStarted by remember { mutableStateOf(SystemClock.elapsedRealtime()) }
+    var lastObservedModuleMs by remember { mutableStateOf(0L) }
+    var observedModuleBuild by remember { mutableStateOf<String?>(null) }
+    var bluetoothServiceResponsive by remember { mutableStateOf(ModuleHealth.CHECKING) }
     val backgroundColor = appBackground()
     val overlayBottomBar = floatingBottomBar.value || blurBottomBar.value
     val pageBottomContentPadding = if (overlayBottomBar) 104.dp else 28.dp
@@ -185,21 +201,18 @@ internal fun MainUI(
     val prefs = remember { context.getSharedPreferences(ConfigManager.PREFS_NAME, Context.MODE_PRIVATE) }
     val lifecyclePrefs = remember(context) { AppLifecyclePrefs(context) }
     val appConfig = remember { ConfigManager.refreshFromPrefs(prefs) }
-    val milinkLowLatencyCardEnabled = remember {
-        mutableStateOf(appConfig.milinkLowLatencyCardEnabled)
-    }
     val notificationClickAction = remember { mutableStateOf(appConfig.notificationClickAction) }
     val moreClickAction = remember { mutableStateOf(appConfig.moreClickAction) }
     val desktopIconHidden = remember { mutableStateOf(isLauncherIconHidden(context)) }
     val logLevel = remember { mutableStateOf(appConfig.logLevel) }
-    val fakeDeviceId = remember { mutableStateOf(appConfig.fakeDeviceId) }
-    val islandMode = remember { mutableStateOf(ConfigManager.islandMode()) }
-    val persistentIslandEnabled = remember { mutableStateOf(appConfig.persistentIslandEnabled) }
     val persistentNotificationEnabled = remember {
         mutableStateOf(appConfig.persistentNotificationEnabled)
     }
     val lockscreenNotificationEnabled = remember {
         mutableStateOf(appConfig.lockscreenNotificationEnabled)
+    }
+    val lowBatteryReminderEnabled = remember {
+        mutableStateOf(appConfig.lowBatteryReminderEnabled)
     }
     val earphonePrefs = remember { mutableStateOf(PodImagePrefs.load(prefs)) }
     val checkUpdatesOnLaunch = remember {
@@ -261,17 +274,18 @@ internal fun MainUI(
                         availableUpdate = result.release
                     }
 
-                    is UpdateCheckResult.UpToDate -> {
+                    is UpdateCheckResult.UpToDate, UpdateCheckResult.NoRelease -> {
+                        val latest = (result as? UpdateCheckResult.UpToDate)?.latest
                         pendingUpdateStore.clear()
                         availableUpdate = null
                         lifecyclePrefs.markUpdateCheck(System.currentTimeMillis())
                         Log.i(
                             "HuaweiPods-Update",
-                            "Already up to date: ${result.latest.tag}",
+                            "No newer ColorOS release: ${latest?.tag.orEmpty()}",
                         )
                         if (updateFeedbackGate.shouldShow(manual)) {
                             updateCheckSummary = UpdateCheckSummary.UpToDate(
-                                versionName = result.latest.versionName,
+                                versionName = latest?.versionName ?: BuildConfig.VERSION_NAME,
                             )
                             Toast.makeText(context, R.string.already_latest_version, Toast.LENGTH_SHORT).show()
                         }
@@ -293,12 +307,6 @@ internal fun MainUI(
                 updateFeedbackGate.reset()
             }
         }
-    }
-
-    fun copyQqGroup() {
-        val clipboard = context.getSystemService(ClipboardManager::class.java)
-        clipboard?.setPrimaryClip(ClipData.newPlainText("HuaweiPods QQ", qqGroupNumber))
-        Toast.makeText(context, R.string.qq_group_copied, Toast.LENGTH_SHORT).show()
     }
 
     LaunchedEffect(showUpdatedDialogOnLaunch) {
@@ -329,13 +337,66 @@ internal fun MainUI(
             putExtra("device", pendingDevice)
             setPackage("com.android.bluetooth")
             addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
-            context.sendBroadcast(this)
+            context.sendIdentitySharingBroadcast(this)
         }
     }
 
     LaunchedEffect(displayTitle) {
         if (displayTitle.isNotEmpty()) {
             mainTitle.value = displayTitle
+        }
+    }
+
+    fun applyNavigationTransition(transition: NavigationTransition) {
+        earphoneNavigationState = transition.newState
+        when (transition.action) {
+            NavigationAction.SWITCH_TO_EARPHONES_TAB -> {
+                showDevicePicker = false
+                onSelectedTabChange(MainTab.Earphones)
+                hasAppliedDefaultTab = true
+                pendingOpenEarphonesAfterPickerLoaded = false
+            }
+            NavigationAction.OPEN_EARPHONES_PICKER -> {
+                onSelectedTabChange(MainTab.Earphones)
+                showDevicePicker = true
+                hasAppliedDefaultTab = true
+                pendingOpenEarphonesAfterPickerLoaded = false
+            }
+            NavigationAction.REQUEST_BLUETOOTH_STATUS_REFRESH -> {
+                // 请求底层蓝牙状态真实刷新，绝不假定已连接
+                sendBluetoothModuleBroadcast(context, HuaweiPodsAction.ACTION_PODS_UI_INIT)
+                sendBluetoothModuleBroadcast(context, HuaweiPodsAction.ACTION_REFRESH_STATUS)
+            }
+            NavigationAction.NONE -> Unit
+        }
+    }
+
+    LaunchedEffect(navigateToEarphoneDetail.value) {
+        if (navigateToEarphoneDetail.value) {
+            val targetAddress = targetDeviceAddress.value
+            val targetName = targetDeviceName.value
+            val transition = EarphoneDetailNavigationPolicy.onRequestNavigation(
+                currentState = earphoneNavigationState,
+                targetAddress = targetAddress,
+                targetName = targetName,
+                currentHookConnected = hookConnected.value,
+                currentConnectedAddress = connectedDeviceAddress,
+            )
+            applyNavigationTransition(transition)
+            navigateToEarphoneDetail.value = false
+            targetDeviceAddress.value = null
+            targetDeviceName.value = null
+        }
+    }
+
+    LaunchedEffect(earphoneNavigationState) {
+        if (earphoneNavigationState is EarphoneDetailNavigationState.Validating) {
+            delay(5000L)
+            val transition = EarphoneDetailNavigationPolicy.onTimeout(earphoneNavigationState)
+            applyNavigationTransition(transition)
+            if (!hookConnected.value) {
+                Toast.makeText(context, R.string.connect_failed, Toast.LENGTH_SHORT).show()
+            }
         }
     }
 
@@ -377,6 +438,7 @@ internal fun MainUI(
         object : BroadcastReceiver() {
             override fun onReceive(p0: Context?, p1: Intent?) {
                 val intent = p1 ?: return
+                if (!HuaweiPodsBroadcastTrustPolicy.shouldAcceptBroadcast(intent.action, sentFromPackage)) return
                 when (HuaweiPodsAction.canonical(intent.action)) {
                     HuaweiPodsAction.ACTION_PODS_ANC_CHANGED -> {
                         connectedDeviceAddress = intent.getStringExtra("address") ?: connectedDeviceAddress
@@ -460,7 +522,14 @@ internal fun MainUI(
                         )
                         hookConnected.value = true
                         hookConnectionState = "connected"
-                        if (shouldOpenEarphones) {
+                        val navTransition = EarphoneDetailNavigationPolicy.onBluetoothStatusUpdated(
+                            currentState = earphoneNavigationState,
+                            isIncomingConnected = true,
+                            incomingAddress = connectedDeviceAddress,
+                            incomingName = deviceName,
+                        )
+                        applyNavigationTransition(navTransition)
+                        if (navTransition.action == NavigationAction.NONE && shouldOpenEarphones) {
                             if (!hasAppliedDefaultTab) {
                                 onSelectedTabChange(MainTab.Earphones)
                             }
@@ -483,6 +552,13 @@ internal fun MainUI(
                             hasHuaweiAncLevel.value = false
                             huaweiTransparencySubMode.value = -1
                             hookConnected.value = false
+                            val navTransition = EarphoneDetailNavigationPolicy.onBluetoothStatusUpdated(
+                                currentState = earphoneNavigationState,
+                                isIncomingConnected = false,
+                                incomingAddress = null,
+                                incomingName = null,
+                            )
+                            applyNavigationTransition(navTransition)
                         } else if (hookConnectionState == "connecting") {
                             val incomingAddress = intent.getStringExtra("address")
                             if (!incomingAddress.isNullOrBlank() &&
@@ -509,6 +585,13 @@ internal fun MainUI(
                                 mainTitle.value = it
                                 earphonePrefs.value = PodImagePrefs.upsertConnected(prefs, xposedService, connectedDeviceAddress, it)
                             }
+                            val navTransition = EarphoneDetailNavigationPolicy.onBluetoothStatusUpdated(
+                                currentState = earphoneNavigationState,
+                                isIncomingConnected = true,
+                                incomingAddress = connectedDeviceAddress,
+                                incomingName = mainTitle.value,
+                            )
+                            applyNavigationTransition(navTransition)
                         }
                     }
 
@@ -524,15 +607,29 @@ internal fun MainUI(
                         huaweiTransparencySubMode.value = -1
                         hookConnectionState = "disconnected"
                         hookConnected.value = false
+                        val navTransition = EarphoneDetailNavigationPolicy.onBluetoothStatusUpdated(
+                            currentState = earphoneNavigationState,
+                            isIncomingConnected = false,
+                            incomingAddress = null,
+                            incomingName = null,
+                        )
+                        applyNavigationTransition(navTransition)
                     }
 
                     HuaweiPodsAction.ACTION_MODULE_BLUETOOTH_SERVICE_ALIVE -> {
+                        val build = intent.getStringExtra(HuaweiPodsAction.EXTRA_MODULE_BUILD_ID)
+                        if (!build.isNullOrBlank()) {
+                            lastObservedModuleMs = SystemClock.elapsedRealtime()
+                            observedModuleBuild = build
+                            bluetoothServiceResponsive = moduleHealth(lastObservedModuleMs,
+                                moduleCheckStarted, lastObservedModuleMs, build, BuildConfig.MODULE_BUILD_ID)
+                        }
                         if (
                             intent.getStringExtra(HuaweiPodsAction.EXTRA_MODULE_BUILD_ID) ==
                             BuildConfig.MODULE_BUILD_ID
                         ) {
                             lastBluetoothServiceAliveMs = SystemClock.elapsedRealtime()
-                            bluetoothServiceResponsive = true
+                            bluetoothServiceResponsive = ModuleHealth.ONLINE
                         }
                     }
 
@@ -618,10 +715,10 @@ internal fun MainUI(
         }
     }
 
-    LaunchedEffect(lastBluetoothServiceAliveMs) {
+    LaunchedEffect(lastObservedModuleMs, moduleCheckStarted) {
         while (true) {
-            bluetoothServiceResponsive = lastBluetoothServiceAliveMs > 0L &&
-                    SystemClock.elapsedRealtime() - lastBluetoothServiceAliveMs <= 75_000L
+            bluetoothServiceResponsive = moduleHealth(SystemClock.elapsedRealtime(),
+                moduleCheckStarted, lastObservedModuleMs, observedModuleBuild, BuildConfig.MODULE_BUILD_ID)
             delay(5_000L)
         }
     }
@@ -660,7 +757,7 @@ internal fun MainUI(
             }
             setPackage("com.android.bluetooth")
             addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
-            context.sendBroadcast(this)
+            context.sendIdentitySharingBroadcast(this)
         }
     }
 
@@ -690,7 +787,7 @@ internal fun MainUI(
             this.putExtra("level", safeLevel)
             setPackage("com.android.bluetooth")
             addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
-            context.sendBroadcast(this)
+            context.sendIdentitySharingBroadcast(this)
         }
     }
 
@@ -735,7 +832,7 @@ internal fun MainUI(
             putExtra("device", device)
             setPackage("com.android.bluetooth")
             addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
-            context.sendBroadcast(this)
+            context.sendIdentitySharingBroadcast(this)
         }
     }
 
@@ -795,6 +892,17 @@ internal fun MainUI(
         }
     }
 
+    fun openColorOsLiveAlertSettings() {
+        Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+            putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            runCatching { context.startActivity(this) }
+                .onFailure {
+                    Toast.makeText(context, R.string.connect_failed, Toast.LENGTH_SHORT).show()
+                }
+        }
+    }
+
     fun openDevicePicker() {
         showDevicePicker = true
         onSelectedTabChange(MainTab.Earphones)
@@ -814,22 +922,14 @@ internal fun MainUI(
             Toast.makeText(context, R.string.connect_failed, Toast.LENGTH_SHORT).show()
             return
         }
-        Intent().apply {
-            setClassName("com.android.settings", "com.android.settings.bluetooth.MiuiHeadsetActivity")
-            putExtra("android.bluetooth.device.extra.DEVICE", device)
-            putExtra("bluetoothaddress", device.address)
-            putExtra("MIUI_HEADSET_SUPPORT", ConfigManager.fakeSupport())
-            putExtra("COME_FROM", "MIUI_BLUETOOTH_SETTINGS")
-            putExtra("DEVICE_ID", ConfigManager.fakeDeviceId())
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            runCatching { context.startActivity(this) }
-                .onFailure { Toast.makeText(context, R.string.connect_failed, Toast.LENGTH_SHORT).show() }
+        if (!SystemHeadsetSettingsIntent.open(context, device)) {
+            Toast.makeText(context, R.string.connect_failed, Toast.LENGTH_SHORT).show()
         }
     }
 
     fun refreshStatus() {
         if (hookConnected.value) {
-            context.sendBroadcast(Intent(HuaweiPodsAction.ACTION_REFRESH_STATUS).apply {
+            context.sendIdentitySharingBroadcast(Intent(HuaweiPodsAction.ACTION_REFRESH_STATUS).apply {
                 setPackage("com.android.bluetooth")
                 addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
             })
@@ -857,16 +957,14 @@ internal fun MainUI(
                     RootManager.restartPackages(packages)
                 }
                 val waitForBluetooth = "com.android.bluetooth" in packages
-                val observeMiBluetooth = "com.xiaomi.bluetooth" in packages
                 success = commandSucceeded
 
                 if (commandSucceeded && waitForBluetooth) {
                     lastBluetoothServiceAliveMs = 0L
-                    bluetoothServiceResponsive = false
-                }
-                if (commandSucceeded && observeMiBluetooth) {
-                    // 通知进程可能按需启动，心跳仅用于观察，不阻断核心蓝牙重启。
-                    lastMiBluetoothServiceAliveMs = 0L
+                    moduleCheckStarted = SystemClock.elapsedRealtime()
+                    lastObservedModuleMs = 0L
+                    observedModuleBuild = null
+                    bluetoothServiceResponsive = ModuleHealth.CHECKING
                 }
 
                 if (commandSucceeded && waitForBluetooth) {
@@ -879,9 +977,9 @@ internal fun MainUI(
                     success = lastBluetoothServiceAliveMs > 0L
                 }
 
-                if (success && (waitForBluetooth || observeMiBluetooth)) {
+                if (success && waitForBluetooth) {
                     // 新 Hook 就绪后只恢复一次；重启期间保留界面上最后一份有效状态。
-                    context.sendBroadcast(Intent(HuaweiPodsAction.ACTION_REFRESH_STATUS).apply {
+                    context.sendIdentitySharingBroadcast(Intent(HuaweiPodsAction.ACTION_REFRESH_STATUS).apply {
                         setPackage("com.android.bluetooth")
                         putExtra(HuaweiPodsAction.EXTRA_RESTORE_NOTIFICATION, true)
                         addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
@@ -940,8 +1038,7 @@ internal fun MainUI(
         onOpenGitHub = { openExternalUrl(context, GITHUB_REPOSITORY_URL) },
         onOpenChangelog = { openExternalUrl(context, GITHUB_RELEASES_URL) },
         onOpenIssues = { openExternalUrl(context, GITHUB_ISSUES_URL) },
-        onCopyQqGroup = { copyQqGroup() },
-        qqGroupNumber = qqGroupNumber,
+        onOpenUpstream = { openExternalUrl(context, UPSTREAM_REPOSITORY_URL) },
         onOpenOnboarding = onOpenOnboarding,
         onOpenSettings = {
             if (backStack.lastOrNull() != Screen.Settings) {
@@ -1114,71 +1211,60 @@ internal fun MainUI(
                             logLevel.value = it
                             ConfigManager.updateLogLevel(prefs, xposedService, it)
                             broadcastConfigChanged(context, "com.android.bluetooth")
-                            broadcastConfigChanged(context, "com.milink.service")
-                            broadcastConfigChanged(context, "com.xiaomi.bluetooth")
-                        },
-                        islandMode = islandMode,
-                        onIslandModeChange = {
-                            islandMode.value = it
-                            ConfigManager.updateIslandMode(prefs, xposedService, it)
-                            broadcastConfigChanged(context, "com.android.bluetooth")
-                            broadcastConfigChanged(context, "com.xiaomi.bluetooth")
                         },
                         persistentNotificationEnabled = persistentNotificationEnabled,
-                        persistentIslandEnabled = persistentIslandEnabled,
-                        onPersistentIslandEnabledChange = {
-                            persistentIslandEnabled.value = it
-                            ConfigManager.updatePersistentIslandEnabled(prefs, xposedService, it)
-                            broadcastConfigChanged(context, "com.xiaomi.bluetooth")
-                        },
                         onPersistentNotificationEnabledChange = {
                             persistentNotificationEnabled.value = it
                             ConfigManager.updatePersistentNotificationEnabled(prefs, xposedService, it)
-                            broadcastConfigChanged(context, "com.xiaomi.bluetooth")
+                            applyColorOsLiveAlertSettings(context, ConfigManager.current())
+                            broadcastConfigChanged(context, "com.android.bluetooth")
                         },
                         lockscreenNotificationEnabled = lockscreenNotificationEnabled,
                         onLockscreenNotificationEnabledChange = {
                             lockscreenNotificationEnabled.value = it
                             ConfigManager.updateLockscreenNotificationEnabled(prefs, xposedService, it)
+                            applyColorOsLiveAlertSettings(context, ConfigManager.current())
                             broadcastConfigChanged(context, "com.android.bluetooth")
-                            broadcastConfigChanged(context, "com.xiaomi.bluetooth")
+                        },
+                        lowBatteryReminderEnabled = lowBatteryReminderEnabled,
+                        onLowBatteryReminderEnabledChange = {
+                            lowBatteryReminderEnabled.value = it
+                            ConfigManager.updateLowBatteryReminderEnabled(prefs, xposedService, it)
+                            broadcastConfigChanged(context, "com.android.bluetooth")
+                        },
+                        onPreviewLowBatteryReminder = {
+                            sendBluetoothModuleBroadcast(
+                                context,
+                                HuaweiPodsAction.ACTION_PREVIEW_LOW_BATTERY_REMINDER,
+                            )
+                            Toast.makeText(
+                                context,
+                                R.string.low_battery_reminder_preview_sent,
+                                Toast.LENGTH_LONG,
+                            ).show()
                         },
                         appLanguage = appLanguage,
                         onAppLanguageChange = {
                             appLanguage.value = it
                             onAppLanguageChange(it)
                         },
-                        milinkLowLatencyCardEnabled = milinkLowLatencyCardEnabled,
-                        onMilinkLowLatencyCardEnabledChange = {
-                            milinkLowLatencyCardEnabled.value = it
-                            ConfigManager.updateMilinkLowLatencyCardEnabled(prefs, xposedService, it)
-                            broadcastConfigChanged(context, "com.milink.service")
-                        },
                         notificationClickAction = notificationClickAction,
                         onNotificationClickActionChange = {
                             notificationClickAction.value = it
                             ConfigManager.updateNotificationClickAction(prefs, xposedService, it)
-                            broadcastConfigChanged(context, "com.xiaomi.bluetooth")
+                            broadcastConfigChanged(context, "com.android.bluetooth")
                         },
                         moreClickAction = moreClickAction,
                         onMoreClickActionChange = {
                             moreClickAction.value = it
                             ConfigManager.updateMoreClickAction(prefs, xposedService, it)
                         },
-                        fakeDeviceId = fakeDeviceId,
-                        onFakeDeviceIdChange = {
-                            fakeDeviceId.value = it
-                            ConfigManager.updateFakeDeviceId(prefs, xposedService, it)
-                            broadcastConfigChanged(context, "com.android.bluetooth")
-                            broadcastConfigChanged(context, "com.android.settings")
-                            broadcastConfigChanged(context, "com.milink.service")
-                            broadcastConfigChanged(context, "com.xiaomi.bluetooth")
-                        },
                         onOpenTheme = {
                             if (backStack.lastOrNull() != Screen.Theme) {
                                 backStack.add(Screen.Theme)
                             }
                         },
+                        onOpenColorOsLiveAlertSettings = { openColorOsLiveAlertSettings() },
                     )
                 }
             }
@@ -1402,12 +1488,10 @@ private fun resolvedConnectedAddress(vararg candidates: String?): String {
 }
 
 private fun sendBluetoothModuleBroadcast(context: Context, action: String) {
-    listOf("com.android.bluetooth", "com.xiaomi.bluetooth").forEach { packageName ->
-        Intent(action).apply {
-            setPackage(packageName)
-            addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
-            context.sendBroadcast(this)
-        }
+    Intent(action).apply {
+        setPackage("com.android.bluetooth")
+        addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
+        context.sendIdentitySharingBroadcast(this)
     }
 }
 

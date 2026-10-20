@@ -148,10 +148,6 @@ abstract class HookContext {
         return true
     }
 
-    fun fakeDeviceId(): String = ConfigManager.fakeDeviceId()
-
-    fun fakeSupport(): String = ConfigManager.fakeSupport()
-
     fun refreshConfig() {
         ConfigManager.refreshFromPrefs(prefs)
     }

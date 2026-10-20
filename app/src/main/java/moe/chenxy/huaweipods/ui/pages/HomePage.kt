@@ -1,5 +1,7 @@
 package moe.chenxy.huaweipods.ui.pages
 
+import moe.chenxy.huaweipods.ui.ModuleHealth
+
 import android.content.Context
 import android.os.Build
 import androidx.compose.foundation.layout.Arrangement
@@ -33,6 +35,7 @@ import java.util.Date
 import java.util.Locale
 import moe.chenxy.huaweipods.BuildConfig
 import moe.chenxy.huaweipods.R
+import moe.chenxy.huaweipods.platform.RomIntegrationPolicy
 import moe.chenxy.huaweipods.ui.components.AppIcons
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.CardDefaults
@@ -45,7 +48,7 @@ import top.yukonga.miuix.kmp.utils.PressFeedbackType
 fun HomePage(
     modifier: Modifier = Modifier,
     xposedService: XposedService?,
-    bluetoothServiceResponsive: Boolean,
+    bluetoothServiceResponsive: ModuleHealth,
     bluetoothEnabled: Boolean,
     bondedDeviceCount: Int,
     onBluetoothStatusClick: () -> Unit,
@@ -55,7 +58,13 @@ fun HomePage(
 ) {
     val context = LocalContext.current
     val systemInfo = remember { homeSystemInfo(context) }
-    val active = remember(xposedService) { hasRequiredBluetoothScopes(xposedService) }
+    val active = remember(xposedService) {
+        hasRequiredBluetoothScopes(
+            service = xposedService,
+            manufacturer = Build.MANUFACTURER,
+            brand = Build.BRAND,
+        )
+    }
     val inactiveSummary = if (xposedService == null) {
         "等待 LSPosed 服务连接"
     } else {
@@ -93,7 +102,7 @@ fun HomePage(
 private fun StatusGrid(
     active: Boolean,
     inactiveSummary: String,
-    bluetoothServiceResponsive: Boolean,
+    bluetoothServiceResponsive: ModuleHealth,
     bluetoothEnabled: Boolean,
     bondedDeviceCount: Int,
     onBluetoothStatusClick: () -> Unit,
@@ -130,8 +139,8 @@ private fun StatusGrid(
 }
 
 @Composable
-private fun StatusCard(active: Boolean, inactiveSummary: String, bluetoothServiceResponsive: Boolean, modifier: Modifier = Modifier) {
-    val serviceTimeout = active && !bluetoothServiceResponsive
+private fun StatusCard(active: Boolean, inactiveSummary: String, bluetoothServiceResponsive: ModuleHealth, modifier: Modifier = Modifier) {
+    val serviceTimeout = active && bluetoothServiceResponsive != ModuleHealth.ONLINE
     val statusColor = when {
         !active -> Color(0xFFFF5A52)
         serviceTimeout -> Color(0xFFFF9F0A)
@@ -164,6 +173,8 @@ private fun StatusCard(active: Boolean, inactiveSummary: String, bluetoothServic
                 Text(
                     text = when {
                         !active -> "LSPosed 未激活"
+                        bluetoothServiceResponsive == ModuleHealth.CHECKING -> "模块检查中"
+                        bluetoothServiceResponsive == ModuleHealth.RELOAD_REQUIRED -> "模块需要重载"
                         serviceTimeout -> "模块服务超时"
                         else -> "模块已激活"
                     },
@@ -174,6 +185,8 @@ private fun StatusCard(active: Boolean, inactiveSummary: String, bluetoothServic
                 Text(
                     text = when {
                         !active -> inactiveSummary
+                        bluetoothServiceResponsive == ModuleHealth.CHECKING -> "正在等待蓝牙模块响应"
+                        bluetoothServiceResponsive == ModuleHealth.RELOAD_REQUIRED -> "旧版本仍运行，请重启作用域"
                         serviceTimeout -> "模块服务未响应"
                         else -> "模块服务已连接"
                     },
@@ -191,15 +204,15 @@ private fun StatusCard(active: Boolean, inactiveSummary: String, bluetoothServic
     }
 }
 
-private val requiredBluetoothScopes = setOf(
-    "com.android.bluetooth",
-    "com.xiaomi.bluetooth",
-)
-
-private fun hasRequiredBluetoothScopes(service: XposedService?): Boolean {
+private fun hasRequiredBluetoothScopes(
+    service: XposedService?,
+    manufacturer: String?,
+    brand: String?,
+): Boolean {
     if (service == null) return false
     return runCatching {
-        service.scope.containsAll(requiredBluetoothScopes)
+        val family = RomIntegrationPolicy.detect(manufacturer, brand)
+        service.scope.containsAll(RomIntegrationPolicy.requiredCoreScopes(family))
     }.getOrDefault(false)
 }
 

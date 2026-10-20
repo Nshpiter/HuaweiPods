@@ -82,6 +82,10 @@ class DeviceCapabilitiesTest {
             HuaweiDeviceRoute.HUAWEI_FREEBUDS7I,
         ).forEach { route -> assertTrue(route.displayName, route.supportsTransparency) }
 
+        assertTrue(HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5.supportsTransparency)
+        assertTrue(HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5.supportsAncStateReadback)
+        assertTrue(HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5.supportsDiscreteAncLevels)
+
         enabledHuaweiDeviceRoutes().forEach { route ->
             assertEquals(
                 route.displayName,
@@ -133,12 +137,12 @@ class DeviceCapabilitiesTest {
             HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3,
             HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5,
             HuaweiDeviceRoute.HUAWEI_FREEBUDS7I,
+            HuaweiDeviceRoute.HUAWEI_FREECLIP,
             HuaweiDeviceRoute.HUAWEI_FREECLIP2,
             HuaweiDeviceRoute.HUAWEI_FREEARC,
             HuaweiDeviceRoute.HUAWEI_EYEWEAR2,
         ).forEach { route -> assertTrue(route.displayName, route.supportsGestureConfiguration) }
         assertFalse(HuaweiDeviceRoute.HUAWEI_FREEBUDS5.supportsGestureConfiguration)
-        assertFalse(HuaweiDeviceRoute.HUAWEI_FREECLIP.supportsGestureConfiguration)
     }
 
     @Test
@@ -153,11 +157,15 @@ class DeviceCapabilitiesTest {
     }
 
     @Test
-    fun `background battery refresh is restricted to FreeClip 2`() {
+    fun `background battery refresh is restricted to FreeClip family`() {
+        val freeClipRoutes = setOf(
+            HuaweiDeviceRoute.HUAWEI_FREECLIP,
+            HuaweiDeviceRoute.HUAWEI_FREECLIP2,
+        )
         HuaweiDeviceRoute.entries.forEach { route ->
             assertEquals(
                 route.name,
-                route == HuaweiDeviceRoute.HUAWEI_FREECLIP2,
+                route in freeClipRoutes,
                 route.supportsBackgroundBatteryRefresh,
             )
         }

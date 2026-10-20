@@ -9,10 +9,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import android.os.Build
 import moe.chenxy.huaweipods.R
 import moe.chenxy.huaweipods.config.ConfigManager
+import moe.chenxy.huaweipods.platform.RomFamily
+import moe.chenxy.huaweipods.platform.RomIntegrationPolicy
+import moe.chenxy.huaweipods.platform.openColorOsBackgroundSettings
 import moe.chenxy.huaweipods.ui.AppLocale
 import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.Card
@@ -33,26 +38,23 @@ fun SettingsPage(
     onCheckUpdatesOnLaunchChange: (Boolean) -> Unit = {},
     logLevel: MutableState<Int> = mutableStateOf(ConfigManager.LOG_LEVEL_BASIC),
     onLogLevelChange: (Int) -> Unit = {},
-    islandMode: MutableState<Int> = mutableStateOf(ConfigManager.ISLAND_MODE_OFFICIAL),
-    onIslandModeChange: (Int) -> Unit = {},
-    persistentIslandEnabled: MutableState<Boolean> = mutableStateOf(false),
-    onPersistentIslandEnabledChange: (Boolean) -> Unit = {},
     persistentNotificationEnabled: MutableState<Boolean> = mutableStateOf(true),
     onPersistentNotificationEnabledChange: (Boolean) -> Unit = {},
     lockscreenNotificationEnabled: MutableState<Boolean> = mutableStateOf(true),
     onLockscreenNotificationEnabledChange: (Boolean) -> Unit = {},
+    lowBatteryReminderEnabled: MutableState<Boolean> = mutableStateOf(true),
+    onLowBatteryReminderEnabledChange: (Boolean) -> Unit = {},
+    onPreviewLowBatteryReminder: () -> Unit = {},
     appLanguage: MutableState<Int> = mutableStateOf(AppLocale.SYSTEM),
     onAppLanguageChange: (Int) -> Unit = {},
-    milinkLowLatencyCardEnabled: MutableState<Boolean> = mutableStateOf(true),
-    onMilinkLowLatencyCardEnabledChange: (Boolean) -> Unit = {},
     notificationClickAction: MutableState<Int> = mutableStateOf(ConfigManager.NOTIFICATION_CLICK_MODULE_POPUP),
     onNotificationClickActionChange: (Int) -> Unit = {},
     moreClickAction: MutableState<Int> = mutableStateOf(ConfigManager.MORE_CLICK_MODULE),
     onMoreClickActionChange: (Int) -> Unit = {},
-    fakeDeviceId: MutableState<String> = mutableStateOf(ConfigManager.DEFAULT_FAKE_DEVICE_ID),
-    onFakeDeviceIdChange: (String) -> Unit = {},
     onOpenTheme: () -> Unit = {},
+    onOpenColorOsLiveAlertSettings: () -> Unit = {},
 ) {
+    val context = LocalContext.current
     val languageOptions = listOf(
         stringResource(R.string.language_system),
         stringResource(R.string.language_chinese),
@@ -63,16 +65,6 @@ fun SettingsPage(
         stringResource(R.string.log_level_off),
         stringResource(R.string.log_level_basic),
         stringResource(R.string.log_level_debug),
-    )
-    val islandModeValues = listOf(
-        ConfigManager.ISLAND_MODE_NONE,
-        ConfigManager.ISLAND_MODE_OFFICIAL,
-        ConfigManager.ISLAND_MODE_MODULE,
-    )
-    val islandModeOptions = listOf(
-        stringResource(R.string.island_mode_none),
-        stringResource(R.string.island_mode_official),
-        stringResource(R.string.island_mode_module),
     )
     val notificationClickActionValues = listOf(
         ConfigManager.NOTIFICATION_CLICK_MODULE_POPUP,
@@ -153,20 +145,6 @@ fun SettingsPage(
 
         item {
             Card(modifier = Modifier.padding(top = 12.dp)) {
-                OverlayDropdownPreference(
-                    title = stringResource(R.string.island_mode),
-                    summary = stringResource(R.string.island_mode_summary),
-                    items = islandModeOptions,
-                    selectedIndex = islandModeValues.indexOf(islandMode.value).coerceAtLeast(0),
-                    onSelectedIndexChange = { onIslandModeChange(islandModeValues[it]) },
-                )
-                SwitchPreference(
-                    title = stringResource(R.string.persistent_island),
-                    summary = stringResource(R.string.persistent_island_summary),
-                    checked = persistentIslandEnabled.value,
-                    enabled = islandMode.value != ConfigManager.ISLAND_MODE_NONE,
-                    onCheckedChange = onPersistentIslandEnabledChange,
-                )
                 SwitchPreference(
                     title = stringResource(R.string.persistent_notification),
                     summary = stringResource(R.string.persistent_notification_summary),
@@ -180,11 +158,34 @@ fun SettingsPage(
                     onCheckedChange = onLockscreenNotificationEnabledChange,
                 )
                 SwitchPreference(
-                    title = stringResource(R.string.milink_low_latency_card),
-                    summary = stringResource(R.string.milink_low_latency_card_summary),
-                    checked = milinkLowLatencyCardEnabled.value,
-                    onCheckedChange = onMilinkLowLatencyCardEnabledChange,
+                    title = stringResource(R.string.low_battery_reminder),
+                    summary = stringResource(R.string.low_battery_reminder_summary),
+                    checked = lowBatteryReminderEnabled.value,
+                    onCheckedChange = onLowBatteryReminderEnabledChange,
                 )
+                if (lowBatteryReminderEnabled.value) {
+                    BasicComponent(
+                        title = stringResource(R.string.low_battery_reminder_preview),
+                        summary = stringResource(R.string.low_battery_reminder_preview_summary),
+                        onClick = onPreviewLowBatteryReminder,
+                    )
+                }
+                if (
+                    Build.VERSION.SDK_INT >= 36 &&
+                    RomIntegrationPolicy.detect(Build.MANUFACTURER, Build.BRAND) ==
+                    RomFamily.COLOR_OS
+                ) {
+                    BasicComponent(
+                        title = stringResource(R.string.coloros_live_alert_settings),
+                        summary = stringResource(R.string.coloros_live_alert_settings_summary),
+                        onClick = onOpenColorOsLiveAlertSettings,
+                    )
+                    BasicComponent(
+                        title = stringResource(R.string.coloros_background_settings),
+                        summary = stringResource(R.string.coloros_background_settings_summary),
+                        onClick = { openColorOsBackgroundSettings(context) },
+                    )
+                }
                 OverlayDropdownPreference(
                     title = stringResource(R.string.notification_click_action),
                     summary = stringResource(R.string.notification_click_action_summary),

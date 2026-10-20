@@ -1,9 +1,10 @@
 package moe.chenxy.huaweipods
 
+import android.Manifest
 import android.content.Context
-import android.content.Intent
-import android.bluetooth.BluetoothAdapter
+import android.content.pm.PackageManager
 import android.graphics.Color
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
@@ -17,22 +18,13 @@ import moe.chenxy.huaweipods.config.AppLifecyclePrefs
 import moe.chenxy.huaweipods.config.ConfigManager
 import moe.chenxy.huaweipods.ui.App
 import moe.chenxy.huaweipods.ui.AppLocale
-import moe.chenxy.huaweipods.utils.miuiStrongToast.data.HuaweiPodsAction
+
+import android.content.Intent
 
 class MainActivity : ComponentActivity() {
-    private val requestedDeviceAddress = mutableStateOf<String?>(null)
-
-    override fun onNewIntent(intent: Intent) {
-        super.onNewIntent(intent)
-        setIntent(intent)
-        readDeviceSettingsRequest(intent)
-    }
-
-    private fun readDeviceSettingsRequest(intent: Intent?) {
-        if (intent?.action != HuaweiPodsAction.ACTION_OPEN_DEVICE_SETTINGS) return
-        requestedDeviceAddress.value = intent.getStringExtra("address")
-            ?.takeIf(BluetoothAdapter::checkBluetoothAddress)
-    }
+    private val navigateToEarphoneDetail = mutableStateOf(false)
+    private val targetDeviceAddress = mutableStateOf<String?>(null)
+    private val targetDeviceName = mutableStateOf<String?>(null)
 
     override fun attachBaseContext(newBase: Context) {
         AppLocale.rememberDeviceLocale(newBase)
@@ -40,9 +32,30 @@ class MainActivity : ComponentActivity() {
         super.attachBaseContext(newBase)
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleIntent(intent)
+    }
+
+    private fun handleIntent(intent: Intent?) {
+        if (intent == null) return
+        val isDetail = intent.getStringExtra(EXTRA_NAVIGATE_PAGE) == PAGE_EARPHONE_DETAIL ||
+            intent.getBooleanExtra("open_earphone_detail", false)
+        if (isDetail) {
+            navigateToEarphoneDetail.value = true
+            intent.getStringExtra(EXTRA_DEVICE_ADDRESS)?.takeIf(String::isNotBlank)?.let {
+                targetDeviceAddress.value = it
+            }
+            intent.getStringExtra(EXTRA_DEVICE_NAME)?.takeIf(String::isNotBlank)?.let {
+                targetDeviceName.value = it
+            }
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        readDeviceSettingsRequest(intent)
+        handleIntent(intent)
 
         val lifecyclePrefs = AppLifecyclePrefs(this)
         val launchDecision = lifecyclePrefs.consumeLaunchDecision(
@@ -77,8 +90,9 @@ class MainActivity : ComponentActivity() {
 
             App(
                 initialLaunchDecision = launchDecision,
-                requestedDeviceAddress = requestedDeviceAddress.value,
-                onDeviceSettingsRequestHandled = { requestedDeviceAddress.value = null },
+                navigateToEarphoneDetail = navigateToEarphoneDetail,
+                targetDeviceAddress = targetDeviceAddress,
+                targetDeviceName = targetDeviceName,
                 themeMode = themeMode,
                 onThemeModeChange = {
                     themeMode.value = it
@@ -106,5 +120,37 @@ class MainActivity : ComponentActivity() {
                 },
             )
         }
+
+        val missingPermissions = buildList {
+            if (
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
+                PackageManager.PERMISSION_GRANTED
+            ) {
+                add(Manifest.permission.POST_NOTIFICATIONS)
+            }
+            if (
+                checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) !=
+                PackageManager.PERMISSION_GRANTED
+            ) {
+                add(Manifest.permission.BLUETOOTH_CONNECT)
+            }
+            if (
+                checkSelfPermission(Manifest.permission.BLUETOOTH_SCAN) !=
+                PackageManager.PERMISSION_GRANTED
+            ) {
+                add(Manifest.permission.BLUETOOTH_SCAN)
+            }
+        }
+        if (missingPermissions.isNotEmpty()) {
+            requestPermissions(missingPermissions.toTypedArray(), 1001)
+        }
+    }
+
+    companion object {
+        const val EXTRA_NAVIGATE_PAGE = "navigate_page"
+        const val PAGE_EARPHONE_DETAIL = "earphone_detail"
+        const val EXTRA_DEVICE_ADDRESS = "device_address"
+        const val EXTRA_DEVICE_NAME = "device_name"
     }
 }

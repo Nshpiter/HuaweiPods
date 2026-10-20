@@ -1,6 +1,7 @@
 package moe.chenxy.huaweipods.update
 
 import android.content.Context
+import moe.chenxy.huaweipods.BuildConfig
 
 internal data class PendingUpdateSnapshot(
     val tag: String,
@@ -15,9 +16,11 @@ internal fun restorePendingUpdate(
     snapshot: PendingUpdateSnapshot?,
     currentVersionCode: Long,
     allowPreview: Boolean = false,
+    allowPrerelease: Boolean = false,
 ): GitHubRelease? {
     snapshot ?: return null
     if (snapshot.isPreview && !allowPreview) return null
+    if (!snapshot.isPreview && !allowPrerelease && GitHubReleaseChecker.isPrereleaseVersion(snapshot.versionName)) return null
     if (snapshot.tag != snapshot.tag.trim()) return null
     if (snapshot.versionCode <= currentVersionCode) return null
 
@@ -58,7 +61,10 @@ class PendingUpdateStore(context: Context) {
         } else {
             null
         }
-        return restorePendingUpdate(snapshot, currentVersionCode, allowPreview).also { restored ->
+        return restorePendingUpdate(
+            snapshot, currentVersionCode, allowPreview,
+            allowPrerelease = GitHubReleaseChecker.isPrereleaseVersion(BuildConfig.VERSION_NAME),
+        ).also { restored ->
             if (snapshot != null && restored == null) clear()
         }
     }
@@ -71,6 +77,7 @@ class PendingUpdateStore(context: Context) {
             snapshot = release.toSnapshot(isPreview = isPreview),
             currentVersionCode = 0L,
             allowPreview = isPreview,
+            allowPrerelease = true,
         ) ?: return false
         return prefs.edit()
             .putString(KEY_TAG, validated.tag)

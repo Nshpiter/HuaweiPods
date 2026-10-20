@@ -14,6 +14,10 @@ import java.util.ArrayDeque
 /**
  * API 102 热重载入口。
  *
+ * module.prop 声明 targetApiVersion=102，minApiVersion 保持 101：Vector/LSPosed 只按
+ * targetApiVersion 选择加载方式，运行时 API 由框架决定。101 框架不会回调热重载，
+ * [installHook] 也会退回不带稳定 ID 的挂钩方式，避免调用 102 才有的 `setId`。
+ *
  * 旧代先关闭非 Xposed 资源并把包名保存为跨 ClassLoader 的 String；新代不会收到
  * onPackageLoaded，因此需要从 ActivityThread.currentApplication() 取得宿主 ClassLoader，
  * 再按稳定 ID 原子替换旧句柄并补装新增 Hook。
@@ -199,6 +203,9 @@ class Api102HookEntry : HookEntry() {
         hookId: String,
         interceptor: (XposedInterface.Chain) -> Any?,
     ): XposedInterface.HookHandle {
+        if (apiVersion < XposedInterface.API_102) {
+            return super.installHook(executable, hookId, interceptor)
+        }
         val hooker = XposedInterface.Hooker { chain -> interceptor(chain) }
         val oldHandle = replacementHandlesById
             ?.get(hookId)

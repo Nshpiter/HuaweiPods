@@ -66,6 +66,32 @@ class HuaweiEqualizerCodecTest {
     }
 
     @Test
+    fun `builds official FreeClip sound effect packets reported by state`() {
+        val expected = mapOf(
+            0x01 to "5A0006002B490101012F1A",
+            0x0A to "5A0006002B4901010A9E71",
+            0x03 to "5A0006002B490101030F58",
+            0x09 to "5A0006002B49010109AE12",
+        )
+
+        expected.forEach { (presetId, packet) ->
+            assertArrayEquals(
+                hex(packet),
+                HuaweiEqualizerCodec.buildBuiltInPresetPacket(
+                    HuaweiDeviceRoute.HUAWEI_FREECLIP,
+                    presetId,
+                ),
+            )
+        }
+        assertNull(
+            HuaweiEqualizerCodec.buildBuiltInPresetPacket(
+                HuaweiDeviceRoute.HUAWEI_FREECLIP,
+                0x02,
+            ),
+        )
+    }
+
+    @Test
     fun `builds only the Pro 5 presets confirmed by capture`() {
         val expected = mapOf(
             0x02 to "5A0006002B490101021F79",

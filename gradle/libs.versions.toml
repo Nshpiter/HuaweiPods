@@ -1,6 +1,5 @@
 [versions]
 agp = "9.1.0"
-focusApi = "1.4"
 kotlin = "2.4.0"
 ksp = "2.3.6"
 coreKtx = "1.19.0"
@@ -42,4 +41,3 @@ miuix-icons = { group = "top.yukonga.miuix.kmp", name = "miuix-icons-android", v
 miuix-blur = { group = "top.yukonga.miuix.kmp", name = "miuix-blur-android", version.ref = "miuix" }
 miuix-navigation3-ui = { group = "top.yukonga.miuix.kmp", name = "miuix-navigation3-ui-android", version.ref = "miuix" }
 navigation3-runtime = { group = "androidx.navigation3", name = "navigation3-runtime", version.ref = "navigation3" }
-focus-api = { group = "com.xzakota.hyper.notification", name = "focus-api", version.ref = "focusApi" }

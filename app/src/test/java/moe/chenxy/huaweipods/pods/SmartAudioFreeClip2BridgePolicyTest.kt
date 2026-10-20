@@ -37,14 +37,14 @@ class SmartAudioFreeClip2BridgePolicyTest {
             SmartAudioFreeClip2BridgePolicy.isTrustedRequestSender("com.android.bluetooth"),
         )
         assertFalse(
-            SmartAudioFreeClip2BridgePolicy.isTrustedRequestSender("moe.chenxy.huaweipods"),
+            SmartAudioFreeClip2BridgePolicy.isTrustedRequestSender("moe.chenxy.huaweipods.coloros"),
         )
         assertTrue(
             SmartAudioFreeClip2BridgePolicy.isTrustedEqualizerRequestSender(
-                "moe.chenxy.huaweipods",
+                "moe.chenxy.huaweipods.coloros",
             ),
         )
-        assertTrue(
+        assertFalse(
             SmartAudioFreeClip2BridgePolicy.isTrustedEqualizerRequestSender(
                 "com.milink.service",
             ),

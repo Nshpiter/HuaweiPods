@@ -5,8 +5,7 @@ import java.util.UUID
 internal object SmartAudioFreeClip2BridgePolicy {
     const val SMART_AUDIO_PACKAGE = "com.huawei.smartaudio"
     const val BLUETOOTH_PACKAGE = "com.android.bluetooth"
-    const val MI_LINK_PACKAGE = "com.milink.service"
-    const val MODULE_PACKAGE = "moe.chenxy.huaweipods"
+    const val MODULE_PACKAGE = "moe.chenxy.huaweipods.coloros"
 
     private val bluetoothAddressPattern = Regex("^(?:[0-9A-F]{2}:){5}[0-9A-F]{2}$")
 
@@ -38,7 +37,7 @@ internal object SmartAudioFreeClip2BridgePolicy {
         packageName == BLUETOOTH_PACKAGE
 
     fun isTrustedEqualizerRequestSender(packageName: String?): Boolean =
-        packageName == MODULE_PACKAGE || packageName == MI_LINK_PACKAGE
+        packageName == MODULE_PACKAGE
 
     fun isTrustedResultSender(packageName: String?): Boolean =
         packageName == SMART_AUDIO_PACKAGE

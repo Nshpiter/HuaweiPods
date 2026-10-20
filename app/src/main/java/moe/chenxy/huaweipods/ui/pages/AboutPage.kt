@@ -59,7 +59,6 @@ import top.yukonga.miuix.kmp.basic.SmallTopAppBar
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.rememberTopAppBarState
 import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.Copy
 import top.yukonga.miuix.kmp.icon.extended.ChevronForward
 import top.yukonga.miuix.kmp.icon.extended.Info
 import top.yukonga.miuix.kmp.icon.extended.Link
@@ -89,8 +88,7 @@ internal data class AboutPageActions(
     val onOpenGitHub: () -> Unit,
     val onOpenChangelog: () -> Unit,
     val onOpenIssues: () -> Unit,
-    val onCopyQqGroup: () -> Unit,
-    val qqGroupNumber: String,
+    val onOpenUpstream: () -> Unit,
     val onOpenOnboarding: () -> Unit,
     val onOpenSettings: () -> Unit,
     val onOpenReferences: () -> Unit,
@@ -113,8 +111,7 @@ fun AboutPage(
     onOpenGitHub: () -> Unit,
     onOpenChangelog: () -> Unit,
     onOpenIssues: () -> Unit,
-    onCopyQqGroup: () -> Unit,
-    qqGroupNumber: String,
+    onOpenUpstream: () -> Unit,
     onOpenOnboarding: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenReferences: () -> Unit,
@@ -203,16 +200,17 @@ fun AboutPage(
                         }
                     }
                 }
-                item(key = "aboutCommunity") {
-                    AboutSectionTitle(stringResource(R.string.about_community_section))
+                item(key = "aboutUpstream") {
+                    AboutSectionTitle(stringResource(R.string.about_upstream_section))
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         colors = CardDefaults.defaultColors(),
                     ) {
                         AboutAvatarRow(
-                            title = stringResource(R.string.qq_group),
-                            summary = stringResource(R.string.qq_group_summary, qqGroupNumber),
-                            onClick = onCopyQqGroup,
+                            title = stringResource(R.string.about_upstream_title),
+                            summary = stringResource(R.string.about_upstream_summary),
+                            avatar = R.drawable.about_developer_avatar,
+                            onClick = onOpenUpstream,
                         )
                     }
                 }
@@ -348,8 +346,7 @@ internal fun AboutTabPage(
         onOpenGitHub = actions.onOpenGitHub,
         onOpenChangelog = actions.onOpenChangelog,
         onOpenIssues = actions.onOpenIssues,
-        onCopyQqGroup = actions.onCopyQqGroup,
-        qqGroupNumber = actions.qqGroupNumber,
+        onOpenUpstream = actions.onOpenUpstream,
         onOpenOnboarding = actions.onOpenOnboarding,
         onOpenSettings = actions.onOpenSettings,
         onOpenReferences = actions.onOpenReferences,
@@ -526,6 +523,7 @@ private fun AboutLinkRow(
 private fun AboutAvatarRow(
     title: String,
     summary: String,
+    avatar: Int,
     onClick: () -> Unit,
 ) {
     BasicComponent(
@@ -533,7 +531,7 @@ private fun AboutAvatarRow(
         summary = summary,
         startAction = {
             Image(
-                painter = painterResource(R.drawable.qq_group_avatar),
+                painter = painterResource(avatar),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
@@ -549,7 +547,7 @@ private fun AboutAvatarRow(
         },
         endActions = {
             Icon(
-                imageVector = MiuixIcons.Copy,
+                imageVector = MiuixIcons.Link,
                 contentDescription = null,
                 modifier = Modifier.padding(end = 8.dp).size(22.dp),
                 tint = MiuixTheme.colorScheme.onSurfaceVariantActions,

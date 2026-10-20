@@ -11,6 +11,8 @@
 .DS_Store
 /build
 /captures
+/capture_extracted/
+/huaweipods-capture-*.zip
 /tmp/
 .externalNativeBuild
 .cxx

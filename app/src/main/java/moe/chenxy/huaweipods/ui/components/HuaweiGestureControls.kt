@@ -55,6 +55,7 @@ import moe.chenxy.huaweipods.pods.HuaweiTapAction
 import moe.chenxy.huaweipods.pods.HuaweiWearDetectionController
 import moe.chenxy.huaweipods.pods.encodeHuaweiDeviceRouteForBroadcast
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.HuaweiPodsAction
+import moe.chenxy.huaweipods.utils.miuiStrongToast.data.sendIdentitySharingBroadcast
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Checkbox
 import top.yukonga.miuix.kmp.basic.Switch
@@ -757,7 +758,7 @@ private fun Context.requestHuaweiGestureState(
 ) {
     val targetContext = applicationContext ?: this
     val request = {
-        targetContext.sendBroadcast(Intent(HuaweiPodsAction.ACTION_HUAWEI_GESTURE_REFRESH).apply {
+        targetContext.sendIdentitySharingBroadcast(Intent(HuaweiPodsAction.ACTION_HUAWEI_GESTURE_REFRESH).apply {
             putExtra(HuaweiGestureController.EXTRA_ADDRESS, address)
             encodeHuaweiDeviceRouteForBroadcast(route)?.let {
                 putExtra(HuaweiPodsAction.EXTRA_DEVICE_ROUTE, it)
@@ -931,7 +932,8 @@ internal fun huaweiGestureControlLayout(route: HuaweiDeviceRoute): HuaweiGesture
         hasWearDetection = route == HuaweiDeviceRoute.HUAWEI_FREEBUDS6I ||
             route == HuaweiDeviceRoute.HUAWEI_FREEBUDS4E ||
             route == HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3 ||
-            route == HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5,
+            route == HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5 ||
+            route == HuaweiDeviceRoute.HUAWEI_FREECLIP,
     )
 }
 

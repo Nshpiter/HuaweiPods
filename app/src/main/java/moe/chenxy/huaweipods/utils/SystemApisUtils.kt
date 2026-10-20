@@ -1,13 +1,7 @@
 package moe.chenxy.huaweipods.utils
 
-import android.app.Notification
-import android.app.NotificationManager
 import android.app.StatusBarManager
 import android.bluetooth.BluetoothDevice
-import android.os.UserHandle
-import java.io.BufferedReader
-import java.io.IOException
-import java.io.InputStreamReader
 
 
 object SystemApisUtils {
@@ -33,24 +27,12 @@ object SystemApisUtils {
 
     const val BATTERY_LEVEL_UNKNOWN: Int = -1
 
-    fun getUserAllUserHandle(): UserHandle {
-        return UserHandle::class.java.getDeclaredField("ALL").apply { isAccessible = true }.get(null) as UserHandle
-    }
-
     fun BluetoothDevice.getMetadata(key: Int): ByteArray? {
         return callMethod(this, "getMetadata", key) as ByteArray?
     }
 
     fun BluetoothDevice.setMetadata(key: Int, value: ByteArray): Boolean {
         return callMethod(this, "setMetadata", key, value) as Boolean
-    }
-
-    fun NotificationManager.notifyAsUser(tag: String, id: Int, notification: Notification, userHandle: UserHandle) {
-        callMethod(this, "notifyAsUser", tag, id, notification, userHandle)
-    }
-
-    fun NotificationManager.cancelAsUser(tag: String, id: Int, userHandle: UserHandle) {
-        callMethod(this, "cancelAsUser", tag, id, userHandle)
     }
 
     fun StatusBarManager.setIconVisibility(iconName: String, show: Boolean) {
@@ -68,18 +50,4 @@ object SystemApisUtils {
         }
         throw NoSuchMethodException(methodName)
     }
-
-    private fun getPropByShell(propName: String): String {
-        return try {
-            val p = Runtime.getRuntime().exec("getprop $propName")
-            BufferedReader(InputStreamReader(p.inputStream), 1024).use { it.readLine() ?: "" }
-        } catch (ignore: IOException) {
-            ""
-        }
-    }
-
-    val isHyperOS: Boolean
-        get() {
-            return getPropByShell("ro.mi.os.version.code").isNotEmpty()
-        }
 }

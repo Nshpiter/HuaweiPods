@@ -72,7 +72,7 @@ class HuaweiDeviceRouteProbePolicyTest {
     @Test
     fun `cross package senders are exact and fail closed`() {
         assertTrue(
-            HuaweiDeviceRouteProbePolicy.isTrustedRequestSender("moe.chenxy.huaweipods"),
+            HuaweiDeviceRouteProbePolicy.isTrustedRequestSender("moe.chenxy.huaweipods.coloros"),
         )
         assertFalse(HuaweiDeviceRouteProbePolicy.isTrustedRequestSender("com.example.attacker"))
         assertFalse(HuaweiDeviceRouteProbePolicy.isTrustedRequestSender(null))

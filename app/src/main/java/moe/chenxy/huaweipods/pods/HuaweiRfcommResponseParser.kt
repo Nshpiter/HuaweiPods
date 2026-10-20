@@ -22,6 +22,9 @@ internal object HuaweiRfcommResponseParser {
     private const val SWIPE_STATE_COMMAND = 0x1F
     private const val LONG_PRESS_SERVICE = 0x2B
     private const val LONG_PRESS_STATE_COMMAND = 0x17
+    private const val IN_EAR_SERVICE = 0x2B
+    private const val IN_EAR_COMMAND = 0x03
+    private val IN_EAR_FIELDS = listOf(0x08, 0x09)
     private const val LEFT_GESTURE = 0x01
     private const val RIGHT_GESTURE = 0x02
 
@@ -81,6 +84,22 @@ internal object HuaweiRfcommResponseParser {
                 mode = mode,
                 subMode = state.u8(0).takeUnless { mode == NoiseControlMode.OFF },
             )
+        }
+        return latestState
+    }
+
+    /**
+     * 耳机主动上报的入耳状态（服务 2B、命令 03，字段 08 或 09 为单字节，1 表示佩戴中）。
+     * 协议只给出整体是否入耳，不区分左右耳；与 OpenFreebuds 的 tws_in_ear 处理一致。
+     */
+    fun parseInEarState(stream: ByteArray): Boolean? {
+        var latestState: Boolean? = null
+        frames(stream).forEach { frame ->
+            if (frame.u8(4) != IN_EAR_SERVICE || frame.u8(5) != IN_EAR_COMMAND) return@forEach
+            val fields = parseFields(frame, start = 6, endExclusive = frame.size - CHECKSUM_SIZE)
+            val value = IN_EAR_FIELDS.firstNotNullOfOrNull { fields[it]?.singleOrNull() }
+                ?: return@forEach
+            latestState = (value.toInt() and 0xFF) == 1
         }
         return latestState
     }

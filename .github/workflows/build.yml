@@ -1,11 +1,11 @@
-name: Build Release APK
+name: Build ColorOS APK
 
 on:
   push:
-    tags: [ "*-*" ]
-    branches: [ "master", "main" ]
+    tags: [ "*-coloros.*" ]
+    branches: [ "coloros" ]
   pull_request:
-    branches: [ "master", "main" ]
+    branches: [ "coloros" ]
   workflow_dispatch:
 
 jobs:
@@ -26,11 +26,17 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install build SDK
+        run: sdkmanager 'platforms;android-37.0' 'build-tools;36.0.0'
+
       - name: Grant execute permission
         run: chmod +x gradlew
 
       - name: Verify and build release APK
-        run: ./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleRelease
+        run: ./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleRelease :app:assembleDebugAndroidTest
 
       - name: Sign release APK
         id: sign
@@ -50,6 +56,11 @@ jobs:
           VERSION_NAME=$(grep -oP 'versionName\s*=\s*"\K[^"]+' app/build.gradle.kts || echo "unversioned")
           VERSION_CODE=$(grep -oP 'versionCode\s*=\s*\K[0-9]+' app/build.gradle.kts || echo "0")
 
+          if [[ ! "$VERSION_NAME" =~ ^[0-9]+(\.[0-9]+)+-coloros\.[0-9]+(-[[:alnum:].+-]+)?$ ]]; then
+            echo "This workflow only publishes ColorOS versions." >&2
+            exit 1
+          fi
+
           if [[ "$GITHUB_REF" == refs/tags/* ]]; then
             EXPECTED_TAG="${VERSION_CODE}-${VERSION_NAME}"
             if [ "$GITHUB_REF_NAME" != "$EXPECTED_TAG" ]; then
@@ -65,11 +76,11 @@ jobs:
           BUILD_TOOLS=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)
 
           if [ -n "$SIGNING_KEY" ]; then
-            OUT_NAME="HuaweiPods-${VERSION_NAME}-release.apk"
+            OUT_NAME="HuaweiPods-ColorOS-${VERSION_NAME}-release.apk"
             umask 077
             trap 'rm -f /tmp/huaweipods-release.jks' EXIT
             echo "$SIGNING_KEY" | base64 -d > /tmp/huaweipods-release.jks
-            "${BUILD_TOOLS}zipalign" -f 4 "$UNSIGNED_APK" "./$OUT_NAME"
+            "${BUILD_TOOLS}zipalign" -P 16 -f 4 "$UNSIGNED_APK" "./$OUT_NAME"
             "${BUILD_TOOLS}apksigner" sign \
               --ks /tmp/huaweipods-release.jks \
               --ks-key-alias "$KEY_ALIAS" \
@@ -79,7 +90,7 @@ jobs:
             "${BUILD_TOOLS}apksigner" verify --verbose "./$OUT_NAME"
             echo "signed=true" >> "$GITHUB_OUTPUT"
           else
-            OUT_NAME="HuaweiPods-${VERSION_NAME}-ci.apk"
+            OUT_NAME="HuaweiPods-ColorOS-${VERSION_NAME}-unsigned.apk"
             cp "$UNSIGNED_APK" "./$OUT_NAME"
             echo "signed=false" >> "$GITHUB_OUTPUT"
           fi
@@ -95,11 +106,10 @@ jobs:
 
       # Non-zipped artifact upload supported by GitHub Actions
       - name: Upload Release APK
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.sign.outputs.apk }}
           path: ./${{ steps.sign.outputs.apk }}
-          archive: false
           if-no-files-found: error
 
       - name: Create GitHub Release
@@ -110,6 +120,8 @@ jobs:
           artifacts: "./${{ steps.sign.outputs.apk }}"
           name: ${{ steps.sign.outputs.version_name }}
           bodyFile: ${{ steps.sign.outputs.release_notes }}
-          makeLatest: true
+          # ColorOS uses its own channel; repository Latest remains the HyperOS release.
+          prerelease: ${{ contains(github.ref_name, '-rc') || contains(github.ref_name, '-beta') || contains(github.ref_name, '-alpha') }}
+          makeLatest: false
           allowUpdates: true
           replacesArtifacts: true

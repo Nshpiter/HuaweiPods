@@ -9,6 +9,7 @@ import moe.chenxy.huaweipods.config.LowLatencyPrefs
 import moe.chenxy.huaweipods.pods.decodeHuaweiDeviceRouteFromBroadcast
 import moe.chenxy.huaweipods.pods.supportsLowLatencyControl
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.HuaweiPodsAction
+import moe.chenxy.huaweipods.utils.miuiStrongToast.data.sendIdentitySharingBroadcast
 
 class LowLatencyStateReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
@@ -29,7 +30,17 @@ class LowLatencyStateReceiver : BroadcastReceiver() {
             route = route,
             enabled = enabled,
         )
-        if (!stored) Log.w(TAG, "Unable to save low-latency policy for $address")
+        if (!stored) {
+            Log.w(TAG, "Unable to save low-latency policy for $address")
+            return
+        }
+        // 请蓝牙进程重发当前电量，流体云卡片据此按新状态重建低时延按钮。
+        runCatching {
+            context.sendIdentitySharingBroadcast(Intent(HuaweiPodsAction.ACTION_REFRESH_STATUS).apply {
+                setPackage("com.android.bluetooth")
+                addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
+            })
+        }.onFailure { Log.w(TAG, "Unable to refresh Live Alert after low-latency change", it) }
     }
 
     private companion object {

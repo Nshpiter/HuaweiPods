@@ -5,13 +5,19 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
 
     <queries>
         <package android:name="com.android.bluetooth" />
         <package android:name="com.android.settings" />
         <package android:name="com.huawei.smartaudio" />
-        <package android:name="com.milink.service" />
-        <package android:name="com.xiaomi.bluetooth" />
+        <package android:name="com.heytap.accessory" />
+        <package android:name="com.heytap.mydevices" />
+        <package android:name="com.oplus.wirelesssettings" />
+        <package android:name="com.oplus.melody" />
     </queries>
 
     <application
@@ -24,8 +30,37 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.HuaweiPods">
 
+        <receiver
+            android:name=".coloros.ColorOsLiveAlertReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="chen.action.huaweipods.coloros.pods_connected" />
+                <action android:name="chen.action.huaweipods.coloros.pods_battery_changed" />
+                <action android:name="chen.action.huaweipods.coloros.pods_disconnected" />
+                <action android:name="chen.action.huaweipods.coloros.pods_connection_state_changed" />
+                <action android:name="android.bluetooth.adapter.action.STATE_CHANGED" />
+                <action android:name="android.bluetooth.a2dp.profile.action.CONNECTION_STATE_CHANGED" />
+                <action android:name="android.bluetooth.headset.profile.action.CONNECTION_STATE_CHANGED" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
+            android:name=".coloros.ColorOsLiveAlertActionReceiver"
+            android:exported="false" />
+
+        <service
+            android:name=".coloros.ColorOsLiveAlertBridgeService"
+            android:exported="true"
+            android:permission="android.permission.BLUETOOTH_PRIVILEGED" />
+
+        <service
+            android:name=".coloros.ColorOsLiveAlertService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice"
+            android:stopWithTask="false" />
+
         <meta-data
-            android:name="moe.chenxy.huaweipods.MODULE_BUILD_ID"
+            android:name="moe.chenxy.huaweipods.coloros.MODULE_BUILD_ID"
             android:value="${moduleBuildId}" />
 
         <activity-alias
@@ -57,7 +92,7 @@
             android:excludeFromRecents="true"
             android:exported="true">
             <intent-filter>
-                <action android:name="chen.action.huaweipods.show_pods_ui" />
+                <action android:name="chen.action.huaweipods.coloros.show_pods_ui" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
@@ -66,7 +101,7 @@
             android:exported="true"
             android:permission="android.permission.BLUETOOTH_PRIVILEGED">
             <intent-filter>
-                <action android:name="chen.action.huaweipods.huawei_low_latency_changed" />
+                <action android:name="chen.action.huaweipods.coloros.huawei_low_latency_changed" />
             </intent-filter>
         </receiver>
         <provider

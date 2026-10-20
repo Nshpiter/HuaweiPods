@@ -173,6 +173,9 @@ private val routeCapabilities = linkedMapOf(
         displayName = "HUAWEI FreeClip",
         aliases = setOf("huaweifreeclip", "freeclip"),
         supportsRfcommBattery = true,
+        supportsBackgroundBatteryRefresh = true,
+        supportsGestureConfiguration = true,
+        supportsLowLatencyControl = true,
         hasChargingCase = true,
     ),
     HuaweiDeviceRoute.HUAWEI_FREECLIP2 to HuaweiDeviceCapabilities(
