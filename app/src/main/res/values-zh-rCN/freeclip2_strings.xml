@@ -43,5 +43,10 @@
     <string name="freeclip2_low_latency">低时延模式</string>
     <string name="freeclip2_dual_device">双设备连接</string>
     <string name="freeclip2_case_prompt_sound">充电盒提示音</string>
-    <string name="freeclip2_state_hint">低时延开启后会在每次连接时自动重新应用；其他无法回读的开关仍以本模块最后一次设置为准。</string>
+    <string name="freeclip2_state_hint">开关显示耳机回读状态，进入页面或返回前台时刷新。低时延在本模块成功开启后，会在下次连接时自动应用。</string>
+    <string name="freeclip2_refresh_settings">刷新耳机状态</string>
+    <string name="freeclip2_refresh_summary">从智慧音频返回后自动更新，也可点击重新读取</string>
+    <string name="freeclip2_settings_loading">正在读取耳机状态…</string>
+    <string name="freeclip2_settings_unknown">未读取到耳机状态，请刷新重试</string>
+    <string name="freeclip2_write_unconfirmed">未确认设置成功，请刷新耳机状态后重试</string>
 </resources>

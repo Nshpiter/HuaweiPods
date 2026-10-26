@@ -5,7 +5,7 @@ description: 在小米 HyperOS 上安装、启用并检查 HuaweiPods。
 
 # 快速开始
 
-HuaweiPods 是面向小米 HyperOS 的 Xposed 模块。从 1.2.0 起项目使用统一 APK，当前源码已接入 19 个型号（含 FreeClip 2 典藏版）；各型号的实机验证程度和可用控制并不相同，请先查看[支持型号](../support/index.md)。
+HuaweiPods 是面向小米 HyperOS 的 Xposed 模块。从 1.2.0 起项目使用统一 APK，当前源码已接入 20 个型号（含 FreeClip 2 典藏版及待实测的 FreeBuds 4）；各型号的发布状态、实机验证程度和可用控制并不相同，请先查看[支持型号](../support/index.md)。
 
 ::: warning 安装前确认
 HuaweiPods 需要正常工作的 LSPosed 环境，并会修改系统蓝牙相关进程的行为。请先确认你了解 Xposed 模块的启用、停用与恢复方式。
@@ -44,7 +44,7 @@ com.huawei.smartaudio
 
 首页右上角提供“使用文档”和“赞助支持”入口。“使用文档”会在 App 内安全加载 [HuaweiPods 官网](https://huaweipods.npiter.de/)：站内页面留在 App，GitHub 等外部链接才交给系统浏览器；文档内容会随官网持续更新。底部栏保留“模块、耳机、关于”三个常用入口，完整设置可从“关于”页右上角进入。
 
-正式版获取图片时不依赖、也不会启动华为智慧音频。支持现代 DeviceInfo 的耳机会由系统蓝牙进程直接读取 `modelId/subModelId`，再从华为官方 CDN 下载并严格校验当前配色图片；FreeBuds 3 等旧协议型号可在 HuaweiPods 的图片设置中检索官方配色并手动确认一次。身份不完整、网络不可用或校验失败时会继续使用已有缓存或内置图，绝不会按默认配色猜测。仅当智慧音频本来就在运行时，HuaweiPods 会使用一个被动桥接 Hook 同步 FreeClip 2 空间音频；它不会主动启动或保活智慧音频。
+耳机图片从华为官方 CDN 获取，无需安装智慧音频。支持 DeviceInfo 的型号自动读取 `modelId/subModelId` 并匹配配色；FreeBuds 3 等旧协议型号可在图片设置中检索并确认官方配色。身份不完整、网络不可用或校验失败时，继续使用缓存或内置图。FreeClip 2 空间音频可通过已运行的智慧音频同步，模块不会主动启动或保活它。
 
 你可以依次检查：
 

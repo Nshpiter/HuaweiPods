@@ -2,6 +2,7 @@ package moe.chenxy.huaweipods.pods
 
 enum class HuaweiDeviceRoute {
     HUAWEI_FREEBUDS3,
+    HUAWEI_FREEBUDS4,
     HUAWEI_FREEBUDS4E,
     HUAWEI_FREEBUDS5,
     HUAWEI_FREEBUDS5I,
@@ -44,6 +45,17 @@ private val routeCapabilities = linkedMapOf(
         aliases = setOf("huaweifreebuds3", "freebuds3"),
         supportsAnc = true,
         supportsAncDirectionDial = true,
+        supportsGestureConfiguration = true,
+        hasChargingCase = true,
+    ),
+    // FreeBuds 4 / 4E 官方 ZA09 / ZAA4 配置共用基础控制；保留独立身份与图片。
+    HuaweiDeviceRoute.HUAWEI_FREEBUDS4 to HuaweiDeviceCapabilities(
+        displayName = "HUAWEI FreeBuds 4",
+        aliases = setOf("huaweifreebuds4", "freebuds4"),
+        supportsAnc = true,
+        supportsAncStateReadback = true,
+        supportsDiscreteAncLevels = true,
+        supportsRfcommBattery = true,
         supportsGestureConfiguration = true,
         hasChargingCase = true,
     ),
@@ -213,6 +225,7 @@ private val normalizedAliasRoutes: Map<String, HuaweiDeviceRoute> = buildMap {
 
 private val broadcastValueByRoute = mapOf(
     HuaweiDeviceRoute.HUAWEI_FREEBUDS3 to "HUAWEI_FREEBUDS3",
+    HuaweiDeviceRoute.HUAWEI_FREEBUDS4 to "HUAWEI_FREEBUDS4",
     HuaweiDeviceRoute.HUAWEI_FREEBUDS4E to "HUAWEI_FREEBUDS4E",
     HuaweiDeviceRoute.HUAWEI_FREEBUDS5 to "HUAWEI_FREEBUDS5",
     HuaweiDeviceRoute.HUAWEI_FREEBUDS5I to "HUAWEI_FREEBUDS5I",
@@ -237,6 +250,9 @@ private val routeByBroadcastValue = broadcastValueByRoute.entries.associate { (r
 
 val HuaweiDeviceRoute.capabilities: HuaweiDeviceCapabilities?
     get() = routeCapabilities[this]
+
+internal val HuaweiDeviceRoute.isFreeBuds4Series: Boolean
+    get() = this == HuaweiDeviceRoute.HUAWEI_FREEBUDS4 || this == HuaweiDeviceRoute.HUAWEI_FREEBUDS4E
 
 val HuaweiDeviceRoute.displayName: String
     get() = capabilities?.displayName ?: "Unsupported"

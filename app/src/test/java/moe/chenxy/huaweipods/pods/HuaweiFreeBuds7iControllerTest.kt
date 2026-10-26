@@ -35,13 +35,13 @@ class HuaweiFreeBuds7iControllerTest {
             FreeBuds7iBooleanFeature.HIGH_QUALITY_AUDIO.packet(true),
         )
         assertArrayEquals(
-            hex("5A0009002BB401011802010240AF"),
+            hex("5A0009002BB401011802010170CC"),
             HuaweiFreeBuds7iController.spatialAudioModePacket(
                 FreeClip2SpatialAudioMode.HEAD_TRACKING,
             ),
         )
         assertArrayEquals(
-            hex("5A0009002BB401011802010170CC"),
+            hex("5A0009002BB401011802010240AF"),
             HuaweiFreeBuds7iController.spatialAudioModePacket(
                 FreeClip2SpatialAudioMode.FIXED,
             ),
@@ -53,11 +53,11 @@ class HuaweiFreeBuds7iControllerTest {
     }
 
     @Test
-    fun `7i spatial reports keep their captured mode order`() {
-        val fixed = HuaweiFreeBuds7iController.parseSpatialAudioState(
+    fun `7i spatial reports match user confirmed head tracking and fixed modes`() {
+        val headTracking = HuaweiFreeBuds7iController.parseSpatialAudioState(
             hex("5A000C002BB401011802010103010281DC"),
         )
-        val headTracking = HuaweiFreeBuds7iController.parseSpatialAudioState(
+        val fixed = HuaweiFreeBuds7iController.parseSpatialAudioState(
             hex("5A000C002BB40101180201020301030A21"),
         )
 

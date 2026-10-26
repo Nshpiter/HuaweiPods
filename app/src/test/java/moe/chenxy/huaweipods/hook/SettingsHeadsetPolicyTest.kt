@@ -58,6 +58,7 @@ class SettingsHeadsetPolicyTest {
 
         val expected = linkedMapOf(
             HuaweiDeviceRoute.HUAWEI_FREEBUDS3 to expectedPolicy(true, false, true),
+            HuaweiDeviceRoute.HUAWEI_FREEBUDS4 to expectedPolicy(true, false, true),
             HuaweiDeviceRoute.HUAWEI_FREEBUDS4E to expectedPolicy(true, false, true),
             HuaweiDeviceRoute.HUAWEI_FREEBUDS5 to expectedPolicy(true, false, false),
             HuaweiDeviceRoute.HUAWEI_FREEBUDS5I to expectedPolicy(true, true, true),

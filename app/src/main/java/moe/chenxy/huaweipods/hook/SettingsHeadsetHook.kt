@@ -15,6 +15,7 @@ import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.PowerManager
 import android.os.SystemClock
 import android.view.MotionEvent
 import android.view.View
@@ -161,8 +162,10 @@ object SettingsHeadsetHook : HookContext() {
     private var refreshLoopStarted = false
     private val refreshRunnable = object : Runnable {
         override fun run() {
-            if (headsetFragments.keys.any { isCurrentHuaweiFragment(it) }) {
-                requestBluetoothStatus("settings-periodic")
+            if (headsetFragments.keys.any { isCurrentHuaweiFragment(it) && isResumedFragment(it) }) {
+                if (headsetFragments.keys.any(::shouldRefreshFragment)) {
+                    requestBluetoothStatus("settings-periodic")
+                }
                 refreshHandler.postDelayed(this, SETTINGS_REFRESH_INTERVAL_MS)
             } else {
                 refreshLoopStarted = false
@@ -607,9 +610,24 @@ object SettingsHeadsetHook : HookContext() {
                 Log.d(TAG, "Fragment.onResume after ${fragmentDebug(instance)} isHuawei=${isHuaweiFragment(instance)}")
                 if (!isHuaweiFragment(instance)) return@hookAfter
                 schedulePruneFreeBudsUnsupportedViews(fragmentRootView(instance))
+                instance?.let { headsetFragments[it] = true }
+                requestBluetoothStatus("fragment-resume")
+                startPeriodicRefresh()
                 injectFragmentStatus(instance)
             }
         }.onFailure { Log.w(TAG, "hook MiuiHeadsetFragment.onResume skipped", it) }
+
+        listOf("onPause", "onDestroyView").forEach { methodName ->
+            runCatching {
+                hookAfter(findMethodByParamCount("com.android.settings.bluetooth.MiuiHeadsetFragment", methodName, 0)) {
+                    instance?.let { headsetFragments.remove(it) }
+                    if (headsetFragments.keys.none { isCurrentHuaweiFragment(it) && isResumedFragment(it) }) {
+                        refreshHandler.removeCallbacks(refreshRunnable)
+                        refreshLoopStarted = false
+                    }
+                }
+            }.onFailure { Log.w(TAG, "hook MiuiHeadsetFragment.$methodName skipped", it) }
+        }
 
         runCatching {
             hookAfter(findMethodByParamCount("com.android.settings.bluetooth.MiuiHeadsetFragment", "onServiceConnected", 0)) {
@@ -971,33 +989,12 @@ object SettingsHeadsetHook : HookContext() {
 
     private fun requestBluetoothStatus(reason: String) {
         val ctx = context ?: return
-        listOf(HuaweiPodsAction.ACTION_PODS_UI_INIT, HuaweiPodsAction.ACTION_REFRESH_STATUS).forEach { action ->
-            ctx.sendBroadcast(Intent(action).apply {
-                setPackage("com.android.bluetooth")
-                addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
-            })
-        }
-        requestFreeClip2AudioState(reason)
-        Log.d(TAG, "requested bluetooth status reason=$reason")
-    }
-
-    private fun requestFreeClip2AudioState(reason: String) {
-        if (currentHuaweiRoute() != HuaweiDeviceRoute.HUAWEI_FREECLIP2) return
-        val ctx = context ?: return
-        val address = currentAddress?.takeIf(String::isNotBlank) ?: run {
-            Log.w(TAG, "FreeClip 2 audio refresh skipped: missing address reason=$reason")
-            return
-        }
-        ctx.sendBroadcast(Intent(HuaweiPodsAction.ACTION_FREECLIP2_AUDIO_REFRESH).apply {
-            putExtra("address", address)
-            putExtra("device_name", currentName.orEmpty())
-            encodeHuaweiDeviceRouteForBroadcast(HuaweiDeviceRoute.HUAWEI_FREECLIP2)?.let {
-                putExtra(HuaweiPodsAction.EXTRA_DEVICE_ROUTE, it)
-            }
+        // REFRESH_STATUS 已同时回应存活状态并查询音频；不再叠发 UI_INIT 和音频查询。
+        ctx.sendBroadcast(Intent(HuaweiPodsAction.ACTION_REFRESH_STATUS).apply {
             setPackage("com.android.bluetooth")
             addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
         })
-        Log.d(TAG, "FreeClip 2 audio state requested reason=$reason address=$address")
+        Log.d(TAG, "requested bluetooth status reason=$reason")
     }
 
     private fun startPeriodicRefresh() {
@@ -1076,6 +1073,21 @@ object SettingsHeadsetHook : HookContext() {
 
     private fun isCurrentHuaweiFragment(fragment: Any?): Boolean {
         return isCurrentHuaweiDevice(fragmentBluetoothDevice(fragment))
+    }
+
+    private fun isResumedFragment(fragment: Any?): Boolean =
+        runCatching { callMethod(fragment, "isResumed") as? Boolean }.getOrNull() == true
+
+    private fun shouldRefreshFragment(fragment: Any): Boolean {
+        if (!isCurrentHuaweiFragment(fragment)) return false
+        val root = fragmentRootView(fragment) ?: return false
+        return HeadsetRefreshPolicy.shouldQueryDetails(
+            resumed = isResumedFragment(fragment),
+            attached = root.isAttachedToWindow,
+            shown = root.isShown,
+            windowVisible = root.windowVisibility == View.VISIBLE,
+            interactive = root.context.getSystemService(PowerManager::class.java)?.isInteractive == true,
+        )
     }
 
     private fun isCurrentHuaweiDevice(device: BluetoothDevice?): Boolean {

@@ -47,6 +47,7 @@ import moe.chenxy.huaweipods.config.ConfigManager
 import moe.chenxy.huaweipods.pods.FreeBudsPro3GestureToggle
 import moe.chenxy.huaweipods.pods.FreeBudsPro3LongPressAction
 import moe.chenxy.huaweipods.pods.HuaweiDeviceRoute
+import moe.chenxy.huaweipods.pods.isFreeBuds4Series
 import moe.chenxy.huaweipods.pods.HuaweiGestureController
 import moe.chenxy.huaweipods.pods.HuaweiGestureKind
 import moe.chenxy.huaweipods.pods.HuaweiGestureSide
@@ -917,8 +918,8 @@ internal fun huaweiGestureControlLayout(route: HuaweiDeviceRoute): HuaweiGesture
     return HuaweiGestureControlLayout(
         tapKinds = tapKinds,
         hasSwipe = HuaweiSwipeAction.availableFor(route).isNotEmpty(),
-        hasFixedSwipeVolume = route == HuaweiDeviceRoute.HUAWEI_FREEBUDS4E,
-        hasModernLongPressControls = route == HuaweiDeviceRoute.HUAWEI_FREEBUDS4E ||
+        hasFixedSwipeVolume = route.isFreeBuds4Series,
+        hasModernLongPressControls = route.isFreeBuds4Series ||
             route == HuaweiDeviceRoute.HUAWEI_FREEBUDS6I ||
             route == HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3 ||
             route == HuaweiDeviceRoute.HUAWEI_FREEBUDS7I ||
@@ -929,7 +930,7 @@ internal fun huaweiGestureControlLayout(route: HuaweiDeviceRoute): HuaweiGesture
         hasModernPinchControls = route == HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3 ||
             route == HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5,
         hasWearDetection = route == HuaweiDeviceRoute.HUAWEI_FREEBUDS6I ||
-            route == HuaweiDeviceRoute.HUAWEI_FREEBUDS4E ||
+            route.isFreeBuds4Series ||
             route == HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3 ||
             route == HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5,
     )
@@ -1011,7 +1012,7 @@ private fun longPressTitleRes(route: HuaweiDeviceRoute, side: HuaweiGestureSide)
 }
 
 private fun HuaweiDeviceRoute.isHoldGestureRoute(): Boolean =
-    this == HuaweiDeviceRoute.HUAWEI_FREEBUDS4E || this == HuaweiDeviceRoute.HUAWEI_FREEARC
+    isFreeBuds4Series || this == HuaweiDeviceRoute.HUAWEI_FREEARC
 
 @StringRes
 private fun HuaweiTapAction.labelRes(): Int = when (this) {

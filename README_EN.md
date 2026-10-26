@@ -18,13 +18,16 @@
 
 HuaweiPods is an Xposed module for Xiaomi HyperOS. It integrates supported Huawei audio devices with the system headset popup, Super Island, Fusion Device Center, and Bluetooth detail page.
 
-Version 1.9.1 integrates the 19 models below, including FreeClip 2 Collector Edition, in one APK. This release adds FreeBuds 6, FreeClip 2 Collector Edition, and Android 14 / HyperOS 2 compatibility, alongside notification-name, persistent-island, and low-latency improvements.
+The current release integrates the 20 models below, including FreeClip 2 Collector Edition, in one APK. Version 1.9.2 adds FreeBuds 4 compatibility, pending testing on that model.
+
+Version 1.9.2 improves FreeClip 2 switch-state synchronization and miuix settings, corrects FreeBuds 7i spatial mode mapping, adds notification delivery confirmation with a bounded retry, and reduces redundant background refreshes. See the [release notes](https://github.com/Nshpiter/HuaweiPods/releases/tag/24-1.9.2) (Chinese).
 
 ## Supported models
 
 | Model | Integrated capabilities |
 | --- | --- |
 | HUAWEI FreeBuds 3 | Battery, ANC on/off, nine-position spatial ANC dial, double-tap gestures, and system UI integration |
+| HUAWEI FreeBuds 4 | Preliminary compatibility: separate identity and official color images, battery, ANC/off with Light/Balanced levels, double-tap/hold, wear detection and three sound presets; based on official configuration and shared 4E protocols, pending device testing ([scope](docs/FREEBUDS4_COMPATIBILITY.md), Chinese) |
 | HUAWEI FreeBuds 4E | Battery, ANC/off with Light/Balanced levels and readback, left/right double-tap and press-and-hold, wear detection, fixed swipe-volume guidance, three official sound presets, and official color images |
 | HUAWEI FreeBuds 5 | Battery, ANC/off readback, Smart/Light/Balanced ANC levels, wear detection, four official sound presets, high-quality audio and low-latency auto-apply; gesture settings remain pending |
 | HUAWEI FreeBuds 5i | Battery, transparency/ANC/off readback, Smart/Light/Balanced/Deep ANC levels, left/right double-tap, wear detection, four official sound presets, high-quality audio, low-latency auto-apply, and official color images; long-press and swipe settings remain pending |

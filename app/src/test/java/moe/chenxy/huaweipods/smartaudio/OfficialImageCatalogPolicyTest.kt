@@ -9,6 +9,7 @@ class OfficialImageCatalogPolicyTest {
     fun `maps only routes backed by verified official model ids`() {
         val expected = mapOf(
             HuaweiDeviceRoute.HUAWEI_FREEBUDS3 to "000027",
+            HuaweiDeviceRoute.HUAWEI_FREEBUDS4 to "000129",
             HuaweiDeviceRoute.HUAWEI_FREEBUDS4E to "000135",
             HuaweiDeviceRoute.HUAWEI_FREEBUDS5 to "000141",
             HuaweiDeviceRoute.HUAWEI_FREEBUDS5I to "000145",

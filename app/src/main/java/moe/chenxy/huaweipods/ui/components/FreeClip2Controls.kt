@@ -8,14 +8,9 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.widget.Toast
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -23,14 +18,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -52,8 +43,12 @@ import moe.chenxy.huaweipods.pods.HuaweiEqualizerState
 import moe.chenxy.huaweipods.pods.readHuaweiEqualizerCustomPresets
 import moe.chenxy.huaweipods.pods.encodeHuaweiDeviceRouteForBroadcast
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.HuaweiPodsAction
-import top.yukonga.miuix.kmp.basic.Checkbox
+import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.preference.ArrowPreference
+import top.yukonga.miuix.kmp.preference.RadioButtonPreference
+import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
@@ -88,6 +83,7 @@ fun FreeClip2Controls(address: String) {
         )
     }
     var equalizer by remember(address) { mutableStateOf<HuaweiEqualizerState?>(null) }
+    val settings = rememberFreeClip2BooleanSettings(address)
 
     FreeClip2AudioReadbackEffect(address) { mode, scene, effect, equalizerState ->
         mode?.let {
@@ -106,114 +102,86 @@ fun FreeClip2Controls(address: String) {
     }
 
     Column(modifier = Modifier.fillMaxWidth()) {
-        SectionTitle(R.string.freeclip2_spatial_audio)
-        EnumPreference(
-            title = stringResource(R.string.freeclip2_spatial_mode),
-            selected = spatialMode,
-            values = FreeClip2SpatialAudioMode.entries,
-            label = { mode -> stringResource(mode.labelRes()) },
-            onSelected = { mode, complete ->
-                context.setFreeClip2SpatialMode(address, mode) { success ->
-                    complete(success)
-                }
-            },
-        )
-
-        if (spatialMode != FreeClip2SpatialAudioMode.OFF) {
+        FreeClip2Section(R.string.freeclip2_spatial_audio) {
             EnumPreference(
-                title = stringResource(R.string.freeclip2_spatial_scene),
-                selected = spatialScene,
-                values = FreeClip2SpatialScene.entries,
-                label = { scene -> stringResource(scene.labelRes()) },
-                onSelected = { scene, complete ->
-                    context.setFreeClip2SpatialScene(address, scene) { success ->
+                title = stringResource(R.string.freeclip2_spatial_mode),
+                selected = spatialMode,
+                values = FreeClip2SpatialAudioMode.entries,
+                label = { mode -> stringResource(mode.labelRes()) },
+                onSelected = { mode, complete ->
+                    context.setFreeClip2SpatialMode(address, mode) { success ->
                         complete(success)
                     }
                 },
             )
-        }
-        SectionTitle(R.string.freeclip2_sound_effect)
-        EnumPreference(
-            title = stringResource(R.string.freeclip2_sound_effect_preset),
-            selected = soundEffect,
-            values = FreeClip2SoundEffect.selectableEntries,
-            label = { effect -> stringResource(effect.labelRes()) },
-            onSelected = { effect, complete ->
-                context.setFreeClip2SoundEffect(address, effect) { success ->
-                    complete(success)
-                }
-            },
-        )
-        HuaweiEqualizerPreference(
-            address = address,
-            route = HuaweiDeviceRoute.HUAWEI_FREECLIP2,
-            readback = equalizer,
-            requestOnMount = false,
-            editable = true,
-        )
-
-        SectionTitle(R.string.freeclip2_smart_features)
-        listOf(
-            FreeClip2BooleanFeature.WEAR_DETECTION to R.string.freeclip2_wear_detection,
-            FreeClip2BooleanFeature.DROP_REMINDER to R.string.freeclip2_drop_reminder,
-            FreeClip2BooleanFeature.ADAPTIVE_VOLUME to R.string.freeclip2_adaptive_volume,
-        ).forEach { (feature, title) ->
-            FeatureToggle(
-                titleRes = title,
-                initialValue = prefs.getBoolean(keyPrefix + feature.extraValue, false),
-                onChange = { enabled, complete ->
-                    context.setFreeClip2BooleanFeature(address, feature, enabled) { success ->
-                        if (success) prefs.edit().putBoolean(keyPrefix + feature.extraValue, enabled).apply()
-                        complete(success)
-                    }
-                },
-            )
-        }
-
-        FreeClip2DeviceSettingsControls(address)
-
-        SectionTitle(R.string.freeclip2_sound_and_connection)
-        listOf(
-            FreeClip2BooleanFeature.LOW_LATENCY to R.string.freeclip2_low_latency,
-            FreeClip2BooleanFeature.DUAL_DEVICE to R.string.freeclip2_dual_device,
-            FreeClip2BooleanFeature.CASE_PROMPT_SOUND to R.string.freeclip2_case_prompt_sound,
-        ).forEach { (feature, title) ->
-            val initialValue = if (feature == FreeClip2BooleanFeature.LOW_LATENCY) {
-                LowLatencyPrefs.desiredOrNull(
-                    prefs,
-                    address,
-                    HuaweiDeviceRoute.HUAWEI_FREECLIP2,
-                ) ?: false
-            } else {
-                prefs.getBoolean(keyPrefix + feature.extraValue, false)
-            }
-            FeatureToggle(
-                titleRes = title,
-                initialValue = initialValue,
-                onChange = { enabled, complete ->
-                    context.setFreeClip2BooleanFeature(address, feature, enabled) { success ->
-                        if (success) {
-                            val stored = if (feature == FreeClip2BooleanFeature.LOW_LATENCY) {
-                                LowLatencyPrefs.setDesired(
-                                    prefs = prefs,
-                                    service = HuaweiPodsApp.xposedService,
-                                    address = address,
-                                    route = HuaweiDeviceRoute.HUAWEI_FREECLIP2,
-                                    enabled = enabled,
-                                )
-                            } else {
-                                prefs.edit().putBoolean(keyPrefix + feature.extraValue, enabled).apply()
-                                true
-                            }
-                            complete(stored)
-                        } else {
-                            complete(false)
+            if (spatialMode != FreeClip2SpatialAudioMode.OFF) {
+                EnumPreference(
+                    title = stringResource(R.string.freeclip2_spatial_scene),
+                    selected = spatialScene,
+                    values = FreeClip2SpatialScene.entries,
+                    label = { scene -> stringResource(scene.labelRes()) },
+                    onSelected = { scene, complete ->
+                        context.setFreeClip2SpatialScene(address, scene) { success ->
+                            complete(success)
                         }
+                    },
+                )
+            }
+        }
+        FreeClip2Section(R.string.freeclip2_sound_effect) {
+            EnumPreference(
+                title = stringResource(R.string.freeclip2_sound_effect_preset),
+                selected = soundEffect,
+                values = FreeClip2SoundEffect.selectableEntries,
+                label = { effect -> stringResource(effect.labelRes()) },
+                onSelected = { effect, complete ->
+                    context.setFreeClip2SoundEffect(address, effect) { success ->
+                        complete(success)
                     }
                 },
             )
+            HuaweiEqualizerPreference(
+                address = address,
+                route = HuaweiDeviceRoute.HUAWEI_FREECLIP2,
+                readback = equalizer,
+                requestOnMount = false,
+                editable = true,
+            )
         }
 
+        FreeClip2SettingsGroups(settings)
+    }
+}
+
+@Composable
+internal fun FreeClip2SettingsGroups(settings: FreeClip2BooleanUiState) {
+    Column(Modifier.fillMaxWidth()) {
+        FreeClip2Section(R.string.freeclip2_smart_features) {
+            listOf(
+                FreeClip2BooleanFeature.WEAR_DETECTION to R.string.freeclip2_wear_detection,
+                FreeClip2BooleanFeature.DROP_REMINDER to R.string.freeclip2_drop_reminder,
+                FreeClip2BooleanFeature.ADAPTIVE_VOLUME to R.string.freeclip2_adaptive_volume,
+            ).forEach { (feature, title) ->
+                BooleanFeaturePreference(title, feature, settings)
+            }
+            FreeClip2DeviceSettingsControls(settings)
+        }
+
+        FreeClip2Section(R.string.freeclip2_sound_and_connection) {
+            listOf(
+                FreeClip2BooleanFeature.LOW_LATENCY to R.string.freeclip2_low_latency,
+                FreeClip2BooleanFeature.DUAL_DEVICE to R.string.freeclip2_dual_device,
+                FreeClip2BooleanFeature.CASE_PROMPT_SOUND to R.string.freeclip2_case_prompt_sound,
+            ).forEach { (feature, title) ->
+                BooleanFeaturePreference(title, feature, settings)
+            }
+            ArrowPreference(
+                title = stringResource(R.string.freeclip2_refresh_settings),
+                summary = stringResource(if (settings.reading) R.string.freeclip2_settings_loading else R.string.freeclip2_refresh_summary),
+                enabled = !settings.busy,
+                onClick = settings.refresh,
+            )
+        }
         Text(
             text = stringResource(R.string.freeclip2_state_hint),
             color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
@@ -223,171 +191,186 @@ fun FreeClip2Controls(address: String) {
     }
 }
 
-@Composable
-private fun FreeClip2DeviceSettingsControls(address: String) {
-    val context = LocalContext.current
-    val lifecycleOwner = LocalView.current.findViewTreeLifecycleOwner()
-    val device = remember(context, address) { context.freeClip2Device(address) }
-    var headState by remember(address) { mutableStateOf<FreeClip2HeadMotionState?>(null) }
-    var noisyVolume by remember(address) { mutableStateOf<Boolean?>(null) }
-    var headPending by remember(address) { mutableStateOf(false) }
-    var volumePending by remember(address) { mutableStateOf(false) }
-    var headRevision by remember(address) { mutableStateOf(0) }
-    var volumeRevision by remember(address) { mutableStateOf(0) }
-    val refresh by rememberUpdatedState {
-        device?.let {
-            if (!headPending) {
-                val revision = ++headRevision
-                HuaweiFreeClip2Controller.requestHeadMotionState(context, it) { state ->
-                    if (revision == headRevision) headState = state
-                }
-            }
-            if (!volumePending) {
-                val revision = ++volumeRevision
-                HuaweiFreeClip2Controller.requestNoisyVolumeState(context, it) { state ->
-                    if (revision == volumeRevision) noisyVolume = state
-                }
-            }
-        }
-    }
-    DisposableEffect(address, lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) refresh()
-        }
-        lifecycleOwner?.lifecycle?.addObserver(observer)
-        if (lifecycleOwner == null || !lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) refresh()
-        onDispose {
-            headRevision++
-            volumeRevision++
-            lifecycleOwner?.lifecycle?.removeObserver(observer)
-        }
+internal class FreeClip2BooleanUiState {
+    var values by mutableStateOf<Map<FreeClip2BooleanFeature, Boolean?>>(emptyMap())
+    var head by mutableStateOf<FreeClip2HeadMotionState?>(null)
+    var reading by mutableStateOf(false)
+    var writing by mutableStateOf(false)
+    val busy get() = reading || writing
+    var revision = 0
+    var active = true
+    var refresh: () -> Unit = {}
+    var change: (FreeClip2BooleanFeature, Boolean, (Boolean) -> Unit) -> Unit = { _, _, done -> done(false) }
+    var changeHead: (FreeClip2HeadMotionGesture, FreeClip2HeadMotionAction, (Boolean) -> Unit) -> Unit = { _, _, done -> done(false) }
+
+    fun finishWrite(ticket: Int, success: Boolean, done: (Boolean) -> Unit) {
+        writing = false
+        done(success)
+        if (active && ticket != revision) refresh()
     }
 
-    FeatureToggle(
-        titleRes = R.string.freeclip2_head_motion,
-        initialValue = headState?.enabled,
-        available = headState != null && !headPending,
-        onChange = { enabled, complete ->
-            if (device == null) complete(false)
-            else {
-                headRevision++
-                headPending = true
-                HuaweiFreeClip2Controller.setHeadMotionEnabled(
-                    context, device, enabled, onState = { headState = it },
-                    onComplete = { headPending = false; complete(it) },
-                )
-            }
-        },
-    )
-    if (headState?.enabled == true) {
-        FreeClip2HeadMotionGesture.entries.forEach { gesture ->
-            EnumPreference(
-                title = stringResource(if (gesture == FreeClip2HeadMotionGesture.NOD) R.string.freeclip2_head_nod else R.string.freeclip2_head_shake),
-                selected = headState?.action(gesture),
-                values = FreeClip2HeadMotionAction.entries,
-                label = { stringResource(it.labelRes()) },
-                available = !headPending,
-                onSelected = { action, complete ->
-                    if (device == null) complete(false)
-                    else {
-                        headRevision++
-                        headPending = true
-                        HuaweiFreeClip2Controller.setHeadMotionAction(
-                            context, device, gesture, action, onState = { headState = it },
-                            onComplete = { headPending = false; complete(it) },
-                        )
-                    }
-                },
-            )
-        }
-    }
-    FeatureToggle(
-        titleRes = R.string.freeclip2_noisy_volume_boost,
-        initialValue = noisyVolume,
-        available = noisyVolume != null && !volumePending,
-        onChange = { enabled, complete ->
-            if (device == null) complete(false)
-            else {
-                volumeRevision++
-                volumePending = true
-                HuaweiFreeClip2Controller.setNoisyVolumeEnabled(
-                    context, device, enabled, onState = { noisyVolume = it },
-                    onComplete = { volumePending = false; complete(it) },
-                )
-            }
-        },
-    )
-    Text(
-        stringResource(R.string.freeclip2_noisy_volume_hint),
-        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-        style = MiuixTheme.textStyles.body2,
-        modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp),
-    )
-    if (headState == null || noisyVolume == null) {
-        Text(
-            stringResource(R.string.freeclip2_settings_retry),
-            color = MiuixTheme.colorScheme.primary,
-            style = MiuixTheme.textStyles.body2,
-            modifier = Modifier.clickable { refresh() }.padding(horizontal = 24.dp, vertical = 12.dp),
-        )
+    fun updateHead(value: FreeClip2HeadMotionState?) {
+        head = value
+        values = values + (FreeClip2BooleanFeature.HEAD_MOTION_CONTROL to value?.enabled)
     }
 }
 
 @Composable
-private fun SectionTitle(titleRes: Int) {
-    Text(
-        text = stringResource(titleRes),
-        color = MiuixTheme.colorScheme.primary,
-        style = MiuixTheme.textStyles.headline1,
-        modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 16.dp, bottom = 4.dp),
+private fun rememberFreeClip2BooleanSettings(address: String): FreeClip2BooleanUiState {
+    val context = LocalContext.current
+    val lifecycleOwner = LocalView.current.findViewTreeLifecycleOwner()
+    val device = remember(context, address) { context.freeClip2Device(address) }
+    val state = remember(address) { FreeClip2BooleanUiState() }
+    state.refresh = {
+        if (state.active && !state.busy && device != null) {
+            val revision = ++state.revision
+            state.reading = true
+            state.values = emptyMap()
+            state.head = null
+            HuaweiFreeClip2Controller.requestBooleanSettings(context, device) { values, head ->
+                if (state.active && revision == state.revision) {
+                    state.values = values
+                    state.head = head
+                    state.reading = false
+                }
+            }
+        }
+    }
+    state.change = { feature, enabled, done ->
+        if (!state.active || state.busy || device == null) done(false)
+        else {
+            val revision = ++state.revision
+            state.writing = true
+            val complete: (Boolean) -> Unit = { success ->
+                // 自动应用策略只由用户写入更新，读取耳机不会覆盖策略。
+                val stored = if (success && feature == FreeClip2BooleanFeature.LOW_LATENCY) {
+                    LowLatencyPrefs.setDesired(
+                        context.getSharedPreferences(ConfigManager.PREFS_NAME, Context.MODE_PRIVATE),
+                        HuaweiPodsApp.xposedService, address, HuaweiDeviceRoute.HUAWEI_FREECLIP2, enabled,
+                    )
+                } else success
+                state.finishWrite(revision, stored, done)
+            }
+            if (feature == FreeClip2BooleanFeature.HEAD_MOTION_CONTROL) {
+                HuaweiFreeClip2Controller.setHeadMotionEnabled(context, device, enabled,
+                    onState = { if (state.active && revision == state.revision) state.updateHead(it) },
+                    onComplete = complete,
+                )
+            } else HuaweiFreeClip2Controller.setBooleanFeatureVerified(
+                context, device, feature, enabled,
+                onState = { actual ->
+                    if (state.active && revision == state.revision) state.values = state.values + (feature to actual)
+                },
+                onComplete = complete,
+            )
+        }
+    }
+    state.changeHead = { gesture, action, done ->
+        if (!state.active || state.busy || device == null) done(false)
+        else {
+            val revision = ++state.revision
+            state.writing = true
+            HuaweiFreeClip2Controller.setHeadMotionAction(context, device, gesture, action,
+                onState = { if (state.active && revision == state.revision) state.updateHead(it) },
+                onComplete = { state.finishWrite(revision, it, done) },
+            )
+        }
+    }
+    DisposableEffect(state, lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> { state.active = true; state.refresh() }
+                Lifecycle.Event.ON_PAUSE -> {
+                    state.active = false
+                    state.revision++
+                    state.reading = false
+                }
+                else -> Unit
+            }
+        }
+        state.active = lifecycleOwner == null || lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+        lifecycleOwner?.lifecycle?.addObserver(observer)
+        if (state.active) state.refresh()
+        onDispose {
+            state.active = false
+            state.revision++
+            state.reading = false
+            lifecycleOwner?.lifecycle?.removeObserver(observer)
+        }
+    }
+    return state
+}
+
+@Composable
+private fun BooleanFeaturePreference(
+    title: Int, feature: FreeClip2BooleanFeature, state: FreeClip2BooleanUiState, summary: String? = null,
+) {
+    FeatureToggle(
+        titleRes = title,
+        value = state.values[feature],
+        available = !state.busy,
+        summary = when {
+            state.reading -> stringResource(R.string.freeclip2_settings_loading)
+            state.values[feature] == null -> stringResource(R.string.freeclip2_settings_unknown)
+            else -> summary
+        },
+        onChange = { enabled, done -> state.change(feature, enabled, done) },
     )
+}
+
+@Composable
+private fun FreeClip2DeviceSettingsControls(settings: FreeClip2BooleanUiState) {
+    BooleanFeaturePreference(R.string.freeclip2_head_motion, FreeClip2BooleanFeature.HEAD_MOTION_CONTROL, settings)
+    if (settings.head?.enabled == true) {
+        FreeClip2HeadMotionGesture.entries.forEach { gesture ->
+            EnumPreference(
+                title = stringResource(if (gesture == FreeClip2HeadMotionGesture.NOD) R.string.freeclip2_head_nod else R.string.freeclip2_head_shake),
+                selected = settings.head?.action(gesture),
+                values = FreeClip2HeadMotionAction.entries,
+                label = { stringResource(it.labelRes()) },
+                available = !settings.busy,
+                onSelected = { action, complete ->
+                    settings.changeHead(gesture, action, complete)
+                },
+            )
+        }
+    }
+    BooleanFeaturePreference(
+        title = R.string.freeclip2_noisy_volume_boost,
+        feature = FreeClip2BooleanFeature.NOISY_VOLUME_BOOST,
+        state = settings,
+        summary = stringResource(R.string.freeclip2_noisy_volume_hint),
+    )
+}
+
+@Composable
+private fun FreeClip2Section(titleRes: Int, content: @Composable () -> Unit) {
+    SmallTitle(text = stringResource(titleRes))
+    Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(bottom = 12.dp)) {
+        content()
+    }
 }
 
 @Composable
 private fun FeatureToggle(
     titleRes: Int,
-    initialValue: Boolean?,
+    value: Boolean?,
     available: Boolean = true,
+    summary: String? = null,
     onChange: (Boolean, (Boolean) -> Unit) -> Unit,
 ) {
     val context = LocalContext.current
-    var enabled by remember(initialValue) { mutableStateOf(initialValue ?: false) }
-    var pending by remember { mutableStateOf(false) }
-    val toggle = {
-        if (available && !pending) {
-            val target = !enabled
-            pending = true
+    SwitchPreference(
+        title = stringResource(titleRes),
+        summary = if (value == null) summary ?: stringResource(R.string.freeclip2_settings_unknown) else summary,
+        checked = value == true,
+        enabled = available && value != null,
+        onCheckedChange = { target ->
             onChange(target) { success ->
-                pending = false
-                if (success) {
-                    enabled = target
-                } else {
-                    Toast.makeText(context, R.string.connect_failed, Toast.LENGTH_SHORT).show()
-                }
+                if (!success) Toast.makeText(context, R.string.freeclip2_write_unconfirmed, Toast.LENGTH_SHORT).show()
             }
-        }
-    }
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .clickable(enabled = available && !pending, role = Role.Switch, onClick = toggle)
-            .padding(horizontal = 24.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = stringResource(titleRes),
-            color = MiuixTheme.colorScheme.onSurface,
-            style = MiuixTheme.textStyles.headline1,
-            modifier = Modifier.weight(1f),
-        )
-        Spacer(Modifier.width(12.dp))
-        Checkbox(
-            state = if (initialValue == null) ToggleableState.Indeterminate else ToggleableState(enabled),
-            enabled = available && !pending,
-            onClick = toggle,
-        )
-    }
+        },
+    )
 }
 
 @Composable
@@ -402,20 +385,13 @@ private fun <T> EnumPreference(
     val context = LocalContext.current
     var showDialog by remember { mutableStateOf(false) }
     var pending by remember { mutableStateOf(false) }
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .clickable(enabled = available && !pending, role = Role.Button) { showDialog = true }
-            .padding(horizontal = 24.dp, vertical = 14.dp),
-    ) {
-        Text(title, color = MiuixTheme.colorScheme.onSurface, style = MiuixTheme.textStyles.headline1)
-        Text(
-            selected?.let { label(it) }.orEmpty(),
-            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-            style = MiuixTheme.textStyles.body2,
-        )
-    }
+    ArrowPreference(
+        title = title,
+        summary = selected?.let { label(it) } ?: stringResource(R.string.freeclip2_settings_unknown),
+        enabled = available && !pending,
+        holdDownState = showDialog,
+        onClick = { showDialog = true },
+    )
     OverlayDialog(
         title = title,
         summary = selected?.let { label(it) }.orEmpty(),
@@ -425,30 +401,25 @@ private fun <T> EnumPreference(
         Column(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
             values.forEach { value ->
                 val isSelected = value == selected
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .clickable(enabled = available && !pending, role = Role.RadioButton) {
-                            if (isSelected) {
+                RadioButtonPreference(
+                    title = label(value),
+                    selected = isSelected,
+                    enabled = available && !pending,
+                    onClick = {
+                        if (isSelected) {
+                            showDialog = false
+                        } else {
+                            pending = true
+                            onSelected(value) { success ->
+                                pending = false
                                 showDialog = false
-                            } else {
-                                pending = true
-                                onSelected(value) { success ->
-                                    pending = false
-                                    showDialog = false
-                                    if (!success) {
-                                        Toast.makeText(context, R.string.connect_failed, Toast.LENGTH_SHORT).show()
-                                    }
+                                if (!success) {
+                                    Toast.makeText(context, R.string.connect_failed, Toast.LENGTH_SHORT).show()
                                 }
                             }
                         }
-                        .padding(horizontal = 12.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(label(value), modifier = Modifier.weight(1f), style = MiuixTheme.textStyles.headline1)
-                    Checkbox(state = ToggleableState(isSelected), enabled = available && !pending, onClick = null)
-                }
+                    },
+                )
             }
         }
     }
@@ -460,16 +431,6 @@ private fun Context.freeClip2Device(address: String) =
         ?.getSystemService(BluetoothManager::class.java)
         ?.adapter
         ?.getRemoteDevice(address)
-
-private fun Context.setFreeClip2BooleanFeature(
-    address: String,
-    feature: FreeClip2BooleanFeature,
-    enabled: Boolean,
-    complete: (Boolean) -> Unit,
-) {
-    val device = freeClip2Device(address) ?: return complete(false)
-    HuaweiFreeClip2Controller.setBooleanFeature(this, device, feature, enabled, complete)
-}
 
 private fun Context.setFreeClip2SpatialMode(
     address: String,

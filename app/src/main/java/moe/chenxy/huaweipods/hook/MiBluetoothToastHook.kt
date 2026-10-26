@@ -1,6 +1,7 @@
 package moe.chenxy.huaweipods.hook
 
 import android.annotation.SuppressLint
+import android.app.Activity
 import android.app.Application
 import android.app.Notification
 import android.app.NotificationChannel
@@ -118,7 +119,7 @@ object MiBluetoothToastHook : HookContext() {
         }
 
         @SuppressLint("WrongConstant")
-        fun createPodsNotification(bluetoothDevice: BluetoothDevice?, context: Context, batteryParams: BatteryParams) {
+        fun createPodsNotification(bluetoothDevice: BluetoothDevice?, context: Context, batteryParams: BatteryParams): Boolean {
             val miheadset_notification_Box = context.resources.getIdentifier("miheadset_notification_Box", "string", "com.xiaomi.bluetooth")
             val miheadset_notification_LeftEar = context.resources.getIdentifier("miheadset_notification_LeftEar", "string", "com.xiaomi.bluetooth")
             val miheadset_notification_RightEar = context.resources.getIdentifier("miheadset_notification_RightEar", "string", "com.xiaomi.bluetooth")
@@ -126,12 +127,12 @@ object MiBluetoothToastHook : HookContext() {
             val system_notification_accent_color = context.resources.getIdentifier("system_notification_accent_color", "color", "android")
             if (bluetoothDevice == null) {
                 Log.e("HuaweiPods", "createPodsNotification: btDevice null")
-                return
+                return false
             }
             try {
                 val address: String = bluetoothDevice.address
                 val notificationIdentity = headsetNotificationIntentIdentity(address)
-                if (!ModuleResourceResolver.isCurrentModuleBuild(context)) return
+                if (!ModuleResourceResolver.isCurrentModuleBuild(context)) return false
                 val displayName = bluetoothDevice.notificationDisplayName()
                 val deviceName = runCatching { bluetoothDevice.name }.getOrNull().orEmpty()
                 val keepIsland = NotificationPresentationPolicy.shouldKeepBatteryIsland(
@@ -157,11 +158,11 @@ object MiBluetoothToastHook : HookContext() {
                 ) {
                     cancelNotificationForAddress(address, context)
                     Log.d("HuaweiPods", "skip persistent notification: disabled")
-                    return
+                    return true
                 }
                 val moduleResources = ModuleResourceResolver.resources(context) ?: run {
                     Log.w("HuaweiPods", "skip notification: module resources unavailable")
-                    return
+                    return false
                 }
                 val deviceRoute = DeviceRoutePrefs.resolve(prefs, address, deviceName)
                 val offerAncAction = shouldOfferNotificationAncAction(deviceRoute)
@@ -247,7 +248,7 @@ object MiBluetoothToastHook : HookContext() {
                     ?: BitmapFactory.decodeResource(moduleResources, R.drawable.img_box)
                 if (headsetBitmap == null) {
                     Log.e("HuaweiPods", "createPodsNotification: headset bitmap null")
-                    return
+                    return false
                 }
                 val headsetIcon = Icon.createWithBitmap(headsetBitmap)
                 val pendingIntent = PendingIntent.getActivity(
@@ -364,8 +365,11 @@ object MiBluetoothToastHook : HookContext() {
                 if (keepIsland && attachOfficialIsland) {
                     schedulePersistentIslandRefresh(context, bluetoothDevice)
                 }
+                Log.d("HuaweiPods", "Focus notification posted device=$address")
+                return true
             } catch (e: Exception) {
                 Log.e("HuaweiPods", "Failed to create Pod Notification", e)
+                return false
             }
         }
 
@@ -463,7 +467,8 @@ object MiBluetoothToastHook : HookContext() {
                                         BatteryParams::class.java,
                                     ) ?: return@runCatching
                                     val device = intent.getParcelableExtra("device", BluetoothDevice::class.java)
-                                    createPodsNotification(device, context, batteryParams)
+                                    val handled = createPodsNotification(device, context, batteryParams)
+                                    if (isOrderedBroadcast && handled) resultCode = Activity.RESULT_OK
                                 }
                                 HuaweiPodsAction.ACTION_CANCEL_PODS_NOTIFICATION -> {
                                     intent.getParcelableExtra("device", BluetoothDevice::class.java)

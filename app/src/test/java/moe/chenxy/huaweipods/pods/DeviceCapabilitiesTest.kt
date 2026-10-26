@@ -178,6 +178,7 @@ class DeviceCapabilitiesTest {
     fun `broadcast route codec uses stable values and round trips every enabled route`() {
         val expectedValues = linkedMapOf(
             HuaweiDeviceRoute.HUAWEI_FREEBUDS3 to "HUAWEI_FREEBUDS3",
+            HuaweiDeviceRoute.HUAWEI_FREEBUDS4 to "HUAWEI_FREEBUDS4",
             HuaweiDeviceRoute.HUAWEI_FREEBUDS4E to "HUAWEI_FREEBUDS4E",
             HuaweiDeviceRoute.HUAWEI_FREEBUDS5 to "HUAWEI_FREEBUDS5",
             HuaweiDeviceRoute.HUAWEI_FREEBUDS5I to "HUAWEI_FREEBUDS5I",

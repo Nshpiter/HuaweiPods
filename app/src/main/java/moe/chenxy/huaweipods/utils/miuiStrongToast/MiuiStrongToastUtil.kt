@@ -2,7 +2,9 @@ package moe.chenxy.huaweipods.utils.miuiStrongToast
 
 import StringToastBundle
 import android.annotation.SuppressLint
+import android.app.Activity
 import android.bluetooth.BluetoothDevice
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
@@ -116,12 +118,39 @@ object MiuiStrongToastUtil {
         context: Context,
         batteryParams: BatteryParams,
         device: BluetoothDevice,
+        retryOnFailure: Boolean = true,
     ) {
         val intent = Intent(HuaweiPodsAction.ACTION_UPDATE_PODS_NOTIFICATION)
         intent.putExtra("batteryParams", batteryParams)
         intent.putExtra("device", device)
         intent.`package` = "com.xiaomi.bluetooth"
-        context.sendBroadcast(intent)
+        intent.addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
+        context.sendOrderedBroadcast(
+            intent,
+            null,
+            object : BroadcastReceiver() {
+                override fun onReceive(receiverContext: Context?, receivedIntent: Intent?) {
+                    if (resultCode == Activity.RESULT_OK) return
+                    Log.w("HuaweiPods", "Notification delivery unconfirmed device=${device.address} retry=$retryOnFailure")
+                    if (!retryOnFailure) return
+                    Handler(Looper.getMainLooper()).postDelayed({
+                        // 重新请求当前会话快照，不重放首次发送时的旧电量。
+                        context.sendBroadcast(
+                            Intent(HuaweiPodsAction.ACTION_REFRESH_STATUS).apply {
+                                setPackage("com.android.bluetooth")
+                                putExtra(HuaweiPodsAction.EXTRA_RESTORE_NOTIFICATION, true)
+                                putExtra("address", device.address)
+                                addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
+                            },
+                        )
+                    }, 750L)
+                }
+            },
+            Handler(Looper.getMainLooper()),
+            Activity.RESULT_CANCELED,
+            null,
+            null,
+        )
     }
 
     fun cancelPodsNotificationByMiuiBt(

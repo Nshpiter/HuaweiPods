@@ -15,7 +15,7 @@ import moe.chenxy.huaweipods.config.DeviceRoutePrefs
  * Shared wear-detection protocol used by the models for which a real capture proves 2B10/2B11.
  *
  * Keeping the protocol here avoids copying the same packets into each model-specific screen. A
- * route is added only after its capture confirms both the setter and the matching state query.
+ * Routes require matching setter/query evidence; FreeBuds 4 also uses the official ZA09 service.
  */
 object HuaweiWearDetectionController {
     private val mainHandler by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
@@ -24,6 +24,7 @@ object HuaweiWearDetectionController {
     private val generation = AtomicLong(0L)
     private val pendingCallbacks = ConcurrentHashMap.newKeySet<Runnable>()
     private val supportedRoutes = setOf(
+        HuaweiDeviceRoute.HUAWEI_FREEBUDS4,
         HuaweiDeviceRoute.HUAWEI_FREEBUDS5,
         HuaweiDeviceRoute.HUAWEI_FREEBUDS5I,
         HuaweiDeviceRoute.HUAWEI_FREEBUDS4E,

@@ -43,5 +43,10 @@
     <string name="freeclip2_low_latency">Low latency mode</string>
     <string name="freeclip2_dual_device">Dual-device connection</string>
     <string name="freeclip2_case_prompt_sound">Case prompt sound</string>
-    <string name="freeclip2_state_hint">Low latency is reapplied after every connection when enabled. Other unreadable switches still reflect the last value set by this module.</string>
+    <string name="freeclip2_state_hint">Switches show device readback and refresh when you open or return to this page. Low latency is reapplied on reconnect after it is successfully enabled here.</string>
+    <string name="freeclip2_refresh_settings">Refresh headset state</string>
+    <string name="freeclip2_refresh_summary">Refreshes when returning from Smart Audio; tap to read again</string>
+    <string name="freeclip2_settings_loading">Reading headset state…</string>
+    <string name="freeclip2_settings_unknown">Headset state unavailable. Refresh to retry.</string>
+    <string name="freeclip2_write_unconfirmed">Could not confirm the setting. Refresh headset state and retry.</string>
 </resources>

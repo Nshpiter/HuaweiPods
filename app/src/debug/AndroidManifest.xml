@@ -11,6 +11,10 @@
         tools:replace="android:label">
 
         <activity
+            android:name=".ui.FreeClip2SettingsPreviewActivity"
+            android:exported="true" />
+
+        <activity
             android:name=".debugcapture.DebugCaptureActivity"
             android:exported="true"
             android:launchMode="singleTask" />

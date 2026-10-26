@@ -243,17 +243,22 @@ object HuaweiHfpController {
             when (HuaweiPodsAction.canonical(receivedIntent.action)) {
                 HuaweiPodsAction.ACTION_PODS_UI_INIT,
                 HuaweiPodsAction.ACTION_REFRESH_STATUS -> {
+                    if (receivedIntent.getBooleanExtra(HuaweiPodsAction.EXTRA_RESTORE_NOTIFICATION, false)) {
+                        synchronized(sessionStateLock) {
+                            val currentDevice = device ?: return
+                            val address = receivedIntent.getStringExtra("address")
+                            if (!address.isNullOrBlank() &&
+                                !address.equals(currentDevice.address, ignoreCase = true)
+                            ) return
+                            restoreCurrentNotification()
+                        }
+                        if (currentBattery == null) requestPrivateBattery()
+                        return
+                    }
                     synchronized(sessionStateLock) {
                         sendConnectionState("connected")
                         sendConnected(force = true)
                         currentBattery?.let { sendBattery(it, cached = currentBatteryIsCached) }
-                        if (receivedIntent.getBooleanExtra(
-                                HuaweiPodsAction.EXTRA_RESTORE_NOTIFICATION,
-                                false,
-                            )
-                        ) {
-                            restoreCurrentNotification()
-                        }
                     }
                     requestOfficialImageIdentity()
                     requestPrivateBattery()
@@ -1953,6 +1958,7 @@ object HuaweiHfpController {
             currentContext,
             battery,
             currentDevice,
+            retryOnFailure = false,
         )
     }
 

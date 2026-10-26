@@ -72,6 +72,7 @@ import moe.chenxy.huaweipods.utils.miuiStrongToast.data.BatteryParams
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Text
 import moe.chenxy.huaweipods.pods.HuaweiDeviceRoute
+import moe.chenxy.huaweipods.pods.isFreeBuds4Series
 import moe.chenxy.huaweipods.pods.hasChargingCase
 import moe.chenxy.huaweipods.pods.isSupported
 import moe.chenxy.huaweipods.pods.supportsAnc
@@ -329,11 +330,7 @@ private fun LazyListScope.podControlItems(
 
     if (deviceRoute == HuaweiDeviceRoute.HUAWEI_FREECLIP2) {
         item {
-            Card(
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
-            ) {
-                FreeClip2Controls(address = connectedDeviceAddress)
-            }
+            FreeClip2Controls(address = connectedDeviceAddress)
         }
     }
 
@@ -398,12 +395,12 @@ private fun LazyListScope.podControlItems(
         }
     }
 
-    if (deviceRoute == HuaweiDeviceRoute.HUAWEI_FREEBUDS4E) {
+    if (deviceRoute.isFreeBuds4Series) {
         item {
             Card(
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
             ) {
-                FreeBuds4eControls(address = connectedDeviceAddress)
+                FreeBuds4eControls(address = connectedDeviceAddress, route = deviceRoute)
             }
         }
     }

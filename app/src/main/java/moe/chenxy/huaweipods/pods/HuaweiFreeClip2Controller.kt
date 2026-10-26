@@ -15,6 +15,76 @@ object HuaweiFreeClip2Controller {
     private val HEAD_MOTION_QUERY = hex("5A0006002BB401010B289B")
     private val NOISY_VOLUME_QUERY = hex("5A0005002B8801009182")
 
+    // 2026-07-29 FreeClip 2 抓包同时包含这些查询与状态返回；只复用相同字段的编解码。
+    private val booleanReadbackCodecs = linkedMapOf(
+        FreeClip2BooleanFeature.WEAR_DETECTION to FreeBuds7Setting.WEAR_DETECTION,
+        FreeClip2BooleanFeature.DROP_REMINDER to FreeBuds7Setting.DROP_REMINDER,
+        FreeClip2BooleanFeature.ADAPTIVE_VOLUME to FreeBuds7Setting.ADAPTIVE_VOLUME,
+        FreeClip2BooleanFeature.LOW_LATENCY to FreeBuds7Setting.LOW_LATENCY,
+        FreeClip2BooleanFeature.DUAL_DEVICE to FreeBuds7Setting.AUTO_SWITCH,
+        FreeClip2BooleanFeature.CASE_PROMPT_SOUND to FreeBuds7Setting.CASE_SOUND,
+    )
+
+    internal fun booleanSettingsQueryPacket(): ByteArray =
+        booleanReadbackCodecs.values.fold(byteArrayOf()) { bytes, codec -> bytes + codec.query() } +
+            HEAD_MOTION_QUERY + NOISY_VOLUME_QUERY
+
+    internal fun parseBooleanSettings(stream: ByteArray): Map<FreeClip2BooleanFeature, Boolean?> =
+        booleanReadbackCodecs.mapValues { (_, codec) -> codec.parse(stream) } + mapOf(
+            FreeClip2BooleanFeature.HEAD_MOTION_CONTROL to parseHeadMotionState(stream)?.enabled,
+            FreeClip2BooleanFeature.NOISY_VOLUME_BOOST to parseNoisyVolumeState(stream),
+        )
+
+    fun requestBooleanSettings(
+        context: Context, device: BluetoothDevice,
+        onState: (Map<FreeClip2BooleanFeature, Boolean?>, FreeClip2HeadMotionState?) -> Unit,
+    ) {
+        var delivered = false
+        fun deliver(bytes: ByteArray) {
+            if (delivered) return
+            delivered = true
+            onState(parseBooleanSettings(bytes), parseHeadMotionState(bytes))
+        }
+        HuaweiL2capAncController.requestRawPacketOnce(
+            context, device, HuaweiDeviceRoute.HUAWEI_FREECLIP2, booleanSettingsQueryPacket(),
+            description = "freeclip2 boolean-settings", responseWindowMs = 1_500L,
+            responseComplete = { parseBooleanSettings(it).values.all { value -> value != null } },
+            onComplete = { if (!it) deliver(byteArrayOf()) }, onResponse = ::deliver,
+        )
+    }
+
+    /** UI 以耳机回读为准；通用 ACK 和本地期望值均不能证明当前开关状态。 */
+    fun setBooleanFeatureVerified(
+        context: Context, device: BluetoothDevice, feature: FreeClip2BooleanFeature, enabled: Boolean,
+        onState: (Boolean?) -> Unit, onComplete: (Boolean) -> Unit,
+    ) {
+        if (feature == FreeClip2BooleanFeature.NOISY_VOLUME_BOOST) {
+            setNoisyVolumeEnabled(context, device, enabled, onState, onComplete)
+            return
+        }
+        val codec = booleanReadbackCodecs[feature] ?: run { onComplete(false); return }
+        if (feature == FreeClip2BooleanFeature.LOW_LATENCY) {
+            // 保留蓝牙宿主写入，避免恢复 App 与宿主争抢连接的旧问题。
+            HuaweiLowLatencyController.setEnabled(context, device, HuaweiDeviceRoute.HUAWEI_FREECLIP2, enabled) { sent ->
+                if (!sent) {
+                    onComplete(false)
+                } else {
+                    requestSetting(context, device, codec.query(), codec::parse) { state ->
+                        fun finish(actual: Boolean?) {
+                            onState(actual)
+                            onComplete(actual == enabled)
+                        }
+                        if (state == enabled) finish(state)
+                        else requestSetting(context, device, codec.query(), codec::parse, ::finish)
+                    }
+                }
+            }
+        } else {
+            writeSetting(context, device, feature.packet(enabled), codec.query(), codec::parse,
+                { it == enabled }, onState, onComplete)
+        }
+    }
+
     fun requestHeadMotionState(context: Context, device: BluetoothDevice, onState: (FreeClip2HeadMotionState?) -> Unit) =
         requestSetting(context, device, HEAD_MOTION_QUERY, ::parseHeadMotionState, onState)
 
@@ -415,8 +485,7 @@ data class FreeClip2HeadMotionState(
 /**
  * FreeClip 2 耳机 AAM 空间音频协议：0=关闭、1=头部跟踪、2=固定。
  *
- * 该顺序同时由官方 API 和真机实际效果确认。FreeBuds 7i 的同类命令顺序不同，
- * 必须由它自己的控制器转换，不能再共用这里的 wire value。
+ * 该顺序同时由官方 API 和真机实际效果确认。各型号控制器负责对应的协议转换。
  */
 enum class FreeClip2SpatialAudioMode(
     val extraValue: String,

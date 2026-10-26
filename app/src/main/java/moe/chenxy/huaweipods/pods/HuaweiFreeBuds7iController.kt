@@ -25,8 +25,8 @@ object HuaweiFreeBuds7iController {
     private val DUAL_DEVICE_QUERY = hex("5A0008002B3101000D0100AEEE")
     private val SPATIAL_AUDIO_MODE_PACKETS = mapOf(
         FreeClip2SpatialAudioMode.OFF to hex("5A0009002BB401011802010060ED"),
-        FreeClip2SpatialAudioMode.FIXED to hex("5A0009002BB401011802010170CC"),
-        FreeClip2SpatialAudioMode.HEAD_TRACKING to hex("5A0009002BB401011802010240AF"),
+        FreeClip2SpatialAudioMode.FIXED to hex("5A0009002BB401011802010240AF"),
+        FreeClip2SpatialAudioMode.HEAD_TRACKING to hex("5A0009002BB401011802010170CC"),
     )
 
     fun setBooleanFeature(
@@ -158,7 +158,7 @@ object HuaweiFreeBuds7iController {
 
     fun dualDeviceQueryPacket(): ByteArray = DUAL_DEVICE_QUERY.copyOf()
 
-    /** FreeBuds 7i 抓包确认使用 0=关闭、1=固定、2=头部跟踪。 */
+    /** 依据 7i 用户实际切换反馈校正：0=关闭、1=头部跟踪、2=固定。 */
     internal fun spatialAudioModePacket(mode: FreeClip2SpatialAudioMode): ByteArray =
         requireNotNull(SPATIAL_AUDIO_MODE_PACKETS[mode]).copyOf()
 
@@ -166,8 +166,8 @@ object HuaweiFreeBuds7iController {
         HuaweiFreeClip2Controller.parseSpatialAudioState(stream) { value ->
             when (value) {
                 0 -> FreeClip2SpatialAudioMode.OFF
-                1 -> FreeClip2SpatialAudioMode.FIXED
-                2 -> FreeClip2SpatialAudioMode.HEAD_TRACKING
+                1 -> FreeClip2SpatialAudioMode.HEAD_TRACKING
+                2 -> FreeClip2SpatialAudioMode.FIXED
                 else -> null
             }
         }

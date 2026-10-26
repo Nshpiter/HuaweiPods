@@ -56,6 +56,7 @@ internal val HuaweiDeviceRoute.ancLevelOptions: List<HuaweiAncLevelOption>
         HuaweiDeviceRoute.HUAWEI_FREEBUDS6,
         HuaweiDeviceRoute.HUAWEI_FREEBUDS7,
         -> freeBuds5AncOptions
+        HuaweiDeviceRoute.HUAWEI_FREEBUDS4,
         HuaweiDeviceRoute.HUAWEI_FREEBUDS4E -> freeBuds4eAncOptions
         HuaweiDeviceRoute.HUAWEI_FREEBUDS_SE4_ANC -> freeBudsSe4AncOptions
         HuaweiDeviceRoute.HUAWEI_FREEBUDS5I,

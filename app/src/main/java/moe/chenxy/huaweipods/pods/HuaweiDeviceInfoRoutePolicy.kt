@@ -1,8 +1,10 @@
 package moe.chenxy.huaweipods.pods
 
-/** 仅收录已有实机 DeviceInfo 帧证明的 modelId；未知机型绝不靠名称或默认配色猜测。 */
+/** 收录实机 DeviceInfo 或官方产品配置确认的 modelId；未知机型不猜测配色或身份。 */
 internal object HuaweiDeviceInfoRoutePolicy {
     private val routeByModelId = mapOf(
+        // 官方 000129.json：Hero / ZA09 / HUAWEI FreeBuds 4，尚待本机型抓包复测。
+        "000129" to HuaweiDeviceRoute.HUAWEI_FREEBUDS4,
         "000141" to HuaweiDeviceRoute.HUAWEI_FREEBUDS5,
         "000145" to HuaweiDeviceRoute.HUAWEI_FREEBUDS5I,
         "000169" to HuaweiDeviceRoute.HUAWEI_FREEBUDS_SE4_ANC,

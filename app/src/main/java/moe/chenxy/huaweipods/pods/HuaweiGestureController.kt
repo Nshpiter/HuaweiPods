@@ -23,6 +23,7 @@ object HuaweiGestureController {
     private val freeClip2SwipeQuery = hex("5A0007002B1F01000200328A")
     private val freeBuds4eLongPressQuery = hex("5A0007002B170100020030A7")
     private val modernLongPressRoutes = setOf(
+        HuaweiDeviceRoute.HUAWEI_FREEBUDS4,
         HuaweiDeviceRoute.HUAWEI_FREEBUDS4E,
         HuaweiDeviceRoute.HUAWEI_FREEBUDS6I,
         HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3,
@@ -301,7 +302,7 @@ object HuaweiGestureController {
     }
 
     internal fun buildGestureStateQuery(route: HuaweiDeviceRoute): ByteArray? =
-        if (route == HuaweiDeviceRoute.HUAWEI_FREEBUDS4E) {
+        if (route.isFreeBuds4Series) {
             freeClip2DoubleTapQuery + freeBuds4eLongPressQuery
         } else if (route == HuaweiDeviceRoute.HUAWEI_FREEBUDS5I) {
             freeClip2DoubleTapQuery
@@ -627,6 +628,7 @@ enum class HuaweiTapAction(val extraValue: String) {
             kind: HuaweiGestureKind,
         ): List<HuaweiTapAction> = when (route to kind) {
             HuaweiDeviceRoute.HUAWEI_FREEBUDS3 to HuaweiGestureKind.DOUBLE_TAP -> freeBuds3DoubleTapActions
+            HuaweiDeviceRoute.HUAWEI_FREEBUDS4 to HuaweiGestureKind.DOUBLE_TAP,
             HuaweiDeviceRoute.HUAWEI_FREEBUDS4E to HuaweiGestureKind.DOUBLE_TAP -> freeBuds4eDoubleTapActions
             HuaweiDeviceRoute.HUAWEI_FREEBUDS5I to HuaweiGestureKind.DOUBLE_TAP -> freeBuds7iDoubleTapActions
             HuaweiDeviceRoute.HUAWEI_FREEBUDS6I to HuaweiGestureKind.DOUBLE_TAP -> freeBuds6iDoubleTapActions
@@ -684,6 +686,7 @@ enum class HuaweiTapAction(val extraValue: String) {
                 NOISE_CANCELLATION -> null
             }
 
+            HuaweiDeviceRoute.HUAWEI_FREEBUDS4,
             HuaweiDeviceRoute.HUAWEI_FREEBUDS4E,
             HuaweiDeviceRoute.HUAWEI_FREEBUDS5I,
             HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5,
@@ -822,6 +825,7 @@ enum class FreeBudsPro3LongPressAction(
             entries.firstOrNull { it.protocolValue == value }
 
         fun availableFor(route: HuaweiDeviceRoute): List<FreeBudsPro3LongPressAction> = when (route) {
+            HuaweiDeviceRoute.HUAWEI_FREEBUDS4,
             HuaweiDeviceRoute.HUAWEI_FREEBUDS4E -> listOf(NOISE_CONTROL, SONG_RECOGNITION, NONE)
             HuaweiDeviceRoute.HUAWEI_FREEBUDS6I,
             HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3,
@@ -844,6 +848,7 @@ enum class FreeBudsPro3LongPressAction(
     fun protocolValue(route: HuaweiDeviceRoute): Int? {
         if (this !in availableFor(route)) return null
         return when (route) {
+            HuaweiDeviceRoute.HUAWEI_FREEBUDS4,
             HuaweiDeviceRoute.HUAWEI_FREEBUDS4E -> when (this) {
                 NOISE_CONTROL -> 0x03
                 SONG_RECOGNITION -> 0x0E
