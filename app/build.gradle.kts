@@ -19,8 +19,8 @@ android {
         minSdk = 35
         targetSdk = 36
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        versionCode = 23
-        versionName = "1.9.1-coloros.1-rc2"
+        versionCode = 24
+        versionName = "1.9.1-coloros.1-rc3"
         buildConfigField("long", "BUILD_TIMESTAMP", moduleBuildTimestamp.toString())
     }
 

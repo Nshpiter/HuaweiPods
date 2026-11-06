@@ -26,6 +26,8 @@
 
 后续试用发布使用 `1.9.1-coloros.1-rc2`（versionCode 23）。rc1 的 CI 在 SDK 安装阶段请求已下架的 `tools` 包而失败；rc2 显式安装 `platform-tools`，仅调整 CI 与版本信息，保留业务实现及审查发现的已知问题。原 rc1 标签保留，避免改写已推送的标签。
 
+rc3（`1.9.1-coloros.1-rc3`，versionCode 24）修复蓝牙进程启动时的 `ConcurrentModificationException` 崩溃循环：ColorOS 16 蓝牙进程内 `closeProfileProxy` 会同步回调 `onServiceDisconnected`，旧实现在遍历 Profile 代理表时被重入修改。已在一加 13（`PKX110_16.0.3.501(CN01)`）配对 FreeClip 的条件下实机复现并验证修复。
+
 ## 验证范围
 
 本轮执行结果：581 项 Debug 单元测试通过，0 失败、0 错误；Debug Lint 0 错误（175 项 Warning、39 项 Hint）；Debug、Release 与设备测试 APK 均构建通过。安装包的包名、版本、五个作用域、API 102 入口、热重载元数据、APK v3 测试签名及 16 KB 对齐校验通过。
