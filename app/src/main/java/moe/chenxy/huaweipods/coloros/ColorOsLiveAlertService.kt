@@ -23,7 +23,9 @@ import moe.chenxy.huaweipods.config.ConfigManager
 class ColorOsLiveAlertService : Service() {
     private var currentAddress: String? = null
     private val mainHandler = Handler(Looper.getMainLooper())
-    private val profileProxies = mutableMapOf<Int, BluetoothProfile>()
+    private val profileProxies = ProfileProxySet<BluetoothProfile> { type, proxy ->
+        getSystemService(BluetoothManager::class.java)?.adapter?.closeProfileProxy(type, proxy)
+    }
     private var disconnectedChecks = 0
     private val bluetoothStateCheck = object : Runnable {
         override fun run() {
@@ -54,11 +56,11 @@ class ColorOsLiveAlertService : Service() {
                     this,
                     object : BluetoothProfile.ServiceListener {
                         override fun onServiceConnected(type: Int, proxy: BluetoothProfile) {
-                            profileProxies[type] = proxy
+                            profileProxies.add(type, proxy)
                         }
 
                         override fun onServiceDisconnected(type: Int) {
-                            profileProxies.remove(type)
+                            profileProxies.forget(type)
                         }
                     },
                     profile,
@@ -168,9 +170,8 @@ class ColorOsLiveAlertService : Service() {
     override fun onDestroy() {
         mainHandler.removeCallbacks(bluetoothStateCheck)
         runCatching { unregisterReceiver(bluetoothReceiver) }
-        val adapter = runCatching { getSystemService(BluetoothManager::class.java)?.adapter }.getOrNull()
-        profileProxies.forEach { (type, proxy) -> runCatching { adapter?.closeProfileProxy(type, proxy) } }
-        profileProxies.clear()
+        // closeProfileProxy may call onServiceDisconnected synchronously; closeAll uses a snapshot.
+        profileProxies.closeAll()
         stopForeground(STOP_FOREGROUND_REMOVE)
         ColorOsLiveAlertBridgeService.reportClosed()
         super.onDestroy()
