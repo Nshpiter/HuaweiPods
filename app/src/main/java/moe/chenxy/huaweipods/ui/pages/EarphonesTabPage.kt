@@ -33,6 +33,7 @@ internal fun EarphonesTabPage(
     pageBottomContentPadding: Dp,
     nestedScrollConnection: NestedScrollConnection,
     onDeviceSelected: (BluetoothDevice, HuaweiDeviceRoute) -> Unit,
+    onRestoreAutomatic: (BluetoothDevice) -> Unit,
     onConnectedDeviceClick: () -> Unit,
     onDismissConnectError: () -> Unit,
 ) {
@@ -66,6 +67,7 @@ internal fun EarphonesTabPage(
                 contentPadding = contentPadding,
                 bottomContentPadding = pageBottomContentPadding,
                 onDeviceSelected = onDeviceSelected,
+                onRestoreAutomatic = onRestoreAutomatic,
                 onConnectedDeviceClick = onConnectedDeviceClick,
                 onDismissConnectError = onDismissConnectError,
             )

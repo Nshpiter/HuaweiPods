@@ -427,9 +427,9 @@ object HuaweiHfpController {
         }
     }
 
-    fun disconnectedPod(context: Context, device: BluetoothDevice) {
-        synchronized(sessionStateLock) {
-            if (this.device?.address != device.address) return
+    fun disconnectedPod(context: Context, device: BluetoothDevice): Boolean {
+        return synchronized(sessionStateLock) {
+            if (this.device?.address != device.address) return@synchronized false
             if (sessionRoute == HuaweiDeviceRoute.HUAWEI_FREEBUDS3) {
                 freeBuds3SnapshotStore.markDisconnected(
                     context = context,
@@ -481,6 +481,7 @@ object HuaweiHfpController {
             sessionRoute = HuaweiDeviceRoute.UNSUPPORTED
             HuaweiL2capAncController.disconnect(device)
             Log.d(TAG, "Huawei HFP disconnected device=${device.address}")
+            true
         }
     }
 

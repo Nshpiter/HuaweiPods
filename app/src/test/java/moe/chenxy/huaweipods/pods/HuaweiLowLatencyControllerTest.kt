@@ -39,6 +39,7 @@ class HuaweiLowLatencyControllerTest {
             HuaweiDeviceRoute.HUAWEI_FREEBUDS_SE4_ANC,
             HuaweiDeviceRoute.HUAWEI_FREEBUDS6I,
             HuaweiDeviceRoute.HUAWEI_FREEBUDS6,
+            HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO2,
             HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3,
             HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5,
             HuaweiDeviceRoute.HUAWEI_FREEBUDS7I,

@@ -11,6 +11,7 @@ internal object HuaweiDeviceInfoRoutePolicy {
         "000135" to HuaweiDeviceRoute.HUAWEI_FREEBUDS4E,
         "000153" to HuaweiDeviceRoute.HUAWEI_FREEBUDS6I,
         "000155" to HuaweiDeviceRoute.HUAWEI_FREEBUDS6,
+        "000131" to HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO2,
         "000149" to HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3,
         "00016D" to HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5,
         "000163" to HuaweiDeviceRoute.HUAWEI_FREEBUDS7I,

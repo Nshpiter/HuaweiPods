@@ -324,6 +324,8 @@ internal fun HuaweiEqualizerPreference(
         context.getSharedPreferences(ConfigManager.PREFS_NAME, Context.MODE_PRIVATE)
     }
     val prefix = remember(address) { "huawei_eq_${address.uppercase().ifBlank { "unknown" }}_" }
+    val hasNamedPresets = route == HuaweiDeviceRoute.HUAWEI_FREECLIP2 ||
+        route == HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO2
     // FreeBuds 7 uses 0.2 dB units; the captured official editor allows +/-6 dB.
     val gainStep = if (route == HuaweiDeviceRoute.HUAWEI_FREEBUDS7) 5 else 10
     val gainLimit = gainStep * 6
@@ -443,7 +445,7 @@ internal fun HuaweiEqualizerPreference(
                 .then(responsiveOverlayDialogModifier())
                 .padding(bottom = 8.dp),
         ) {
-            if (route == HuaweiDeviceRoute.HUAWEI_FREECLIP2) {
+            if (hasNamedPresets) {
                 val customPresets = currentState?.customPresets.orEmpty()
                 if (customPresets.isNotEmpty()) {
                     Text(
@@ -558,7 +560,7 @@ internal fun HuaweiEqualizerPreference(
                 TextButton(
                     text = stringResource(R.string.freebuds7i_eq_apply),
                     enabled = !pending && (
-                        route != HuaweiDeviceRoute.HUAWEI_FREECLIP2 ||
+                        !hasNamedPresets ||
                             HuaweiEqualizerPresetPolicy.normalizeName(editingPresetName) != null
                         ),
                     modifier = Modifier.weight(1f).heightIn(min = 48.dp),
@@ -609,6 +611,12 @@ internal fun HuaweiEqualizerPreference(
                                     }
                                     onComplete(success)
                                 },
+                            )
+                        } else if (route == HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO2) {
+                            val device = context.freeBuds7iDevice(address)
+                            if (device == null) onComplete(false)
+                            else moe.chenxy.huaweipods.pods.HuaweiFreeBudsPro2Controller.setCustom(
+                                context, device, editingPresetId, editingPresetName, editing, onComplete,
                             )
                         } else {
                             context.setHuaweiCustomEqualizer(address, route, editing, onComplete)

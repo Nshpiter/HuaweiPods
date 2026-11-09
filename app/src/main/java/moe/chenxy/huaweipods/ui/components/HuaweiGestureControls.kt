@@ -446,7 +446,7 @@ private fun ModernEarbudsLongPressPreference(
                 if (success) {
                     localSelected = action
                     prefs.edit().putString(key, action.extraValue).apply()
-                    if (route.isHoldGestureRoute()) {
+                    if (route.isHoldGestureRoute() || route == HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO2) {
                         context.requestHuaweiGestureState(
                             route = route,
                             address = address,
@@ -921,6 +921,7 @@ internal fun huaweiGestureControlLayout(route: HuaweiDeviceRoute): HuaweiGesture
         hasFixedSwipeVolume = route.isFreeBuds4Series,
         hasModernLongPressControls = route.isFreeBuds4Series ||
             route == HuaweiDeviceRoute.HUAWEI_FREEBUDS6I ||
+            route == HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO2 ||
             route == HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3 ||
             route == HuaweiDeviceRoute.HUAWEI_FREEBUDS7I ||
             route == HuaweiDeviceRoute.HUAWEI_FREEARC,
@@ -930,6 +931,7 @@ internal fun huaweiGestureControlLayout(route: HuaweiDeviceRoute): HuaweiGesture
         hasModernPinchControls = route == HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3 ||
             route == HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5,
         hasWearDetection = route == HuaweiDeviceRoute.HUAWEI_FREEBUDS6I ||
+            route == HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO2 ||
             route.isFreeBuds4Series ||
             route == HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3 ||
             route == HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5,

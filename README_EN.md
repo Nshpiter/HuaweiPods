@@ -18,9 +18,9 @@
 
 HuaweiPods is an Xposed module for Xiaomi HyperOS. It integrates supported Huawei audio devices with the system headset popup, Super Island, Fusion Device Center, and Bluetooth detail page.
 
-The current release integrates the 20 models below, including FreeClip 2 Collector Edition, in one APK. Version 1.9.2 adds FreeBuds 4 compatibility, pending testing on that model.
+One APK supports the 21 models below, including FreeClip 2 Collector Edition. Version 1.9.3 adds FreeBuds Pro 2 support; see the model-specific notes for device verification of FreeBuds Pro 2 and FreeBuds 4.
 
-Version 1.9.2 improves FreeClip 2 switch-state synchronization and miuix settings, corrects FreeBuds 7i spatial mode mapping, adds notification delivery confirmation with a bounded retry, and reduces redundant background refreshes. See the [release notes](https://github.com/Nshpiter/HuaweiPods/releases/tag/24-1.9.2) (Chinese).
+Version 1.9.3 adds a model-mapping reset so an incorrect selection can be undone without reinstalling, plus FreeBuds Pro 2 noise control, sound effects, gestures, and connection settings. See the [release notes](https://github.com/Nshpiter/HuaweiPods/releases/tag/25-1.9.3) (Chinese).
 
 ## Supported models
 
@@ -35,6 +35,7 @@ Version 1.9.2 improves FreeClip 2 switch-state synchronization and miuix setting
 | HUAWEI FreeBuds 6i | Battery, transparency/ANC/off readback, four ANC levels, voice transparency, double/triple-tap gestures, four official sound presets, a 10-band custom EQ, saved low-latency preference with reconnect auto-apply, Fusion Device Center synchronization, and dedicated images |
 | HUAWEI FreeBuds 6 | Battery and official color images, ANC/off with three ANC levels and readback, selected sound presets, adaptive volume, wear detection, drop reminder, case sounds, low-latency readback and reconnect auto-apply; [protocol and validation scope](docs/FREEBUDS6_ADAPTATION.md) (Chinese) |
 | HUAWEI FreeBuds Pro 3 | Battery, three-mode control and readback, four ANC levels, voice transparency, long-press/pinch/swipe gestures, and low-latency auto-apply |
+| HUAWEI FreeBuds Pro 2 | Battery and official color images, three-mode control/readback, four ANC levels, enhanced voices, six sound presets and 10-band EQ, hold/pinch/swipe gestures, wear detection, high-quality audio, dual connection, and low-latency auto-apply; [scope and verification](docs/FREEBUDS_PRO2_ADAPTATION.md) (Chinese) |
 | HUAWEI FreeBuds Pro 4 | Battery and ANC/off; no verified ANC state readback or gesture settings |
 | HUAWEI FreeBuds Pro 5 | Battery, three-mode readback, four ANC levels, standard/voice/adaptive transparency, triple-tap/pinch/swipe-volume gestures, wear detection, adaptive volume, head-motion and voice controls, spatial audio, nine Yuezhang/scene/AI sound presets, a 10-band custom EQ, high-quality audio, low-latency auto-apply, dual-device connection, case-open sound, and ear-tip material |
 | HUAWEI FreeBuds 7 | Battery and official images, three ANC levels with readback, spatial audio, double/triple-tap, pinch and swipe settings, wear detection, eight sound effects, a 10-band EQ, high-quality audio, low latency, and selected smart settings; native Settings and fusion-center controls ([validation scope](docs/FREEBUDS7_ADAPTATION.md), Chinese) |
@@ -62,6 +63,7 @@ The table lists currently integrated capabilities. Unlisted official features sh
 - An optional persistent battery island is off by default, updates with battery reports, and is removed on disconnect. System style also requires the persistent headset notification and ROM support for Super Island.
 - **Fusion Device Center** headset display and transfer between paired devices, with an optional low-latency quick card on verified legacy hosts.
 - **Manual model binding** by Bluetooth address when a device has been renamed or cannot be identified automatically.
+- **Restore automatic detection** from Earphones → device list → edit model to remove an incorrect mapping without losing the Bluetooth pairing or connection. Non-Huawei devices stop using module controls.
 - **First-run setup guide** and in-app GitHub release checks.
 - **Standalone About page** for version details, updates, feedback, and community access, with full settings available from its top-right action.
 - **Post-update scope restart prompt** after installing a newer APK.

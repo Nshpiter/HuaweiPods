@@ -385,6 +385,14 @@ private fun LazyListScope.podControlItems(
         }
     }
 
+    if (deviceRoute == HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO2) {
+        item {
+            Card(modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp)) {
+                moe.chenxy.huaweipods.ui.components.FreeBudsPro2Controls(connectedDeviceAddress)
+            }
+        }
+    }
+
     if (deviceRoute == HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5) {
         item {
             Card(

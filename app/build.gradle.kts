@@ -19,8 +19,8 @@ android {
         // HyperOS 2 also ships on Android 14; the LSPosed API requirement is independent.
         minSdk = 34
         targetSdk = 36
-        versionCode = 24
-        versionName = "1.9.2"
+        versionCode = 25
+        versionName = "1.9.3"
         buildConfigField("long", "BUILD_TIMESTAMP", moduleBuildTimestamp.toString())
     }
 

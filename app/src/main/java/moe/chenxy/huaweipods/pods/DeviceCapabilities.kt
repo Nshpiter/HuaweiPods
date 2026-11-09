@@ -9,6 +9,7 @@ enum class HuaweiDeviceRoute {
     HUAWEI_FREEBUDS_SE4_ANC,
     HUAWEI_FREEBUDS6I,
     HUAWEI_FREEBUDS6,
+    HUAWEI_FREEBUDS_PRO2,
     HUAWEI_FREEBUDS_PRO3,
     HUAWEI_FREEBUDS_PRO4,
     HUAWEI_FREEBUDS_PRO5,
@@ -125,6 +126,18 @@ private val routeCapabilities = linkedMapOf(
         supportsLowLatencyControl = true,
         hasChargingCase = true,
     ),
+    HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO2 to HuaweiDeviceCapabilities(
+        displayName = "HUAWEI FreeBuds Pro 2",
+        aliases = setOf("huaweifreebudspro2", "freebudspro2"),
+        supportsAnc = true,
+        supportsTransparency = true,
+        supportsAncStateReadback = true,
+        supportsDiscreteAncLevels = true,
+        supportsRfcommBattery = true,
+        supportsGestureConfiguration = true,
+        supportsLowLatencyControl = true,
+        hasChargingCase = true,
+    ),
     HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3 to HuaweiDeviceCapabilities(
         displayName = "HUAWEI FreeBuds Pro 3",
         aliases = setOf("huaweifreebudspro3", "freebudspro3"),
@@ -232,6 +245,7 @@ private val broadcastValueByRoute = mapOf(
     HuaweiDeviceRoute.HUAWEI_FREEBUDS_SE4_ANC to "HUAWEI_FREEBUDS_SE4_ANC",
     HuaweiDeviceRoute.HUAWEI_FREEBUDS6I to "HUAWEI_FREEBUDS6I",
     HuaweiDeviceRoute.HUAWEI_FREEBUDS6 to "HUAWEI_FREEBUDS6",
+    HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO2 to "HUAWEI_FREEBUDS_PRO2",
     HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3 to "HUAWEI_FREEBUDS_PRO3",
     HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO4 to "HUAWEI_FREEBUDS_PRO4",
     HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5 to "HUAWEI_FREEBUDS_PRO5",
@@ -326,4 +340,4 @@ fun detectKnownHuaweiDeviceRoute(deviceName: String?): HuaweiDeviceRoute {
 }
 
 private fun normalizeDeviceName(deviceName: String): String =
-    deviceName.lowercase().filter { it.isLetterOrDigit() }
+    deviceName.lowercase().filter { it.isLetterOrDigit() || it == '+' }

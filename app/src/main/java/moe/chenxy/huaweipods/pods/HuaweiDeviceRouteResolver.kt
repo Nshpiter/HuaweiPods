@@ -23,6 +23,10 @@ object HuaweiDeviceRouteResolver {
 
     fun resolve(address: String?, deviceName: String?): HuaweiDeviceRoute {
         val normalizedAddress = normalizeAddress(address)
+        if (prefs?.let { DeviceRoutePrefs.isAutomatic(it, normalizedAddress) } == true) {
+            normalizedAddress?.let(sessionBindings::remove)
+            return resolveBoundOrNamedRoute(null, deviceName)
+        }
         val persistedRoute = prefs?.let { DeviceRoutePrefs.find(it, normalizedAddress) }
         if (persistedRoute != null) {
             val route = resolveBoundOrNamedRoute(persistedRoute, deviceName)
