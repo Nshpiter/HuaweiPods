@@ -45,6 +45,8 @@ fun SettingsPage(
     onAppLanguageChange: (Int) -> Unit = {},
     milinkLowLatencyCardEnabled: MutableState<Boolean> = mutableStateOf(true),
     onMilinkLowLatencyCardEnabledChange: (Boolean) -> Unit = {},
+    bottomPopupEnabled: MutableState<Boolean> = mutableStateOf(true),
+    onBottomPopupEnabledChange: (Boolean) -> Unit = {},
     notificationClickAction: MutableState<Int> = mutableStateOf(ConfigManager.NOTIFICATION_CLICK_MODULE_POPUP),
     onNotificationClickActionChange: (Int) -> Unit = {},
     moreClickAction: MutableState<Int> = mutableStateOf(ConfigManager.MORE_CLICK_MODULE),
@@ -184,6 +186,12 @@ fun SettingsPage(
                     summary = stringResource(R.string.milink_low_latency_card_summary),
                     checked = milinkLowLatencyCardEnabled.value,
                     onCheckedChange = onMilinkLowLatencyCardEnabledChange,
+                )
+                SwitchPreference(
+                    title = stringResource(R.string.bottom_popup),
+                    summary = stringResource(R.string.bottom_popup_summary),
+                    checked = bottomPopupEnabled.value,
+                    onCheckedChange = onBottomPopupEnabledChange,
                 )
                 OverlayDropdownPreference(
                     title = stringResource(R.string.notification_click_action),

@@ -699,7 +699,7 @@ internal fun popupBroadcastMatchesTarget(
         received.route == target.route
 }
 
-private fun Intent.putPopupTarget(target: PopupDeviceTarget) {
+internal fun Intent.putPopupTarget(target: PopupDeviceTarget) {
     putExtra("address", target.address)
     putExtra("device_name", target.deviceName)
     encodeHuaweiDeviceRouteForBroadcast(target.route)?.let {

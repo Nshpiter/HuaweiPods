@@ -13,6 +13,7 @@ import android.os.Process
 import android.os.SystemClock
 import java.util.UUID
 import moe.chenxy.huaweipods.BuildConfig
+import moe.chenxy.huaweipods.BottomPopupActivity
 import moe.chenxy.huaweipods.config.ConfigManager
 import moe.chenxy.huaweipods.config.LowLatencyPrefs
 import moe.chenxy.huaweipods.hook.Log
@@ -85,6 +86,7 @@ object HuaweiHfpController {
     private val lowLatencyWritePolicy = LowLatencyWritePolicy()
     private val freeClip2AudioStateTracker = FreeClip2AudioStateTracker()
     private val batteryIslandTriggerPolicy = BatteryIslandTriggerPolicy()
+    private var bottomPopupShownForGeneration = -1L
     private val freeBuds3SnapshotStore = FreeBuds3StateSnapshotStore()
     private val sessionStateLock = Any()
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -415,9 +417,13 @@ object HuaweiHfpController {
             restored?.battery != null
         }
         if (restoredCachedBattery) scheduleCachedNotificationRestore()
+        // 开盖即弹：连接建立后立即弹出底部卡片，不等待较慢的 RFCOMM 电量查询；
+        // 电量稍后通过 ACTION_PODS_BATTERY_CHANGED 广播自动回填到卡片。
+        maybeShowBottomPopup(context, device)
+        // 电量查询提到 RFCOMM 队列最前，让超级岛尽早拿到真实电量，不再被其他查询阻塞。
+        requestPrivateBattery()
         requestOfficialImageIdentity(force = true)
         requestAncState(force = true)
-        requestPrivateBattery()
         scheduleAutoLowLatency()
         if (route == HuaweiDeviceRoute.HUAWEI_FREECLIP2) {
             requestFreeClip2AudioState(force = true)
@@ -518,6 +524,7 @@ object HuaweiHfpController {
             sendBattery(battery)
             MiuiStrongToastUtil.showPodsNotificationByMiuiBt(context, battery, device)
             maybeShowBatteryIsland(context, battery, device)
+            maybeShowBottomPopup(context, device)
             Log.i(TAG, "Huawei battery parsed device=${device.address} values=${result.values}")
             battery
         }
@@ -1446,6 +1453,7 @@ object HuaweiHfpController {
                             activeDevice,
                         )
                         maybeShowBatteryIsland(currentContext, normalizedBattery, activeDevice)
+                        maybeShowBottomPopup(currentContext, activeDevice)
                         Log.i(TAG, "Huawei RFCOMM battery updated device=$requestedAddress")
                     }
                 }
@@ -1773,6 +1781,29 @@ object HuaweiHfpController {
             Log.i(TAG, "Huawei battery island requested device=${device.address}")
         }.onFailure {
             Log.e(TAG, "Huawei battery island request failed safely device=${device.address}", it)
+        }
+    }
+
+    private fun maybeShowBottomPopup(
+        context: Context,
+        device: BluetoothDevice,
+    ) {
+        if (!ConfigManager.bottomPopupEnabled()) return
+        if (bottomPopupShownForGeneration == sessionGeneration) return
+        bottomPopupShownForGeneration = sessionGeneration
+        runCatching {
+            val intent = Intent().apply {
+                // 模块代码运行在蓝牙进程，context.packageName 是 com.android.bluetooth；
+                // 必须显式指向模块自己的包，否则会去蓝牙包里找 Activity 而抛异常。
+                setClassName(BuildConfig.APPLICATION_ID, BottomPopupActivity::class.java.name)
+                putExtra("android.bluetooth.device.extra.DEVICE", device)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+        }.onSuccess {
+            Log.i(TAG, "Huawei bottom popup requested device=${device.address}")
+        }.onFailure {
+            Log.e(TAG, "Bottom popup launch failed safely device=${device.address}", it)
         }
     }
 

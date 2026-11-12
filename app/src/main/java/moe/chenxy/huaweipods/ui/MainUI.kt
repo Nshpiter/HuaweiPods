@@ -189,6 +189,9 @@ internal fun MainUI(
     val milinkLowLatencyCardEnabled = remember {
         mutableStateOf(appConfig.milinkLowLatencyCardEnabled)
     }
+    val bottomPopupEnabled = remember {
+        mutableStateOf(appConfig.bottomPopupEnabled)
+    }
     val notificationClickAction = remember { mutableStateOf(appConfig.notificationClickAction) }
     val moreClickAction = remember { mutableStateOf(appConfig.moreClickAction) }
     val desktopIconHidden = remember { mutableStateOf(isLauncherIconHidden(context)) }
@@ -1174,6 +1177,12 @@ internal fun MainUI(
                             milinkLowLatencyCardEnabled.value = it
                             ConfigManager.updateMilinkLowLatencyCardEnabled(prefs, xposedService, it)
                             broadcastConfigChanged(context, "com.milink.service")
+                        },
+                        bottomPopupEnabled = bottomPopupEnabled,
+                        onBottomPopupEnabledChange = {
+                            bottomPopupEnabled.value = it
+                            ConfigManager.updateBottomPopupEnabled(prefs, xposedService, it)
+                            broadcastConfigChanged(context, "com.android.bluetooth")
                         },
                         notificationClickAction = notificationClickAction,
                         onNotificationClickActionChange = {
