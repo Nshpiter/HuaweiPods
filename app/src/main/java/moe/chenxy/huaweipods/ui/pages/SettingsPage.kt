@@ -45,7 +45,7 @@ fun SettingsPage(
     onAppLanguageChange: (Int) -> Unit = {},
     milinkLowLatencyCardEnabled: MutableState<Boolean> = mutableStateOf(true),
     onMilinkLowLatencyCardEnabledChange: (Boolean) -> Unit = {},
-    bottomPopupEnabled: MutableState<Boolean> = mutableStateOf(true),
+    bottomPopupEnabled: MutableState<Boolean> = mutableStateOf(false),
     onBottomPopupEnabledChange: (Boolean) -> Unit = {},
     notificationClickAction: MutableState<Int> = mutableStateOf(ConfigManager.NOTIFICATION_CLICK_MODULE_POPUP),
     onNotificationClickActionChange: (Int) -> Unit = {},

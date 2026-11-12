@@ -18,7 +18,7 @@ data class AppConfig(
     val notificationClickAction: Int = ConfigManager.NOTIFICATION_CLICK_MODULE_POPUP,
     val moreClickAction: Int = ConfigManager.MORE_CLICK_MODULE,
     val milinkLowLatencyCardEnabled: Boolean = true,
-    val bottomPopupEnabled: Boolean = true,
+    val bottomPopupEnabled: Boolean = false,
 )
 
 object ConfigManager {

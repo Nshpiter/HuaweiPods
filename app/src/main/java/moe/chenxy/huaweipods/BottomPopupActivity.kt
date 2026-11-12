@@ -70,17 +70,20 @@ class BottomPopupActivity : ComponentActivity() {
         super.attachBaseContext(newBase)
     }
 
+    private var popupTarget by mutableStateOf<PopupDeviceTarget?>(null)
+
     @SuppressLint("UnspecifiedRegisterReceiverFlag")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         val prefs = getSharedPreferences(ConfigManager.PREFS_NAME, Context.MODE_PRIVATE)
-        val bluetoothDevice = intent.parcelableDevice("android.bluetooth.device.extra.DEVICE")
-        val target = bluetoothDevice?.let { resolveTarget(it, prefs) }
-        if (target == null) {
+        val initial = intent.parcelableDevice("android.bluetooth.device.extra.DEVICE")
+            ?.let { resolveTarget(it, prefs) }
+        if (initial == null) {
             finish()
             return
         }
+        popupTarget = initial
 
         setContent {
             val colorSchemeMode = when (prefs.getInt("theme_mode", 0)) {
@@ -89,12 +92,26 @@ class BottomPopupActivity : ComponentActivity() {
                 else -> ColorSchemeMode.System
             }
             AppTheme(colorSchemeMode = colorSchemeMode, accentMode = prefs.getInt("accent_mode", 0)) {
-                BottomPopupContent(
-                    target = target,
-                    onFinish = { finish() },
-                )
+                val target = popupTarget
+                if (target != null) {
+                    BottomPopupContent(
+                        target = target,
+                        onFinish = { finish() },
+                    )
+                }
             }
         }
+    }
+
+    // singleTop：旧弹窗未关闭时连接另一设备，复用本 Activity，更新设备信息，
+    // 卡片内部会据此重置电量与自动关闭计时。
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        val prefs = getSharedPreferences(ConfigManager.PREFS_NAME, Context.MODE_PRIVATE)
+        val newTarget = intent.parcelableDevice("android.bluetooth.device.extra.DEVICE")
+            ?.let { resolveTarget(it, prefs) } ?: return
+        popupTarget = newTarget
+        setIntent(intent)
     }
 
     private fun Intent.parcelableDevice(key: String): BluetoothDevice? =
@@ -139,7 +156,7 @@ private fun BottomPopupContent(
         visible = false
     }
 
-    val receiver = remember {
+    val receiver = remember(target) {
         object : BroadcastReceiver() {
             override fun onReceive(c: Context?, intent: Intent?) {
                 intent ?: return
@@ -163,7 +180,8 @@ private fun BottomPopupContent(
         }
     }
 
-    DisposableEffect(Unit) {
+    // 绑定 target：设备切换时反注册旧广播、为新设备重新注册并请求一次状态。
+    DisposableEffect(target) {
         context.registerReceiver(
             receiver,
             IntentFilter().apply {
@@ -187,8 +205,12 @@ private fun BottomPopupContent(
     LaunchedEffect(Unit) {
         visible = true
     }
-    // 自动关闭。
-    LaunchedEffect(Unit) {
+    // 切换到新设备：先清空旧电量，等新设备的广播回填。
+    LaunchedEffect(target.address) {
+        battery = BatteryParams()
+    }
+    // 自动关闭；key 为设备地址，切换设备时重新计时。
+    LaunchedEffect(target.address) {
         kotlinx.coroutines.delay(AUTO_DISMISS_MS)
         close()
     }

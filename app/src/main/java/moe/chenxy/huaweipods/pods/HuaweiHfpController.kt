@@ -401,7 +401,11 @@ object HuaweiHfpController {
         }
     }
 
-    fun connectPod(context: Context, device: BluetoothDevice) {
+    fun connectPod(
+        context: Context,
+        device: BluetoothDevice,
+        isSessionRestore: Boolean = false,
+    ) {
         val route = device.huaweiDeviceRoute()
         if (!route.isSupported) {
             Log.w(TAG, "Huawei session skipped: unsupported device=${device.address}")
@@ -417,9 +421,10 @@ object HuaweiHfpController {
             restored?.battery != null
         }
         if (restoredCachedBattery) scheduleCachedNotificationRestore()
-        // 开盖即弹：连接建立后立即弹出底部卡片，不等待较慢的 RFCOMM 电量查询；
-        // 电量稍后通过 ACTION_PODS_BATTERY_CHANGED 广播自动回填到卡片。
-        maybeShowBottomPopup(context, device)
+        // 开盖即弹：仅在真实新连接时弹出底部卡片；模块热重载/进程重启恢复已有连接
+        // （isSessionRestore=true）时不弹窗，避免用户没有重新开盖却被打扰。
+        // 卡片不等待较慢的 RFCOMM 电量查询，电量稍后通过广播自动回填。
+        if (!isSessionRestore) maybeShowBottomPopup(context, device)
         // 电量查询提到 RFCOMM 队列最前，让超级岛尽早拿到真实电量，不再被其他查询阻塞。
         requestPrivateBattery()
         requestOfficialImageIdentity(force = true)
