@@ -20,7 +20,7 @@ HuaweiPods is an Xposed module for Xiaomi HyperOS. It integrates supported Huawe
 
 One APK supports the 21 models below, including FreeClip 2 Collector Edition. Version 1.9.3 adds FreeBuds Pro 2 support; see the model-specific notes for device verification of FreeBuds Pro 2 and FreeBuds 4.
 
-Version 1.9.3 adds a model-mapping reset so an incorrect selection can be undone without reinstalling, plus FreeBuds Pro 2 noise control, sound effects, gestures, and connection settings. See the [release notes](https://github.com/Nshpiter/HuaweiPods/releases/tag/25-1.9.3) (Chinese).
+Version 1.9.4 adds an optional bottom connection popup with device images and battery levels, off by default, and improves popup handling when switching devices or restoring a hot-reload session. Thanks to [@gjwjy](https://github.com/gjwjy) for [PR #18](https://github.com/Nshpiter/HuaweiPods/pull/18). See the [release notes](https://github.com/Nshpiter/HuaweiPods/releases/tag/26-1.9.4) (Chinese).
 
 ## Supported models
 
@@ -57,6 +57,7 @@ The table lists currently integrated capabilities. Unlisted official features sh
 - **ANC dial** for FreeBuds 3 spatial noise cancellation adjustment only.
 - **System Bluetooth detail page** integration for battery and controls supported by the selected model.
 - **Super Island / popup** status display and quick ANC controls.
+- An optional bottom connection popup shows the device image and battery levels. It is off by default and dismisses automatically after about six seconds or manually.
 - Independent switches for lock-screen headset notifications and all Super Island notifications.
 - Notification taps can open the module popup, system settings, or Huawei Smart Audio; verified models can toggle low latency in the popup.
 - Notifications and Super Island prefer the name saved in system Bluetooth settings and update when renamed while connected. Model identification still uses the original device information and address binding.

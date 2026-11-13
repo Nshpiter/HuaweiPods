@@ -25,7 +25,7 @@ HuaweiPods 是一个面向小米 / Redmi HyperOS 设备的 Xposed 模块，将�
 
 > 当前接入下列 21 个型号（含 FreeClip 2 典藏版），所有型号使用同一个 APK。1.9.3 新增 FreeBuds Pro 2 适配；FreeBuds Pro 2 和 FreeBuds 4 的实机验证范围见各自说明。
 
-1.9.3 新增机型映射复原入口，误选设备无需卸载重装；同时加入 FreeBuds Pro 2 的噪声控制、音效、手势和连接设置。见[更新说明](https://github.com/Nshpiter/HuaweiPods/releases/tag/25-1.9.3)。
+1.9.4 新增可选的开盖底部弹窗，连接时查看设备图片与电量，默认关闭；完善连续连接不同设备及热重载时的弹窗处理。感谢 [@gjwjy](https://github.com/gjwjy) 贡献 [PR #18](https://github.com/Nshpiter/HuaweiPods/pull/18)。见[更新说明](https://github.com/Nshpiter/HuaweiPods/releases/tag/26-1.9.4)。
 
 ## 支持型号
 
@@ -61,6 +61,7 @@ HuaweiPods 是一个面向小米 / Redmi HyperOS 设备的 Xposed 模块，将�
 
 - 在系统蓝牙详情页显示电量及机型支持的控制项
 - 接入 HyperOS 连接弹窗和超级岛
+- 设置可开启“开盖底部弹窗”，默认关闭；设备连接时显示图片与电量，约 6 秒后自动收起，也可手动关闭
 - 可分别控制锁屏耳机通知与超级岛通知
 - 通知可打开模块弹窗、系统设置或华为智慧音频；模块弹窗可直接切换低时延
 - 耳机通知与超级岛优先显示系统蓝牙设置中的设备名称，连接期间改名会同步更新；机型识别仍使用原始信息与地址绑定
