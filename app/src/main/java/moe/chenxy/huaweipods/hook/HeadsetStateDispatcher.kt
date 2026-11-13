@@ -183,7 +183,7 @@ object HeadsetStateDispatcher : HookContext() {
             it.address.equals(savedAddress, ignoreCase = true)
         } ?: connectedDevices.firstOrNull()
         sessionDevice?.let { device ->
-            HuaweiHfpController.connectPod(context, device)
+            HuaweiHfpController.connectPod(context, device, isSessionRestore = true)
             HuaweiHfpController.restoreHotReloadState(savedState)
         }
     }

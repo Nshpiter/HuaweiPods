@@ -21,6 +21,9 @@
     <string name="wind_noise_reduction_summary">Reduce wind interference in outdoor environments</string>
     <string name="milink_low_latency_card">Fusion Center low-latency card</string>
     <string name="milink_low_latency_card_summary">Use the Find Earbuds card to toggle low latency on supported models</string>
+    <string name="bottom_popup">Bottom connection popup</string>
+    <string name="bottom_popup_summary">Slide up a bottom card with battery levels when the earbuds reconnect after opening the case</string>
+    <string name="bottom_popup_connected">Connected</string>
     <string name="low_latency_enabled">On</string>
     <string name="low_latency_disabled">Off</string>
     <string name="noise_cancellation_title">NC</string>
