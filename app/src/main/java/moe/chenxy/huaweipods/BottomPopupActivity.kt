@@ -33,6 +33,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -94,10 +95,13 @@ class BottomPopupActivity : ComponentActivity() {
             AppTheme(colorSchemeMode = colorSchemeMode, accentMode = prefs.getInt("accent_mode", 0)) {
                 val target = popupTarget
                 if (target != null) {
-                    BottomPopupContent(
-                        target = target,
-                        onFinish = { finish() },
-                    )
+                    // 切换设备时重建卡片状态，同时取消旧设备尚未结束的关闭任务。
+                    key(target.address) {
+                        BottomPopupContent(
+                            target = target,
+                            onFinish = { finish() },
+                        )
+                    }
                 }
             }
         }
