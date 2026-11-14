@@ -88,6 +88,7 @@ object HuaweiPodsBroadcastTrustPolicy {
             // 控制类 Action
             HuaweiPodsAction.ACTION_CONNECT_POD_REQUEST,
             HuaweiPodsAction.ACTION_DEVICE_ROUTE_PROBE_REQUEST,
+            HuaweiPodsAction.ACTION_DEVICE_ROUTE_RESET,
             HuaweiPodsAction.ACTION_PODS_UI_INIT,
             HuaweiPodsAction.ACTION_PODS_UI_CLOSED,
             HuaweiPodsAction.ACTION_REFRESH_STATUS,

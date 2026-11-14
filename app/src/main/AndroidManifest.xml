@@ -96,6 +96,12 @@
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
+        <activity android:name=".BottomPopupActivity"
+            android:theme="@style/Theme.HuaweiPods.Popup"
+            android:taskAffinity=""
+            android:excludeFromRecents="true"
+            android:launchMode="singleTop"
+            android:exported="true" />
         <receiver
             android:name=".LowLatencyStateReceiver"
             android:exported="true"

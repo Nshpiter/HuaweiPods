@@ -8,6 +8,7 @@ import moe.chenxy.huaweipods.pods.isHuaweiDeviceRouteEnabled
 
 object DeviceRoutePrefs {
     private const val PREF_KEY_PREFIX = "device_route_v1_"
+    private const val AUTOMATIC_ROUTE = "automatic"
     private val bluetoothAddressPattern = Regex("^(?:[0-9A-F]{2}:){5}[0-9A-F]{2}$")
     private val bindingLock = Any()
 
@@ -25,6 +26,33 @@ object DeviceRoutePrefs {
     ): HuaweiDeviceRoute {
         val boundRoute = prefs?.let { find(it, address) }
         return resolveBoundOrNamedRoute(boundRoute, deviceName)
+    }
+
+    fun isAutomatic(prefs: SharedPreferences, address: String?): Boolean {
+        val key = bindingKey(address) ?: return false
+        return prefs.getString(key, null) == AUTOMATIC_ROUTE
+    }
+
+    fun restoreAutomatic(
+        prefs: SharedPreferences,
+        service: XposedService?,
+        address: String,
+    ): Boolean = synchronized(bindingLock) {
+        if (!restoreAutomatic(prefs, address)) return@synchronized false
+        runCatching {
+            service?.getRemotePreferences(ConfigManager.PREFS_NAME)
+                ?.let { restoreAutomatic(it, address) }
+        }
+        true
+    }
+
+    internal fun restoreAutomatic(prefs: SharedPreferences, address: String): Boolean {
+        val key = bindingKey(address) ?: return false
+        // 保留复原标记，避免下次同步时远程旧绑定重新覆盖本地。
+        return synchronized(bindingLock) {
+            runCatching { prefs.edit().putString(key, AUTOMATIC_ROUTE).commit() }
+                .getOrDefault(false)
+        }
     }
 
     fun bind(
@@ -101,6 +129,8 @@ object DeviceRoutePrefs {
     ): Boolean {
         val key = bindingKey(address) ?: return false
         if (!isHuaweiDeviceRouteEnabled(route)) return false
+        // 用户复原后，迟到的自动探测不得重新写回旧映射；手动选择仍可覆盖。
+        if (isAutomatic(prefs, address)) return false
         val existingRoute = prefs.getString(key, null)?.let(::routeFromStorage)
         if (existingRoute != null) return existingRoute == route
         return bindLocked(prefs, address, route)
@@ -115,6 +145,12 @@ object DeviceRoutePrefs {
             val remotePrefs = runCatching {
                 service?.getRemotePreferences(ConfigManager.PREFS_NAME)
             }.getOrNull() ?: return@synchronized
+            syncBindings(prefs, remotePrefs)
+        }
+    }
+
+    internal fun syncBindings(prefs: SharedPreferences, remotePrefs: SharedPreferences) {
+        synchronized(bindingLock) {
             val localBindings = runCatching { validBindings(prefs) }.getOrDefault(emptyMap())
             val remoteBindings = runCatching { validBindings(remotePrefs) }.getOrDefault(emptyMap())
 
@@ -152,12 +188,14 @@ object DeviceRoutePrefs {
 
     private fun HuaweiDeviceRoute.storageId(): String = when (this) {
         HuaweiDeviceRoute.HUAWEI_FREEBUDS3 -> "freebuds3"
+        HuaweiDeviceRoute.HUAWEI_FREEBUDS4 -> "freebuds4"
         HuaweiDeviceRoute.HUAWEI_FREEBUDS4E -> "freebuds4e"
         HuaweiDeviceRoute.HUAWEI_FREEBUDS5 -> "freebuds5"
         HuaweiDeviceRoute.HUAWEI_FREEBUDS5I -> "freebuds5i"
         HuaweiDeviceRoute.HUAWEI_FREEBUDS_SE4_ANC -> "freebuds_se4_anc"
         HuaweiDeviceRoute.HUAWEI_FREEBUDS6I -> "freebuds6i"
         HuaweiDeviceRoute.HUAWEI_FREEBUDS6 -> "freebuds6"
+        HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO2 -> "freebuds_pro2"
         HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3 -> "freebuds_pro3"
         HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO4 -> "freebuds_pro4"
         HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5 -> "freebuds_pro5"
@@ -173,12 +211,14 @@ object DeviceRoutePrefs {
 
     private fun routeFromStorage(value: String): HuaweiDeviceRoute? = when (value) {
         "freebuds3" -> HuaweiDeviceRoute.HUAWEI_FREEBUDS3
+        "freebuds4" -> HuaweiDeviceRoute.HUAWEI_FREEBUDS4
         "freebuds4e" -> HuaweiDeviceRoute.HUAWEI_FREEBUDS4E
         "freebuds5" -> HuaweiDeviceRoute.HUAWEI_FREEBUDS5
         "freebuds5i" -> HuaweiDeviceRoute.HUAWEI_FREEBUDS5I
         "freebuds_se4_anc" -> HuaweiDeviceRoute.HUAWEI_FREEBUDS_SE4_ANC
         "freebuds6i" -> HuaweiDeviceRoute.HUAWEI_FREEBUDS6I
         "freebuds6" -> HuaweiDeviceRoute.HUAWEI_FREEBUDS6
+        "freebuds_pro2" -> HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO2
         "freebuds_pro3" -> HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3
         "freebuds_pro4" -> HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO4
         "freebuds_pro5" -> HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5
@@ -195,6 +235,7 @@ object DeviceRoutePrefs {
     private fun validBindings(prefs: SharedPreferences): Map<String, String> {
         return prefs.all.mapNotNull { (key, value) ->
             if (!isBindingKey(key)) return@mapNotNull null
+            if (value == AUTOMATIC_ROUTE) return@mapNotNull key to AUTOMATIC_ROUTE
             val route = (value as? String)
                 ?.let(::routeFromStorage)
                 ?.takeIf(::isHuaweiDeviceRouteEnabled)

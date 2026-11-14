@@ -47,6 +47,8 @@ fun SettingsPage(
     onPreviewLowBatteryReminder: () -> Unit = {},
     appLanguage: MutableState<Int> = mutableStateOf(AppLocale.SYSTEM),
     onAppLanguageChange: (Int) -> Unit = {},
+    bottomPopupEnabled: MutableState<Boolean> = mutableStateOf(false),
+    onBottomPopupEnabledChange: (Boolean) -> Unit = {},
     notificationClickAction: MutableState<Int> = mutableStateOf(ConfigManager.NOTIFICATION_CLICK_MODULE_POPUP),
     onNotificationClickActionChange: (Int) -> Unit = {},
     moreClickAction: MutableState<Int> = mutableStateOf(ConfigManager.MORE_CLICK_MODULE),
@@ -186,6 +188,12 @@ fun SettingsPage(
                         onClick = { openColorOsBackgroundSettings(context) },
                     )
                 }
+                SwitchPreference(
+                    title = stringResource(R.string.bottom_popup),
+                    summary = stringResource(R.string.bottom_popup_summary),
+                    checked = bottomPopupEnabled.value,
+                    onCheckedChange = onBottomPopupEnabledChange,
+                )
                 OverlayDropdownPreference(
                     title = stringResource(R.string.notification_click_action),
                     summary = stringResource(R.string.notification_click_action_summary),

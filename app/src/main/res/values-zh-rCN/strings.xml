@@ -31,6 +31,9 @@
     <string name="low_latency_auto_apply_summary">开启后会在每次连接时自动重新应用</string>
     <string name="wind_noise_reduction">防风噪</string>
     <string name="wind_noise_reduction_summary">降低户外环境中的风声干扰</string>
+    <string name="bottom_popup">开盖底部弹窗</string>
+    <string name="bottom_popup_summary">耳机开盖回连时，从底部滑出显示电量的卡片</string>
+    <string name="bottom_popup_connected">已连接</string>
     <string name="noise_cancellation_title">降噪</string>
     <string name="gesture_left_double_tap">左耳双击</string>
     <string name="gesture_right_double_tap">右耳双击</string>

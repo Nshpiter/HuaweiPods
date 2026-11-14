@@ -16,8 +16,11 @@ import android.content.IntentFilter
 import android.os.Handler
 import android.os.Bundle
 import android.os.Looper
+import android.os.PowerManager
 import android.os.SystemClock
 import moe.chenxy.huaweipods.BuildConfig
+import moe.chenxy.huaweipods.config.DeviceRoutePrefs
+import moe.chenxy.huaweipods.pods.HuaweiDeviceRouteResolver
 import moe.chenxy.huaweipods.pods.HuaweiHfpController
 import moe.chenxy.huaweipods.pods.HuaweiDeviceInfoIdentity
 import moe.chenxy.huaweipods.pods.HuaweiDeviceRouteProbePolicy
@@ -30,6 +33,7 @@ import moe.chenxy.huaweipods.smartaudio.OfficialImageIdentityBridge
 import moe.chenxy.huaweipods.broadcast.HuaweiPodsBroadcastTrustPolicy
 import moe.chenxy.huaweipods.utils.safeDisplayName
 import moe.chenxy.huaweipods.utils.SystemApisUtils.setIconVisibility
+import moe.chenxy.huaweipods.utils.miuiStrongToast.MiuiStrongToastUtil
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.HuaweiPodsAction
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.addHuaweiPodsAction
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.sendIdentitySharingBroadcast
@@ -39,7 +43,6 @@ import moe.chenxy.huaweipods.coloros.queryColorOsLiveAlertAudioProfiles
 
 object HeadsetStateDispatcher : HookContext() {
     private const val ROUTE_PROBE_WATCHDOG_MS = 5_500L
-    private const val HEADSET_ICON_WATCHDOG_MS = 2_500L
 
     private var appRequestReceiverRegistered = false
     @Volatile
@@ -62,13 +65,19 @@ object HeadsetStateDispatcher : HookContext() {
     private var iconWatchdogContext: Context? = null
     @Volatile
     private var iconWatchdogRunning = false
+    private var iconWatchdogTicks = 0
     private val iconWatchdogTick = object : Runnable {
         override fun run() {
             val context = iconWatchdogContext
             if (!iconWatchdogRunning || context == null || connectedHuaweiA2dpAddresses.isEmpty()) return
+            if (!isScreenInteractive(context)) {
+                stopIconWatchdog()
+                return
+            }
             setHeadsetIcon(context, visible = true, reason = "watchdog")
+            iconWatchdogTicks = (iconWatchdogTicks + 1).coerceAtMost(4)
             if (iconWatchdogRunning) {
-                mainHandler.postDelayed(this, HEADSET_ICON_WATCHDOG_MS)
+                mainHandler.postDelayed(this, HeadsetRefreshPolicy.iconDelayMs(iconWatchdogTicks))
             }
         }
     }
@@ -224,11 +233,16 @@ object HeadsetStateDispatcher : HookContext() {
 
     private fun startIconWatchdog(context: Context) {
         if (statusBarIconUnavailable) return
+        if (!isScreenInteractive(context) || connectedHuaweiA2dpAddresses.isEmpty()) return
         iconWatchdogContext = context
         iconWatchdogRunning = true
+        iconWatchdogTicks = 0
         mainHandler.removeCallbacks(iconWatchdogTick)
-        mainHandler.postDelayed(iconWatchdogTick, HEADSET_ICON_WATCHDOG_MS)
+        mainHandler.postDelayed(iconWatchdogTick, HeadsetRefreshPolicy.iconDelayMs(iconWatchdogTicks))
     }
+
+    private fun isScreenInteractive(context: Context): Boolean =
+        context.getSystemService(PowerManager::class.java)?.isInteractive == true
 
     private fun stopIconWatchdog() {
         iconWatchdogRunning = false
@@ -340,7 +354,7 @@ object HeadsetStateDispatcher : HookContext() {
                         setHeadsetIcon(context, true, "audio-profile")
                         startIconWatchdog(context)
                         if (decision == AudioSessionDecision.CONNECT) {
-                            HuaweiHfpController.connectPod(context, device)
+                            HuaweiHfpController.connectPod(context, device, isSessionRestore = restore)
                             savedState?.let(HuaweiHfpController::restoreHotReloadState)
                         }
                     }
@@ -392,6 +406,20 @@ object HeadsetStateDispatcher : HookContext() {
                             .onFailure { Log.w("HuaweiPods", "Audio Profile event failed", it) }
                         return
                     }
+                    // Protected system broadcasts: handled before the app-sender trust check.
+                    if (receivedIntent.action == Intent.ACTION_SCREEN_OFF) {
+                        stopIconWatchdog()
+                        return
+                    }
+                    if (receivedIntent.action == Intent.ACTION_SCREEN_ON) {
+                        runCatching {
+                            if (connectedHuaweiA2dpAddresses.isNotEmpty()) {
+                                setHeadsetIcon(context, visible = true, reason = "screen-on")
+                                startIconWatchdog(context)
+                            }
+                        }.onFailure { Log.w("HuaweiPods", "Screen-on icon refresh failed", it) }
+                        return
+                    }
                     runCatching {
                         val action = HuaweiPodsAction.canonical(receivedIntent.action)
                         if (!HuaweiPodsBroadcastTrustPolicy.isTrustedAppControlSender(sentFromPackage)) {
@@ -431,6 +459,12 @@ object HeadsetStateDispatcher : HookContext() {
                                     notifyRejectedDevice(context, device, state = "error", operation = "connect")
                                 }
                             }
+                            HuaweiPodsAction.ACTION_DEVICE_ROUTE_RESET -> {
+                                if (sentFromPackage != BuildConfig.APPLICATION_ID) return@runCatching
+                                val device = receivedIntent.getParcelableExtra("device", BluetoothDevice::class.java)
+                                    ?: return@runCatching
+                                resetDeviceRoute(context, device)
+                            }
                             HuaweiPodsAction.ACTION_DEVICE_ROUTE_PROBE_REQUEST -> {
                                 handleDeviceRouteProbeRequest(context, receivedIntent)
                             }
@@ -445,9 +479,12 @@ object HeadsetStateDispatcher : HookContext() {
                 addAction(BluetoothAdapter.ACTION_STATE_CHANGED)
                 addAction(BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED)
                 addAction(BluetoothHeadset.ACTION_CONNECTION_STATE_CHANGED)
+                addAction(Intent.ACTION_SCREEN_ON)
+                addAction(Intent.ACTION_SCREEN_OFF)
                 addHuaweiPodsAction(HuaweiPodsAction.ACTION_PODS_UI_INIT)
                 addHuaweiPodsAction(HuaweiPodsAction.ACTION_REFRESH_STATUS)
                 addHuaweiPodsAction(HuaweiPodsAction.ACTION_CONNECT_POD_REQUEST)
+                addHuaweiPodsAction(HuaweiPodsAction.ACTION_DEVICE_ROUTE_RESET)
                 addHuaweiPodsAction(HuaweiPodsAction.ACTION_DEVICE_ROUTE_PROBE_REQUEST)
             }, Context.RECEIVER_EXPORTED)
         }.onFailure {
@@ -457,6 +494,31 @@ object HeadsetStateDispatcher : HookContext() {
             appRequestReceiver = receiver
             appRequestReceiverContext = context
             appRequestReceiverRegistered = true
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun resetDeviceRoute(context: Context, device: BluetoothDevice, retries: Int = 5) {
+        if (!acceptingCallbacks) return
+        if (!DeviceRoutePrefs.isAutomatic(prefs, device.address)) {
+            // 远程配置监听回调可能稍晚于广播；短暂等待后仍以持久配置为准。
+            if (retries > 0) mainHandler.postDelayed({
+                runCatching { resetDeviceRoute(context, device, retries - 1) }
+                    .onFailure { Log.w("HuaweiPods", "Deferred model reset failed", it) }
+            }, 150L)
+            return
+        }
+        HuaweiDeviceRouteResolver.refreshBindings()
+        // 仅结束模块控制会话，不断开系统蓝牙连接。
+        val wasActive = HuaweiHfpController.disconnectedPod(context, device)
+        MiuiStrongToastUtil.cancelPodsNotificationByMiuiBt(context, device)
+        // ColorOS：disconnectedPod 已通知“我的设备”并经生命周期通道收起应用侧流体云。
+        connectedHuaweiA2dpAddresses.remove(device.address.uppercase())
+        if (connectedHuaweiA2dpAddresses.isEmpty()) stopIconWatchdog()
+        if (wasActive && isHuaweiPod(device) && isDeviceConnected(device)) {
+            connectedHuaweiA2dpAddresses.add(device.address.uppercase())
+            HuaweiHfpController.connectPod(context, device)
+            startIconWatchdog(context)
         }
     }
 

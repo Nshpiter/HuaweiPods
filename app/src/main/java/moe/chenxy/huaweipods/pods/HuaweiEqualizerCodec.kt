@@ -93,11 +93,13 @@ object HuaweiEqualizerCodec {
      */
     fun buildBuiltInPresetPacket(route: HuaweiDeviceRoute, presetId: Int): ByteArray? {
         val allowedIds = when (route) {
+            HuaweiDeviceRoute.HUAWEI_FREEBUDS4,
             HuaweiDeviceRoute.HUAWEI_FREEBUDS4E -> setOf(1, 2, 3)
             HuaweiDeviceRoute.HUAWEI_FREEBUDS_SE4_ANC -> setOf(0x01, 0x02, 0x03, 0x09)
             HuaweiDeviceRoute.HUAWEI_FREEBUDS6I -> setOf(0x01, 0x02, 0x03, 0x09)
             HuaweiDeviceRoute.HUAWEI_FREEBUDS6 -> setOf(0x00, 0x02, 0x03, 0x09)
             HuaweiDeviceRoute.HUAWEI_FREECLIP -> setOf(0x01, 0x0A, 0x03, 0x09)
+            HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO2 -> setOf(0x02, 0x03, 0x05, 0x09)
             HuaweiDeviceRoute.HUAWEI_FREEARC -> setOf(0x01, 0x0A, 0x02, 0x03, 0x09)
             HuaweiDeviceRoute.HUAWEI_FREEBUDS7 -> setOf(0x02, 0x05, 0x09, 0x0D, 0x0E, 0x0F, 0x10)
             HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5 -> setOf(
@@ -125,6 +127,7 @@ object HuaweiEqualizerCodec {
     }
 
     fun customWriteOperation(route: HuaweiDeviceRoute): Int? = when (route) {
+        HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO2 -> 0x01
         HuaweiDeviceRoute.HUAWEI_FREEBUDS_SE4_ANC,
         HuaweiDeviceRoute.HUAWEI_FREEBUDS6I -> 0x01
         HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5 -> 0x01
@@ -135,6 +138,8 @@ object HuaweiEqualizerCodec {
     }
 
     fun supportsStateRead(route: HuaweiDeviceRoute): Boolean = route in setOf(
+        HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO2,
+        HuaweiDeviceRoute.HUAWEI_FREEBUDS4,
         HuaweiDeviceRoute.HUAWEI_FREEBUDS5,
         HuaweiDeviceRoute.HUAWEI_FREEBUDS4E,
         HuaweiDeviceRoute.HUAWEI_FREEBUDS_SE4_ANC,

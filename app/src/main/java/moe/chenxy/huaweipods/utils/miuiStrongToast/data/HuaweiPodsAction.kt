@@ -62,6 +62,7 @@ object HuaweiPodsAction {
     const val ACTION_PODS_CONNECTED = PREFIX + ".pods_connected"
     const val ACTION_PODS_DISCONNECTED = PREFIX + ".pods_disconnected"
     const val ACTION_CONNECT_POD_REQUEST = PREFIX + ".connect_pod_request"
+    const val ACTION_DEVICE_ROUTE_RESET = PREFIX + ".device_route_reset"
     const val ACTION_DEVICE_ROUTE_PROBE_REQUEST = PREFIX + ".device_route_probe_request"
     const val ACTION_DEVICE_ROUTE_PROBE_RESULT = PREFIX + ".device_route_probe_result"
     const val ACTION_PODS_CONNECTION_STATE_CHANGED = PREFIX + ".pods_connection_state_changed"

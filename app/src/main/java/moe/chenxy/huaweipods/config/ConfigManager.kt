@@ -14,6 +14,7 @@ data class AppConfig(
     val notificationClickAction: Int = ConfigManager.NOTIFICATION_CLICK_MODULE_POPUP,
     val moreClickAction: Int = ConfigManager.MORE_CLICK_MODULE,
     val lowBatteryReminderEnabled: Boolean = true,
+    val bottomPopupEnabled: Boolean = false,
 )
 
 object ConfigManager {
@@ -27,6 +28,7 @@ object ConfigManager {
     const val PREF_KEY_NOTIFICATION_CLICK_ACTION = "notification_click_action"
     const val PREF_KEY_MORE_CLICK_ACTION = "more_click_action"
     const val PREF_KEY_LOW_BATTERY_REMINDER_ENABLED = "low_battery_reminder_enabled"
+    const val PREF_KEY_BOTTOM_POPUP_ENABLED = "bottom_popup_enabled"
     const val LOG_LEVEL_OFF = 0
     const val LOG_LEVEL_BASIC = 1
     const val LOG_LEVEL_DEBUG = 2
@@ -73,6 +75,8 @@ object ConfigManager {
 
     fun lowBatteryReminderEnabled(): Boolean = current().lowBatteryReminderEnabled
 
+    fun bottomPopupEnabled(): Boolean = current().bottomPopupEnabled
+
     fun updateLogLevel(prefs: SharedPreferences, service: XposedService?, logLevel: Int) {
         val config = current().copy(logLevel = logLevel.coerceIn(LOG_LEVEL_OFF, LOG_LEVEL_DEBUG))
         save(prefs, service, config)
@@ -110,6 +114,14 @@ object ConfigManager {
     fun updateMoreClickAction(prefs: SharedPreferences, service: XposedService?, action: Int) {
         val config = current().copy(moreClickAction = action.normalizedMoreClickAction())
         save(prefs, service, config)
+    }
+
+    fun updateBottomPopupEnabled(
+        prefs: SharedPreferences,
+        service: XposedService?,
+        enabled: Boolean,
+    ) {
+        save(prefs, service, current().copy(bottomPopupEnabled = enabled))
     }
 
     fun save(prefs: SharedPreferences, config: AppConfig) {
@@ -154,6 +166,7 @@ object ConfigManager {
             .putInt(PREF_KEY_NOTIFICATION_CLICK_ACTION, config.notificationClickAction)
             .putInt(PREF_KEY_MORE_CLICK_ACTION, config.moreClickAction)
             .putBoolean(PREF_KEY_LOW_BATTERY_REMINDER_ENABLED, config.lowBatteryReminderEnabled)
+            .putBoolean(PREF_KEY_BOTTOM_POPUP_ENABLED, config.bottomPopupEnabled)
             .commit()
     }
 
@@ -168,6 +181,7 @@ object ConfigManager {
         val directNotificationClickAction = prefs.getInt(PREF_KEY_NOTIFICATION_CLICK_ACTION, Int.MIN_VALUE)
         val directMoreClickAction = prefs.getInt(PREF_KEY_MORE_CLICK_ACTION, Int.MIN_VALUE)
         val directLowBatteryReminderEnabled = prefs.booleanOrNull(PREF_KEY_LOW_BATTERY_REMINDER_ENABLED)
+        val directBottomPopupEnabled = prefs.booleanOrNull(PREF_KEY_BOTTOM_POPUP_ENABLED)
         val raw = prefs.getString(PREF_KEY_CONFIG_JSON, null)
         logPrefsSnapshot(source, prefs, raw)
         val config = raw?.let {
@@ -182,6 +196,7 @@ object ConfigManager {
             notificationClickAction = directNotificationClickAction.takeIf { it != Int.MIN_VALUE } ?: config.notificationClickAction,
             moreClickAction = directMoreClickAction.takeIf { it != Int.MIN_VALUE } ?: config.moreClickAction,
             lowBatteryReminderEnabled = directLowBatteryReminderEnabled ?: config.lowBatteryReminderEnabled,
+            bottomPopupEnabled = directBottomPopupEnabled ?: config.bottomPopupEnabled,
         ).normalized()
     }
 
@@ -255,6 +270,9 @@ object ConfigManager {
             }
             if (oldConfig.moreClickAction != newConfig.moreClickAction) {
                 add("moreClickAction=${oldConfig.moreClickAction}->${newConfig.moreClickAction}")
+            }
+            if (oldConfig.bottomPopupEnabled != newConfig.bottomPopupEnabled) {
+                add("bottomPopupEnabled=${oldConfig.bottomPopupEnabled}->${newConfig.bottomPopupEnabled}")
             }
         }
     }

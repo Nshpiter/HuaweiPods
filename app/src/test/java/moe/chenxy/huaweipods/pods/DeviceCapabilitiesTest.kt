@@ -17,6 +17,7 @@ class DeviceCapabilitiesTest {
             "HUAWEI FreeBuds SE 4 ANC" to HuaweiDeviceRoute.HUAWEI_FREEBUDS_SE4_ANC,
             "HUAWEI FreeBuds 6i" to HuaweiDeviceRoute.HUAWEI_FREEBUDS6I,
             "HUAWEI FreeBuds 6" to HuaweiDeviceRoute.HUAWEI_FREEBUDS6,
+            "HUAWEI FreeBuds Pro 2" to HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO2,
             "FreeBuds Pro 3" to HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3,
             "HUAWEI FreeBuds Pro 4" to HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO4,
             "FreeBuds Pro 5" to HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5,
@@ -186,12 +187,14 @@ class DeviceCapabilitiesTest {
     fun `broadcast route codec uses stable values and round trips every enabled route`() {
         val expectedValues = linkedMapOf(
             HuaweiDeviceRoute.HUAWEI_FREEBUDS3 to "HUAWEI_FREEBUDS3",
+            HuaweiDeviceRoute.HUAWEI_FREEBUDS4 to "HUAWEI_FREEBUDS4",
             HuaweiDeviceRoute.HUAWEI_FREEBUDS4E to "HUAWEI_FREEBUDS4E",
             HuaweiDeviceRoute.HUAWEI_FREEBUDS5 to "HUAWEI_FREEBUDS5",
             HuaweiDeviceRoute.HUAWEI_FREEBUDS5I to "HUAWEI_FREEBUDS5I",
             HuaweiDeviceRoute.HUAWEI_FREEBUDS_SE4_ANC to "HUAWEI_FREEBUDS_SE4_ANC",
             HuaweiDeviceRoute.HUAWEI_FREEBUDS6 to "HUAWEI_FREEBUDS6",
             HuaweiDeviceRoute.HUAWEI_FREEBUDS6I to "HUAWEI_FREEBUDS6I",
+            HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO2 to "HUAWEI_FREEBUDS_PRO2",
             HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO3 to "HUAWEI_FREEBUDS_PRO3",
             HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO4 to "HUAWEI_FREEBUDS_PRO4",
             HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO5 to "HUAWEI_FREEBUDS_PRO5",

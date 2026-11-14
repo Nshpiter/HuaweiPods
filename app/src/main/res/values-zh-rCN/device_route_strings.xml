@@ -1,0 +1,6 @@
+<resources>
+    <string name="restore_automatic_model">恢复自动识别</string>
+    <string name="restore_automatic_model_hint">移除此设备保存的机型映射。支持的华为设备仍会自动识别，其他设备将停止使用模块控制。系统蓝牙配对和连接会保留。</string>
+    <string name="restore_automatic_model_done">已移除机型映射</string>
+    <string name="restore_automatic_model_failed">保存失败，请重试</string>
+</resources>

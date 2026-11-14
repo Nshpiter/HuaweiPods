@@ -94,6 +94,7 @@ import moe.chenxy.huaweipods.utils.RootManager
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.BatteryParams
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.HuaweiPodsAction
 import moe.chenxy.huaweipods.utils.miuiStrongToast.data.addHuaweiPodsAction
+import moe.chenxy.huaweipods.utils.miuiStrongToast.data.sendIdentitySharingBroadcast
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -201,6 +202,9 @@ internal fun MainUI(
     val prefs = remember { context.getSharedPreferences(ConfigManager.PREFS_NAME, Context.MODE_PRIVATE) }
     val lifecyclePrefs = remember(context) { AppLifecyclePrefs(context) }
     val appConfig = remember { ConfigManager.refreshFromPrefs(prefs) }
+    val bottomPopupEnabled = remember {
+        mutableStateOf(appConfig.bottomPopupEnabled)
+    }
     val notificationClickAction = remember { mutableStateOf(appConfig.notificationClickAction) }
     val moreClickAction = remember { mutableStateOf(appConfig.moreClickAction) }
     val desktopIconHidden = remember { mutableStateOf(isLauncherIconHidden(context)) }
@@ -845,6 +849,25 @@ internal fun MainUI(
         onSelectedTabChange(MainTab.Earphones)
     }
 
+    fun restoreAutomaticModel(device: BluetoothDevice) {
+        if (!DeviceRoutePrefs.restoreAutomatic(prefs, xposedService, device.address)) {
+            Toast.makeText(context, R.string.restore_automatic_model_failed, Toast.LENGTH_LONG).show()
+            return
+        }
+        if (device.address.equals(connectedDeviceAddress, ignoreCase = true) ||
+            device.address.equals(connectingDeviceAddress, ignoreCase = true)
+        ) {
+            clearPodConnectionState()
+        }
+        Intent(HuaweiPodsAction.ACTION_DEVICE_ROUTE_RESET).apply {
+            putExtra("device", device)
+            setPackage("com.android.bluetooth")
+            addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
+            context.sendIdentitySharingBroadcast(this)
+        }
+        Toast.makeText(context, R.string.restore_automatic_model_done, Toast.LENGTH_SHORT).show()
+    }
+
     LaunchedEffect(requestedDeviceAddress) {
         val address = requestedDeviceAddress ?: return@LaunchedEffect
         while (backStack.size > 1) backStack.removeAt(backStack.lastIndex)
@@ -1090,6 +1113,7 @@ internal fun MainUI(
                 connectingDeviceAddress = connectingDeviceAddress,
                 showConnectErrorDialog = showConnectErrorDialog,
                 onDeviceSelected = { device, route -> onDeviceSelected(device, route) },
+                onRestoreAutomatic = ::restoreAutomaticModel,
                 onConnectedDeviceClick = { onConnectedDeviceClick() },
                 onDismissConnectError = { showConnectErrorDialog = false },
                 aboutActions = aboutActions,
@@ -1247,6 +1271,12 @@ internal fun MainUI(
                         onAppLanguageChange = {
                             appLanguage.value = it
                             onAppLanguageChange(it)
+                        },
+                        bottomPopupEnabled = bottomPopupEnabled,
+                        onBottomPopupEnabledChange = {
+                            bottomPopupEnabled.value = it
+                            ConfigManager.updateBottomPopupEnabled(prefs, xposedService, it)
+                            broadcastConfigChanged(context, "com.android.bluetooth")
                         },
                         notificationClickAction = notificationClickAction,
                         onNotificationClickActionChange = {

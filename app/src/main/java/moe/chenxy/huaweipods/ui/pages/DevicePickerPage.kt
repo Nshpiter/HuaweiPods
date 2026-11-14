@@ -101,6 +101,7 @@ fun DevicePickerPage(
     contentPadding: PaddingValues = PaddingValues(0.dp),
     bottomContentPadding: Dp = 16.dp,
     onDeviceSelected: (BluetoothDevice, HuaweiDeviceRoute) -> Unit,
+    onRestoreAutomatic: (BluetoothDevice) -> Unit,
     onConnectedDeviceClick: () -> Unit = {},
     onDismissConnectError: () -> Unit = {},
 ) {
@@ -124,6 +125,7 @@ fun DevicePickerPage(
     var bluetoothRefreshToken by remember { mutableStateOf(0) }
     var routeRefreshToken by remember { mutableStateOf(0) }
     var pendingRouteDevice by remember { mutableStateOf<BluetoothDevice?>(null) }
+    var pendingResetDevice by remember { mutableStateOf<BluetoothDevice?>(null) }
     var pendingRouteProbe by remember { mutableStateOf<PendingDeviceRouteProbe?>(null) }
 
     fun selectDevice(device: BluetoothDevice) {
@@ -134,6 +136,10 @@ fun DevicePickerPage(
         )
         if (route.isSupported) {
             onDeviceSelected(device, route)
+            return
+        }
+        if (DeviceRoutePrefs.isAutomatic(routePrefs, device.address)) {
+            pendingRouteDevice = device
             return
         }
         val mayProbe = HuaweiDeviceRouteProbePolicy.mayRequest(
@@ -383,7 +389,7 @@ fun DevicePickerPage(
                         },
                         onChangeModel = {
                             pendingRouteDevice = device
-                        }.takeIf { route.isSupported && !connected },
+                        }.takeIf { route.isSupported || DeviceRoutePrefs.find(routePrefs, device.address) != null },
                     )
                 }
             }
@@ -431,12 +437,45 @@ fun DevicePickerPage(
 
     DeviceModelPickerDialog(
         device = pendingRouteDevice,
+        canRestoreAutomatic = pendingRouteDevice?.let {
+            DeviceRoutePrefs.find(routePrefs, it.address) != null
+        } == true,
+        onRestoreAutomatic = {
+            pendingResetDevice = pendingRouteDevice
+            pendingRouteDevice = null
+        },
         onDismissRequest = { pendingRouteDevice = null },
         onSelect = { device, route ->
             pendingRouteDevice = null
             onDeviceSelected(device, route)
         },
     )
+
+    WindowDialog(
+        title = stringResource(R.string.restore_automatic_model),
+        summary = stringResource(R.string.restore_automatic_model_hint),
+        show = pendingResetDevice != null,
+        onDismissRequest = { pendingResetDevice = null },
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            TextButton(
+                text = stringResource(R.string.cancel),
+                onClick = { pendingResetDevice = null },
+                modifier = Modifier.weight(1f),
+            )
+            TextButton(
+                text = stringResource(R.string.confirm),
+                onClick = {
+                    val device = pendingResetDevice ?: return@TextButton
+                    pendingRouteProbe = null
+                    pendingResetDevice = null
+                    onRestoreAutomatic(device)
+                },
+                modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.textButtonColorsPrimary(),
+            )
+        }
+    }
 
     WindowDialog(
         title = stringResource(R.string.connect_failed),
@@ -457,6 +496,8 @@ fun DevicePickerPage(
 @Composable
 private fun DeviceModelPickerDialog(
     device: BluetoothDevice?,
+    canRestoreAutomatic: Boolean,
+    onRestoreAutomatic: () -> Unit,
     onDismissRequest: () -> Unit,
     onSelect: (BluetoothDevice, HuaweiDeviceRoute) -> Unit,
 ) {
@@ -474,6 +515,13 @@ private fun DeviceModelPickerDialog(
         show = device != null,
         onDismissRequest = onDismissRequest,
     ) {
+        if (canRestoreAutomatic) {
+            TextButton(
+                text = stringResource(R.string.restore_automatic_model),
+                onClick = onRestoreAutomatic,
+                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+            )
+        }
         TextField(
             value = query,
             onValueChange = { query = it },
@@ -576,7 +624,7 @@ private fun DeviceRow(
             }
             if (connecting || identifying) {
                 InfiniteProgressIndicator()
-            } else if (onChangeModel != null && !connected) {
+            } else if (onChangeModel != null) {
                 IconButton(
                     modifier = Modifier.size(32.dp),
                     onClick = onChangeModel,

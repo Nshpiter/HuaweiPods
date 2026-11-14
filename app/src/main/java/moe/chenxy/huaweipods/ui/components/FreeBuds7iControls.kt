@@ -54,6 +54,7 @@ import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
+import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /** FreeBuds 7i controls backed exclusively by the verified 2026-08-08 capture. */
@@ -323,6 +324,8 @@ internal fun HuaweiEqualizerPreference(
         context.getSharedPreferences(ConfigManager.PREFS_NAME, Context.MODE_PRIVATE)
     }
     val prefix = remember(address) { "huawei_eq_${address.uppercase().ifBlank { "unknown" }}_" }
+    val hasNamedPresets = route == HuaweiDeviceRoute.HUAWEI_FREECLIP2 ||
+        route == HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO2
     // FreeBuds 7 uses 0.2 dB units; the captured official editor allows +/-6 dB.
     val gainStep = if (route == HuaweiDeviceRoute.HUAWEI_FREEBUDS7) 5 else 10
     val gainLimit = gainStep * 6
@@ -397,39 +400,26 @@ internal fun HuaweiEqualizerPreference(
         }
         onDispose { disposed = true }
     }
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .clickable(enabled = editable && !pending, role = Role.Button) {
-                openPresetEditor(null)
-            }
-            .padding(horizontal = 24.dp, vertical = 14.dp),
-    ) {
-        Text(
-            stringResource(
+    ArrowPreference(
+        title = stringResource(
+            if (route == HuaweiDeviceRoute.HUAWEI_FREECLIP2) {
+                R.string.freeclip2_custom_effect_title
+            } else {
+                R.string.huawei_equalizer_title
+            },
+        ),
+        summary = currentState?.selectedName?.takeIf(String::isNotBlank)
+            ?: stringResource(
                 if (route == HuaweiDeviceRoute.HUAWEI_FREECLIP2) {
-                    R.string.freeclip2_custom_effect_title
+                    R.string.freeclip2_custom_effect_summary
                 } else {
-                    R.string.huawei_equalizer_title
+                    R.string.huawei_equalizer_summary
                 },
             ),
-            color = MiuixTheme.colorScheme.onSurface,
-            style = MiuixTheme.textStyles.headline1,
-        )
-        Text(
-            currentState?.selectedName?.takeIf(String::isNotBlank)
-                ?: stringResource(
-                    if (route == HuaweiDeviceRoute.HUAWEI_FREECLIP2) {
-                        R.string.freeclip2_custom_effect_summary
-                    } else {
-                        R.string.huawei_equalizer_summary
-                    },
-                ),
-            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-            style = MiuixTheme.textStyles.body2,
-        )
-    }
+        enabled = editable && !pending,
+        holdDownState = showDialog,
+        onClick = { openPresetEditor(null) },
+    )
     OverlayDialog(
         title = stringResource(
             if (route == HuaweiDeviceRoute.HUAWEI_FREECLIP2) {
@@ -455,7 +445,7 @@ internal fun HuaweiEqualizerPreference(
                 .then(responsiveOverlayDialogModifier())
                 .padding(bottom = 8.dp),
         ) {
-            if (route == HuaweiDeviceRoute.HUAWEI_FREECLIP2) {
+            if (hasNamedPresets) {
                 val customPresets = currentState?.customPresets.orEmpty()
                 if (customPresets.isNotEmpty()) {
                     Text(
@@ -570,7 +560,7 @@ internal fun HuaweiEqualizerPreference(
                 TextButton(
                     text = stringResource(R.string.freebuds7i_eq_apply),
                     enabled = !pending && (
-                        route != HuaweiDeviceRoute.HUAWEI_FREECLIP2 ||
+                        !hasNamedPresets ||
                             HuaweiEqualizerPresetPolicy.normalizeName(editingPresetName) != null
                         ),
                     modifier = Modifier.weight(1f).heightIn(min = 48.dp),
@@ -621,6 +611,12 @@ internal fun HuaweiEqualizerPreference(
                                     }
                                     onComplete(success)
                                 },
+                            )
+                        } else if (route == HuaweiDeviceRoute.HUAWEI_FREEBUDS_PRO2) {
+                            val device = context.freeBuds7iDevice(address)
+                            if (device == null) onComplete(false)
+                            else moe.chenxy.huaweipods.pods.HuaweiFreeBudsPro2Controller.setCustom(
+                                context, device, editingPresetId, editingPresetName, editing, onComplete,
                             )
                         } else {
                             context.setHuaweiCustomEqualizer(address, route, editing, onComplete)

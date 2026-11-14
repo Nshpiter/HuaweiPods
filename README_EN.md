@@ -23,6 +23,8 @@ Official Quick Connect popup, system battery reporting, My Devices controls, Blu
 
 Private host compatibility depends on firmware. The reference ColorOS 17 adaptation includes static analysis and still requires device testing.
 
+Synced with upstream HuaweiPods 1.9.4: 21 models are integrated, including FreeClip 2 Collector Edition, with new FreeBuds Pro 2 and FreeBuds 4 support that still needs ColorOS device verification. Incorrect model mappings can be removed from Earphones → device list → edit model, and an optional bottom connection popup is available in settings (off by default).
+
 ## Build
 
 JDK 23, Android SDK Platform 37.0, Build Tools 36.0.0:

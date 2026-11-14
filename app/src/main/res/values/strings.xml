@@ -30,6 +30,9 @@
     <string name="low_latency_auto_apply_summary">Automatically reapplied after every connection</string>
     <string name="wind_noise_reduction">Wind noise reduction</string>
     <string name="wind_noise_reduction_summary">Reduce wind interference in outdoor environments</string>
+    <string name="bottom_popup">Bottom connection popup</string>
+    <string name="bottom_popup_summary">Slide up a bottom card with battery levels when the earbuds reconnect after opening the case</string>
+    <string name="bottom_popup_connected">Connected</string>
     <string name="noise_cancellation_title">NC</string>
     <string name="gesture_left_double_tap">Left double-tap</string>
     <string name="gesture_right_double_tap">Right double-tap</string>

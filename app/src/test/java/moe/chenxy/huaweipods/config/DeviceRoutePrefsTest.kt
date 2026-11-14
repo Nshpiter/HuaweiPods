@@ -6,6 +6,7 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import moe.chenxy.huaweipods.pods.HuaweiDeviceRoute
+import moe.chenxy.huaweipods.pods.HuaweiDeviceRouteResolver
 import moe.chenxy.huaweipods.pods.enabledHuaweiDeviceRoutes
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -14,6 +15,51 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class DeviceRoutePrefsTest {
+    @Test
+    fun `restoring automatic clears an active mapping and keeps native recognition`() {
+        val prefs = inMemoryPreferences()
+        val address = "AA:BB:CC:DD:EE:FF"
+        DeviceRoutePrefs.bind(prefs, address, HuaweiDeviceRoute.HUAWEI_FREEBUDS3)
+        HuaweiDeviceRouteResolver.init(prefs)
+        assertEquals(HuaweiDeviceRoute.HUAWEI_FREEBUDS3,
+            HuaweiDeviceRouteResolver.resolve(address, "Other headphones"))
+
+        assertTrue(DeviceRoutePrefs.restoreAutomatic(prefs, address))
+        assertNull(DeviceRoutePrefs.find(prefs, address))
+        assertEquals(HuaweiDeviceRoute.UNSUPPORTED,
+            HuaweiDeviceRouteResolver.resolve(address, "Other headphones"))
+        assertEquals(HuaweiDeviceRoute.HUAWEI_FREECLIP2,
+            HuaweiDeviceRouteResolver.resolve(address, "HUAWEI FreeClip 2"))
+        // 名称识别产生的会话缓存也不能重新接入改名后的非华为设备。
+        assertEquals(HuaweiDeviceRoute.UNSUPPORTED,
+            HuaweiDeviceRouteResolver.resolve(address, "Other headphones"))
+        HuaweiDeviceRouteResolver.init(prefs)
+        assertEquals(HuaweiDeviceRoute.UNSUPPORTED,
+            HuaweiDeviceRouteResolver.resolve(address, "Other headphones"))
+    }
+
+    @Test
+    fun `remote sync preserves a reset and manual selection can bind again`() {
+        val local = inMemoryPreferences()
+        val remote = inMemoryPreferences()
+        val address = "AA:BB:CC:DD:EE:FF"
+        DeviceRoutePrefs.bind(local, address, HuaweiDeviceRoute.HUAWEI_FREEBUDS3)
+        DeviceRoutePrefs.bind(remote, address, HuaweiDeviceRoute.HUAWEI_FREEBUDS3)
+        assertTrue(DeviceRoutePrefs.restoreAutomatic(local, address))
+        DeviceRoutePrefs.syncBindings(local, remote)
+        assertTrue(DeviceRoutePrefs.isAutomatic(remote, address))
+        assertNull(DeviceRoutePrefs.find(remote, address))
+
+        val restoredLocal = inMemoryPreferences()
+        DeviceRoutePrefs.syncBindings(restoredLocal, remote)
+        assertTrue(DeviceRoutePrefs.isAutomatic(restoredLocal, address))
+        assertFalse(DeviceRoutePrefs.bindIfAbsent(restoredLocal, address, HuaweiDeviceRoute.HUAWEI_FREEBUDS3))
+        assertTrue(DeviceRoutePrefs.bind(restoredLocal, address, HuaweiDeviceRoute.HUAWEI_FREEBUDS6I))
+        DeviceRoutePrefs.syncBindings(restoredLocal, remote)
+        assertEquals(HuaweiDeviceRoute.HUAWEI_FREEBUDS6I, DeviceRoutePrefs.find(remote, address))
+        assertFalse(DeviceRoutePrefs.isAutomatic(remote, address))
+    }
+
     @Test
     fun `enabled address binding wins after device is renamed`() {
         assertEquals(
